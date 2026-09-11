@@ -1,6 +1,10 @@
 # HUE HERITAGE MUSIC
 
 <p align="center">
+  <img src="app/assets/images/app_logo.png" alt="Hue Heritage Music" width="160"/>
+</p>
+
+<p align="center">
   <b>Hệ thống AI bảo tồn và phát huy di sản âm nhạc truyền thống Huế</b><br>
   <i>An AI-Powered Platform for Preserving and Promoting Hue Traditional Music Heritage</i>
 </p>

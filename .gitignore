@@ -2,48 +2,134 @@
 # Gitignore for HUE HERITAGE MUSIC
 # ============================================================
 
-# --- Internal Documents & Private Notes ---
+# ------------------------------------------------------------
+# 0. THƯ MỤC HỆ THỐNG & CÔNG CỤ CỤC BỘ
+# ------------------------------------------------------------
+.git/
+.freebuff/
+
+# ------------------------------------------------------------
+# 0.1. CẤU HÌNH API/MÁY CHỦ RIÊNG TƯ (GHITA_API)
+# File cấu hình thật chứa IP/URL máy chủ — không bao giờ public.
+# Chỉ commit mẫu GHITA_API.example.json.
+# ------------------------------------------------------------
+GHITA_API.json
+GHITA_API.*.json
+!GHITA_API.example.json
+
+# ------------------------------------------------------------
+# 1. TÀI LIỆU NỘI BỘ, GHI CHÚ VÀ BẢN THẢO RIÊNG TƯ
+# ------------------------------------------------------------
 DOC.txt
 PROJECT_STRUCTURE.md
+AGENTS.md
+.agents/
 docs/internal/
+docs/research/notes/
+docs/research/drafts/
+docs/**
+!docs/**/
+!docs/**/.gitkeep
 *.internal.*
 notes/
+scratch/
 *.scratch.*
-
-# --- OS Specific Files ---
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-[Dd]esktop.ini
-
-# --- IDE & Editor Files ---
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-.idea/
+*.tmp
+*.temp
+*.bak
+*.backup
 *.swp
 *.swo
 *~
+*.log
 
-# --- Environment & Credentials ---
+# ------------------------------------------------------------
+# 2. FILE BẢO MẬT, MÔI TRƯỜNG & KHÓA XÁC THỰC
+# ------------------------------------------------------------
 .env
 .env.*
 !.env.example
 *.pem
 *.key
+*.cert
+*.crt
+*.p12
+*.pfx
 credentials.json
+token.json
+auth.json
+service_account*.json
+client_secrets*.json
 
-# --- Python & Backend (FastAPI) ---
+# ------------------------------------------------------------
+# 3. HỆ ĐIỀU HÀNH & TRÌNH SOẠN THẢO (OS & IDE)
+# ------------------------------------------------------------
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Visual Studio / MSVC / CMake (Windows Desktop Build)
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+x64/
+x86/
+ARM64/
+[Dd]ebug/
+[Rr]elease/
+[Rr]elWithDebInfo/
+[Mm]inSizeRel/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.idb
+*.tlog
+*.lastbuildstate
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.[Cc]ache
+!*.[Cc]ache/
+
+# ------------------------------------------------------------
+# 4. PYTHON, FASTAPI & XỬ LÝ DỮ LIỆU
+# ------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyd
 .Python
 build/
 develop-eggs/
@@ -51,8 +137,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
+!app/lib/
 parts/
 sdist/
 var/
@@ -62,8 +149,20 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing & Coverage
 .pytest_cache/
+.ipynb_checkpoints/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
 .nox/
@@ -73,32 +172,59 @@ htmlcov/
 .ruff_cache/
 pip-log.txt
 pip-delete-this-directory.txt
+coverage/
 
-# Virtual Environments
-venv/
-env/
-ENV/
-.venv/
-env.bak/
-venv.bak/
+# Merge & editor leftovers
+*.orig
+.history/
 
-# --- Flutter & Dart ---
+# Databases (SQLite local)
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+server/app/database/*.db
+server/app/database/*.sqlite
+server/app/database/*.sqlite3
+
+# ------------------------------------------------------------
+# 5. FLUTTER & DART (CLIENT ĐA NỀN TẢNG)
+# ------------------------------------------------------------
 .dart_tool/
 .packages
 .pub-cache/
 .pub/
-/build/
 app/build/
 app/.dart_tool/
 app/.packages
 app/.flutter-plugins
 app/.flutter-plugins-dependencies
-app/android/.gradle
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json
+
+# Android build & Signing
+app/android/.gradle/
 app/android/captures/
 app/android/gradlew
 app/android/gradlew.bat
 app/android/local.properties
-app/android/GeneratedPluginRegistrant.java
+app/android/key.properties
+**/GeneratedPluginRegistrant.*
+**/generated_plugin_registrant.*
+**/generated_plugins.cmake
+app/android/.cxx/
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+gradle-wrapper.jar
+*.keystore
+*.jks
+
+# iOS & macOS CocoaPods
 app/ios/.symlinks/
 app/ios/Pods/
 app/ios/Podfile.lock
@@ -109,46 +235,214 @@ app/ios/Flutter/Generated.xcconfig
 app/ios/Flutter/app.flx
 app/ios/Flutter/app.zip
 app/ios/Flutter/flutter_assets/
-app/windows/flutter/ephemeral/
 app/macos/Flutter/ephemeral/
+DerivedData/
+xcuserdata/
+
+# Windows Desktop Flutter
+app/windows/flutter/ephemeral/
+app/windows/x64/
+app/windows/x86/
+
+# macOS / Xcode build extras (khi làm việc trên Mac)
+*.dSYM/
+app/macos/Flutter/Generated.xcconfig
+app/macos/Flutter/flutter_export_environment.sh
+app/.plugin_symlinks/
+app/ios/.flutter-plugins-dependencies
+
+# App packages & installers
 *.apk
 *.aab
 *.ipa
+*.app
+*.exe
+*.msi
+*.bundle
 
-# --- AI Models, Checkpoints & Large Weights ---
-# Do not commit large model weights (>100MB) to Git
+# ------------------------------------------------------------
+# 6. TRỌNG SỐ MÔ HÌNH AI & CHECKPOINTS (DUNG LƯỢNG LỚN)
+# ------------------------------------------------------------
+# Không đẩy file weights binary lớn lên Git
 models/**/*.safetensors
 models/**/*.pt
+models/**/*.pth
 models/**/*.bin
 models/**/*.onnx
 models/**/*.ckpt
-models/ace_step/*
-!models/ace_step/.gitkeep
-models/lora/*
-!models/lora/.gitkeep
+models/**/*.h5
+models/**/*.tflite
 
-# --- Training Outputs & Heavy Logs ---
+# Giữ cấu trúc thư mục models bằng .gitkeep (mọi file khác trong models/ đều bị chặn)
+models/**
+!models/**/
+!models/**/.gitkeep
+
+# HuggingFace & Torch Cache
+.cache/
+hf_cache/
+torch_cache/
+
+# ------------------------------------------------------------
+# 7. NHẬT KÝ HUẤN LUYỆN & THEO DÕI THÍ NGHIỆM
+# ------------------------------------------------------------
 training/logs/*
 !training/logs/.gitkeep
 wandb/
 runs/
+events.out.tfevents.*
+checkpoints/
+mlruns/
+mlflow/
+lightning_logs/
+tensorboard/
+logs/
 
-# --- Storage & Media Audio Files ---
-# Audio binaries are managed via storage server / sync scripts
-storage/heritage/original/*
-!storage/heritage/original/.gitkeep
-storage/heritage/restored/*
-!storage/heritage/restored/.gitkeep
-storage/generated/*
-!storage/generated/.gitkeep
-storage/temp/*
-!storage/temp/.gitkeep
+# ------------------------------------------------------------
+# 8. KHO LƯU TRỮ TỆP DI SẢN (STORAGE)
+# ------------------------------------------------------------
+# File âm thanh gốc và đã phục chế lưu trữ local/server
+# Mọi file trong storage/ đều private — chỉ giữ cây thư mục bằng .gitkeep
+storage/**
+!storage/**/
+!storage/**/.gitkeep
 
-# --- Datasets (Raw & Processed Audio) ---
-datasets/raw/*
-!datasets/raw/.gitkeep
-datasets/processed/*
-!datasets/processed/.gitkeep
-datasets/**/*.wav
-datasets/**/*.mp3
-datasets/**/*.flac
+# ------------------------------------------------------------
+# 9. TẬP DỮ LIỆU ÂM THANH (DATASETS)
+# ------------------------------------------------------------
+# Dataset gốc, đã tiền xử lý, metadata và annotation đều KHÔNG upload
+# Chỉ giữ cây thư mục bằng .gitkeep
+datasets/**
+!datasets/**/
+!datasets/**/.gitkeep
+
+# Chặn toàn bộ file audio nhị phân trên toàn bộ dự án
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.aac
+*.ogg
+*.oga
+*.opus
+*.aif
+*.aiff
+*.aifc
+*.wma
+*.wmv
+*.amr
+*.mka
+*.au
+*.snd
+*.caf
+*.mp2
+*.mpc
+*.ape
+*.wv
+*.tta
+*.shn
+*.dsf
+*.dff
+*.ac3
+*.dts
+*.ra
+*.rm
+*.mid
+*.midi
+*.kar
+*.rmi
+*.npy
+*.npz
+
+# Video demo / bản quay màn hình (tài sản riêng tư)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4v
+*.mpg
+*.mpeg
+*.flv
+
+# Dự án DAW, soundfont và thư viện sampler (tài sản sản xuất/nhạc cụ riêng tư)
+*.flp
+*.als
+*.logic
+*.logicx
+*.rpp
+*.cpr
+*.ses
+*.sesx
+*.aup
+*.aup3
+*.band
+*.ardour
+*.sfk
+*.pkf
+*.gig
+*.sf2
+*.sf3
+*.dls
+*.nki
+*.nkm
+*.nkc
+*.exs
+
+# Thư mục dữ liệu phát sinh khi điền dã / xử lý ngoài cấu trúc datasets/
+data/
+data_raw/
+
+# ------------------------------------------------------------
+# 10. AN TOÀN TUYỆT ĐỐI CHO AI: WEIGHTS, LORA, ADAPTER, EXPORT
+# ------------------------------------------------------------
+# Không bao giờ upload bất kỳ trọng số / adapter / file checkpoint nào
+# (bắt buộc kể cả khi đặt sai thư mục hoặc đổi tên)
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.h5
+*.hdf
+*.hdf5
+*.tflite
+*.gguf
+*.pkl
+*.pickle
+*.joblib
+*.msgpack
+*.weights
+adapter_model.bin
+adapter_config.json
+tokenizer.json
+vocab.txt
+merges.txt
+*.ftz
+*.pb
+*.parquet
+*.feather
+*.arrow
+*.lmdb
+*.mdb
+training/reports/
+training/exports/
+training/checkpoints/
+
+# ------------------------------------------------------------
+# 11. NGUỒN THIẾT KẾ & FILE NÉN (TÀI SẢN RIÊNG TƯ)
+# Logo chính thức chỉ là app/assets/images/app_logo.png (+ .jpg)
+# ------------------------------------------------------------
+*.psd
+*.ai
+*.xd
+*.fig
+*.sketch
+*.afdesign
+*.afphoto
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz

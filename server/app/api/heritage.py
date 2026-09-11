@@ -1,0 +1,68 @@
+from pathlib import Path
+
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from ..database.session import get_db, init_db
+from ..database import crud
+from ..services import heritage_service
+from ..storage import manager
+
+router = APIRouter(prefix="/heritage", tags=["heritage"])
+init_db()
+
+
+@router.get("")
+def list_heritage(q: str = "", limit: int = 50, db: Session = Depends(get_db)):
+    items = crud.list_items(db, q, max(1, min(limit, 200)))
+    return [heritage_service.item_to_dict(i) for i in items]
+
+
+@router.post("/upload")
+async def upload_heritage(
+    request: Request,
+    file: UploadFile = File(...),
+    title: str = Form(""),
+    type: str = Form(""),
+    artist: str = Form(""),
+    source: str = Form(""),
+    license: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > manager.MAX_SIZE + 1024 * 1024:
+        raise HTTPException(status_code=413, detail="file too large")
+    data = await file.read()
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(data) > manager.MAX_SIZE:
+        raise HTTPException(status_code=413, detail="file too large")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in manager.ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail="unsupported type")
+    item, created = heritage_service.ingest_upload(db, data, file.filename or "audio.wav", title, type, artist, source, license)
+    result = heritage_service.item_to_dict(item)
+    result["created"] = created
+    return result
+
+
+@router.get("/{item_id}")
+def get_heritage(item_id: str, db: Session = Depends(get_db)):
+    item = crud.get_item(db, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="not found")
+    return heritage_service.item_to_dict(item)
+
+
+@router.get("/{item_id}/audio")
+def download_audio(item_id: str, db: Session = Depends(get_db)):
+    item = crud.get_item(db, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="not found")
+    if not manager.safe_original_name(item.filename):
+        raise HTTPException(status_code=400, detail="bad filename")
+    path = manager.original_dir() / item.filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="file missing")
+    return FileResponse(path)
