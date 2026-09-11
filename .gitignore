@@ -1,0 +1,154 @@
+# ============================================================
+# Gitignore for HUE HERITAGE MUSIC
+# ============================================================
+
+# --- Internal Documents & Private Notes ---
+DOC.txt
+PROJECT_STRUCTURE.md
+docs/internal/
+*.internal.*
+notes/
+*.scratch.*
+
+# --- OS Specific Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# --- IDE & Editor Files ---
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Environment & Credentials ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# --- Python & Backend (FastAPI) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.pytype/
+.ruff_cache/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# --- Flutter & Dart ---
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+/build/
+app/build/
+app/.dart_tool/
+app/.packages
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/android/.gradle
+app/android/captures/
+app/android/gradlew
+app/android/gradlew.bat
+app/android/local.properties
+app/android/GeneratedPluginRegistrant.java
+app/ios/.symlinks/
+app/ios/Pods/
+app/ios/Podfile.lock
+app/ios/Flutter/App.framework
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/app.flx
+app/ios/Flutter/app.zip
+app/ios/Flutter/flutter_assets/
+app/windows/flutter/ephemeral/
+app/macos/Flutter/ephemeral/
+*.apk
+*.aab
+*.ipa
+
+# --- AI Models, Checkpoints & Large Weights ---
+# Do not commit large model weights (>100MB) to Git
+models/**/*.safetensors
+models/**/*.pt
+models/**/*.bin
+models/**/*.onnx
+models/**/*.ckpt
+models/ace_step/*
+!models/ace_step/.gitkeep
+models/lora/*
+!models/lora/.gitkeep
+
+# --- Training Outputs & Heavy Logs ---
+training/logs/*
+!training/logs/.gitkeep
+wandb/
+runs/
+
+# --- Storage & Media Audio Files ---
+# Audio binaries are managed via storage server / sync scripts
+storage/heritage/original/*
+!storage/heritage/original/.gitkeep
+storage/heritage/restored/*
+!storage/heritage/restored/.gitkeep
+storage/generated/*
+!storage/generated/.gitkeep
+storage/temp/*
+!storage/temp/.gitkeep
+
+# --- Datasets (Raw & Processed Audio) ---
+datasets/raw/*
+!datasets/raw/.gitkeep
+datasets/processed/*
+!datasets/processed/.gitkeep
+datasets/**/*.wav
+datasets/**/*.mp3
+datasets/**/*.flac
