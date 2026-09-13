@@ -8,9 +8,19 @@ from ..database.session import get_db, init_db
 from ..database import crud
 from ..services import heritage_service
 from ..storage import manager
+from .auth import require_user
 
 router = APIRouter(prefix="/heritage", tags=["heritage"])
 init_db()
+
+METADATA_FORM_FIELDS = [
+    "genre", "composer", "performers", "artisans", "collector", "recorded_time",
+    "location", "lyrics", "instruments", "tonal", "description", "notes",
+]
+
+
+def _collect_metadata(**kwargs):
+    return {k: v for k, v in kwargs.items() if v not in (None, "")}
 
 
 @router.get("")
@@ -26,9 +36,23 @@ async def upload_heritage(
     title: str = Form(""),
     type: str = Form(""),
     artist: str = Form(""),
+    genre: str = Form(""),
+    composer: str = Form(""),
+    performers: str = Form(""),
+    artisans: str = Form(""),
+    collector: str = Form(""),
+    recorded_time: str = Form(""),
+    location: str = Form(""),
+    lyrics: str = Form(""),
+    instruments: str = Form(""),
+    tonal: str = Form(""),
+    description: str = Form(""),
+    notes: str = Form(""),
+    bpm: float | None = Form(None),
     source: str = Form(""),
     license: str = Form(""),
     db: Session = Depends(get_db),
+    user_id: str | None = Depends(require_user),
 ):
     content_length = request.headers.get("content-length")
     if content_length and content_length.isdigit() and int(content_length) > manager.MAX_SIZE + 1024 * 1024:
@@ -41,7 +65,13 @@ async def upload_heritage(
     ext = Path(file.filename or "").suffix.lower()
     if ext not in manager.ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="unsupported type")
-    item, created = heritage_service.ingest_upload(db, data, file.filename or "audio.wav", title, type, artist, source, license)
+    metadata = _collect_metadata(
+        genre=genre, composer=composer, performers=performers, artisans=artisans,
+        collector=collector, recorded_time=recorded_time, location=location,
+        lyrics=lyrics, instruments=instruments, tonal=tonal,
+        description=description, notes=notes, bpm=bpm, source=source, license=license,
+    )
+    item, created = heritage_service.ingest_upload(db, data, file.filename or "audio.wav", title, type, artist, **metadata)
     result = heritage_service.item_to_dict(item)
     result["created"] = created
     return result

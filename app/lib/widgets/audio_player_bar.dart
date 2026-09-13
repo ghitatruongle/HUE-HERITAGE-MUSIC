@@ -1,10 +1,16 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 class AudioPlayerBar extends StatefulWidget {
-  final String url;
+  final String? url;
+  final String? filePath;
+  final Uint8List? bytes;
+  final String label;
 
-  const AudioPlayerBar({super.key, required this.url});
+  const AudioPlayerBar({super.key, this.url, this.filePath, this.bytes, this.label = ''});
 
   @override
   State<AudioPlayerBar> createState() => _AudioPlayerBarState();
@@ -20,15 +26,37 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
   @override
   void initState() {
     super.initState();
-    _player.setUrl(widget.url).then((_) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      if (widget.url != null && widget.url!.isNotEmpty) {
+        await _player.setUrl(widget.url!);
+      } else if (widget.filePath != null && widget.filePath!.isNotEmpty) {
+        await _player.setFilePath(widget.filePath!);
+      } else if (widget.bytes != null) {
+        await _player.setAudioSource(await _bytesSource(widget.bytes!));
+      } else {
+        throw StateError('no audio source');
+      }
       if (mounted) {
         setState(() => _ready = true);
       }
-    }).catchError((Object e) {
+    } catch (e) {
       if (mounted) {
         setState(() => _error = e.toString());
       }
-    });
+    }
+  }
+
+  Future<AudioSource> _bytesSource(Uint8List bytes) async {
+    if (kIsWeb) {
+      return AudioSource.uri(Uri.dataFromBytes(bytes, mimeType: 'audio/wav'));
+    }
+    final file = File('${Directory.systemTemp.path}/hue_play_${DateTime.now().millisecondsSinceEpoch}.wav');
+    await file.writeAsBytes(bytes);
+    return AudioSource.uri(Uri.file(file.path));
   }
 
   @override
@@ -52,11 +80,16 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
       return Text(_error!);
     }
     if (!_ready) {
-      return const CircularProgressIndicator();
+      return const Center(child: CircularProgressIndicator());
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (widget.label.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(widget.label, style: Theme.of(context).textTheme.bodySmall),
+          ),
         StreamBuilder<PlayerState>(
           stream: _player.playerStateStream,
           builder: (context, snap) {

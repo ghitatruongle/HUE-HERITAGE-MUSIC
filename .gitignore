@@ -7,6 +7,10 @@
 # ------------------------------------------------------------
 .git/
 .freebuff/
+.claude/
+.cursor/
+.zcode/
+node_modules/
 
 # ------------------------------------------------------------
 # 0.1. CẤU HÌNH API/MÁY CHỦ RIÊNG TƯ (GHITA_API)
@@ -56,6 +60,7 @@ scratch/
 *.p12
 *.pfx
 credentials.json
+credentials*.json
 token.json
 auth.json
 service_account*.json
@@ -129,6 +134,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.dylib
+*.dll
 *.pyd
 .Python
 build/
@@ -153,6 +160,7 @@ MANIFEST
 # Virtual Environments
 venv/
 .venv/
+.venv-*/
 env/
 ENV/
 env.bak/
@@ -241,6 +249,7 @@ xcuserdata/
 
 # Windows Desktop Flutter
 app/windows/flutter/ephemeral/
+app/linux/flutter/ephemeral/
 app/windows/x64/
 app/windows/x86/
 
@@ -351,6 +360,21 @@ datasets/**
 *.midi
 *.kar
 *.rmi
+*.tak
+*.spx
+*.w64
+*.oma
+*.at3
+*.aa
+*.aax
+*.aa3
+*.gsm
+*.voc
+*.iff
+*.mod
+*.xm
+*.s3m
+*.it
 *.npy
 *.npz
 
@@ -364,6 +388,15 @@ datasets/**
 *.mpg
 *.mpeg
 *.flv
+*.3gp
+*.3g2
+*.ogv
+*.asf
+*.rmvb
+*.mts
+*.m2ts
+*.vob
+*.mxf
 
 # Dự án DAW, soundfont và thư viện sampler (tài sản sản xuất/nhạc cụ riêng tư)
 *.flp
@@ -387,7 +420,14 @@ datasets/**
 *.nki
 *.nkm
 *.nkc
+*.nka
 *.exs
+*.sfz
+*.fxp
+*.fxb
+*.rns
+*.ptf
+*.ptx
 
 # Thư mục dữ liệu phát sinh khi điền dã / xử lý ngoài cấu trúc datasets/
 data/
@@ -413,6 +453,9 @@ data_raw/
 *.joblib
 *.msgpack
 *.weights
+*.bin
+*.engine
+*.trt
 adapter_model.bin
 adapter_config.json
 tokenizer.json
@@ -446,3 +489,11 @@ training/checkpoints/
 *.tar
 *.tar.gz
 *.tgz
+*.tar.bz2
+*.tar.xz
+*.bz2
+*.xz
+*.gz
+*.zst
+*.dmg
+*.iso

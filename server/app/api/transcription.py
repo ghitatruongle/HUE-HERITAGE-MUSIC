@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 from ..database.session import get_db
 from ..database import crud
 from ..services import pitch_service, amt_service, midi_service, musicxml_service, amt_eval
+from ..ai import basic_pitch_amt as bp_amt
 from ..audio_dsp import post_quantizer
 from ..storage import manager
+from .auth import require_user
 
 router = APIRouter(tags=["transcription"])
 LABEL = "Ký âm tự động – cần kiểm duyệt"
@@ -24,12 +26,19 @@ def xml_dir():
     return manager.xml_dir()
 
 
+def _dsp_notes(samples, sr):
+    times, f0s = pitch_service.estimate_f0(samples, sr)
+    return amt_service.segment_notes(times, f0s)
+
+
 @router.post("/music/transcribe")
 async def transcribe(
     file: UploadFile = File(...),
     bpm: float = Form(60.0),
     heritage_id: str = Form(""),
+    engine: str = Form("basic_pitch"),
     db: Session = Depends(get_db),
+    user_id: str | None = Depends(require_user),
 ):
     data = await file.read()
     if len(data) == 0:
@@ -42,8 +51,17 @@ async def transcribe(
         samples, sr = pitch_service.read_mono_wav(data)
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
-    times, f0s = await asyncio.to_thread(pitch_service.estimate_f0, samples, sr)
-    notes = post_quantizer.quantize(amt_service.segment_notes(times, f0s), bpm)
+    used = "dsp"
+    notes = None
+    if engine == "basic_pitch" and bp_amt.available():
+        try:
+            notes = await asyncio.to_thread(bp_amt.transcribe, samples, sr)
+            used = "basic_pitch"
+        except Exception:
+            notes = None
+    if notes is None:
+        notes = await asyncio.to_thread(_dsp_notes, samples, sr)
+    notes = post_quantizer.quantize(notes, bpm)
     digest = manager.sha256_bytes(data)
     if heritage_id:
         item = crud.get_item(db, heritage_id)
@@ -62,6 +80,7 @@ async def transcribe(
                 crud.create_audio(db, item.id, "musicxml", str(xm), digest, xm.stat().st_size)
     return {
         "label": LABEL,
+        "engine": used,
         "filename": file.filename,
         "bpm": bpm,
         "sha": digest,
@@ -91,6 +110,7 @@ async def evaluate_transcription(
     file: UploadFile = File(...),
     truth: str = Form("[]"),
     bpm: float = Form(60.0),
+    engine: str = Form("basic_pitch"),
 ):
     data = await file.read()
     if len(data) == 0:
@@ -109,7 +129,18 @@ async def evaluate_transcription(
         samples, sr = pitch_service.read_mono_wav(data)
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
-    times, f0s = await asyncio.to_thread(pitch_service.estimate_f0, samples, sr)
-    notes = post_quantizer.quantize(amt_service.segment_notes(times, f0s), bpm)
+    used = "dsp"
+    notes = None
+    if engine == "basic_pitch" and bp_amt.available():
+        try:
+            notes = await asyncio.to_thread(bp_amt.transcribe, samples, sr)
+            used = "basic_pitch"
+        except Exception:
+            notes = None
+    if notes is None:
+        notes = await asyncio.to_thread(_dsp_notes, samples, sr)
+    notes = post_quantizer.quantize(notes, bpm)
     pred = [{"midi": n["midi"], "start": n["start"], "end": n["end"]} for n in notes]
-    return amt_eval.evaluate(pred, items)
+    result = amt_eval.evaluate(pred, items)
+    result["engine"] = used
+    return result

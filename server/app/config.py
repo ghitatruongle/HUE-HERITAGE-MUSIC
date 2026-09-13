@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
@@ -13,6 +14,12 @@ class Settings(BaseSettings):
     storage_dir: Path = BASE_DIR / "storage"
     models_dir: Path = BASE_DIR / "models"
     datasets_dir: Path = BASE_DIR / "datasets"
+    secret_key: str = "dev-insecure-secret-key"
+    auth_required: bool = False
+    token_ttl_hours: int = 72
+    allowed_origins: str = "*"
+    redis_url: str = "redis://127.0.0.1:6379/0"
+    acestep_api_url: str = ""
 
 
 settings = Settings()

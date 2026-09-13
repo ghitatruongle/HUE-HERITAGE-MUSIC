@@ -3,7 +3,9 @@ import xml.etree.ElementTree as ET
 NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 DIVISIONS = 480
 BEATS_PER_BAR = 4
-TYPES = {4.0: "whole", 2.0: "half", 1.0: "quarter", 0.5: "eighth", 0.25: "16th"}
+TYPES = {4.0: "whole", 2.0: "half", 1.0: "quarter", 0.5: "eighth", 0.25: "16th",
+         6.0: "whole", 3.0: "half", 1.5: "quarter", 0.75: "eighth", 0.375: "16th"}
+DOTTED = {6.0, 3.0, 1.5, 0.75, 0.375}
 
 
 def midi_to_step(midi):
@@ -29,8 +31,8 @@ def seconds_to_beats(notes, bpm):
 def duration_type(beats):
     for key in sorted(TYPES.keys(), reverse=True):
         if abs(beats - key) < 0.0001:
-            return TYPES[key]
-    return None
+            return TYPES[key], key in DOTTED
+    return None, False
 
 
 def append_rest(m, dur_div):
@@ -39,9 +41,11 @@ def append_rest(m, dur_div):
     n = ET.SubElement(m, "note")
     ET.SubElement(n, "rest")
     ET.SubElement(n, "duration").text = str(dur_div)
-    t = duration_type(dur_div / DIVISIONS)
+    t, dots = duration_type(dur_div / DIVISIONS)
     if t:
         ET.SubElement(n, "type").text = t
+        for _ in range(1 if dots else 0):
+            ET.SubElement(n, "dot")
 
 
 def split_bars(notes):
@@ -112,9 +116,11 @@ def build_musicxml(notes, bpm, title):
                 ET.SubElement(p, "alter").text = "1"
             ET.SubElement(p, "octave").text = str(octave)
             ET.SubElement(n, "duration").text = str(dur)
-            t = duration_type(dur / DIVISIONS)
+            t, dots = duration_type(dur / DIVISIONS)
             if t:
                 ET.SubElement(n, "type").text = t
+                for _ in range(1 if dots else 0):
+                    ET.SubElement(n, "dot")
             used += dur
         remain = DIVISIONS * BEATS_PER_BAR - used
         if remain > 0:

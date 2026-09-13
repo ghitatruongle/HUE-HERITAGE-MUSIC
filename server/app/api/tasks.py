@@ -1,27 +1,32 @@
-import time
-import uuid
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, HTTPException
+from ..database.session import get_db, init_db
+from ..database import crud
+from ..workers import queue
 
 router = APIRouter(prefix="/task", tags=["tasks"])
-MAX_TASKS = 500
-_tasks = {}
+init_db()
 
 
 @router.post("")
-def create_task(kind: str = "generic"):
-    tid = str(uuid.uuid4())
-    if len(_tasks) >= MAX_TASKS:
-        oldest = sorted(_tasks, key=lambda k: _tasks[k]["created_at"])
-        for k in oldest[: len(_tasks) - MAX_TASKS + 1]:
-            _tasks.pop(k, None)
-    _tasks[tid] = {"id": tid, "kind": kind, "status": "pending", "created_at": time.time()}
-    return _tasks[tid]
+def create_task(body: dict | None = None, kind: str = "generic", db: Session = Depends(get_db)):
+    if body and kind in queue.KINDS:
+        params = body.get("params", body)
+        task_id = queue.dispatch(kind, params)
+        return crud.task_to_dict(crud.get_task(db, task_id))
+    return crud.task_to_dict(crud.create_task(db, kind, body or {}))
+
+
+@router.get("")
+def list_tasks(kind: str = "", status: str = "", limit: int = 100, db: Session = Depends(get_db)):
+    tasks = crud.list_tasks(db, kind, status, max(1, min(limit, 500)))
+    return [crud.task_to_dict(t) for t in tasks]
 
 
 @router.get("/{task_id}")
-def get_task(task_id: str):
-    found = _tasks.get(task_id)
-    if not found:
+def get_task(task_id: str, db: Session = Depends(get_db)):
+    task = crud.get_task(db, task_id)
+    if not task:
         raise HTTPException(status_code=404, detail="not found")
-    return found
+    return crud.task_to_dict(task)

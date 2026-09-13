@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hue_heritage_music/core/constants/app_constants.dart';
 import 'package:hue_heritage_music/models/compare_result.dart';
 import 'package:hue_heritage_music/models/pitch_data.dart';
 import 'package:hue_heritage_music/screens/settings/settings_screen.dart';
@@ -9,27 +8,30 @@ import 'package:hue_heritage_music/services/theme_provider.dart';
 import 'package:hue_heritage_music/widgets/common_button.dart';
 import 'package:hue_heritage_music/widgets/compare_chart.dart';
 import 'package:hue_heritage_music/widgets/pitch_contour_chart.dart';
+import 'package:hue_heritage_music/widgets/sheet_music_view.dart';
 import 'package:provider/provider.dart';
 
 void main() {
-  test('ServerConfig keeps default URL when config file is absent', () async {
+  test('ServerConfig starts without a server until configured', () {
     final cfg = ServerConfig();
-    expect(cfg.baseUrl, AppConstants.defaultServerUrl);
-    await cfg.load();
-    expect(cfg.baseUrl, AppConstants.defaultServerUrl);
+    expect(cfg.baseUrl, '');
+    expect(cfg.hasServer, isFalse);
   });
 
   test('ServerConfig normalizes base URL', () {
     expect(ServerConfig.normalize('http://192.0.2.10:8000/api'), 'http://192.0.2.10:8000');
     expect(ServerConfig.normalize('http://192.0.2.10:8000/'), 'http://192.0.2.10:8000');
     expect(ServerConfig.normalize('192.0.2.10:8000'), 'http://192.0.2.10:8000');
-    expect(ServerConfig.normalize(''), AppConstants.defaultServerUrl);
+    expect(ServerConfig.normalize(''), '');
   });
 
-  testWidgets('Settings screen never shows server connection UI', (tester) async {
+  testWidgets('Settings screen shows server configuration UI', (tester) async {
     await tester.pumpWidget(
-      ChangeNotifierProvider<ThemeProvider>.value(
-        value: ThemeProvider(),
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: ServerConfig()),
+          ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
+        ],
         child: const MaterialApp(
           home: Scaffold(body: SettingsScreen()),
         ),
@@ -37,12 +39,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Kết nối máy chủ AI'), findsNothing);
-    expect(find.text('Địa chỉ máy chủ'), findsNothing);
-    expect(find.text('URL máy chủ'), findsNothing);
-    expect(find.text('Kiểm tra'), findsNothing);
-    expect(find.byType(TextField), findsNothing);
-    expect(find.byType(FilledButton), findsNothing);
+    expect(find.text('Địa chỉ máy chủ API'), findsOneWidget);
+    expect(find.text('Lưu'), findsOneWidget);
+    expect(find.text('Kiểm tra'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('CommonButton renders and responds to tap', (tester) async {
@@ -98,6 +98,7 @@ void main() {
         meanOffsetMs: 50.0,
         startOffsetMs: 20.0,
         pairs: 10,
+        dtwDistance: 3.2,
       ),
       times: [0.0, 0.5],
       sampleF0: [220.0, 220.0],
@@ -131,5 +132,23 @@ void main() {
     );
 
     expect(find.byType(CompareChart), findsOneWidget);
+  });
+
+  testWidgets('SheetMusicView shows piano roll and disclaimer', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SheetMusicView(
+            notes: [
+              SheetNote(midi: 69, start: 0.0, end: 0.5),
+              SheetNote(midi: 72, start: 0.5, end: 1.0),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('kiểm duyệt'), findsOneWidget);
   });
 }

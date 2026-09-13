@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../analysis/analysis_screen.dart';
 import '../creation/creation_screen.dart';
 import '../heritage/heritage_list_screen.dart';
+import '../history/history_screen.dart';
+import '../info/info_screen.dart';
+import '../instruments/instruments_screen.dart';
 import '../learning/learning_screen.dart';
 import '../settings/settings_screen.dart';
 import '../transcription/transcription_screen.dart';
@@ -26,6 +30,14 @@ class HomeScreen extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final features = [
       const _Feature(
+        icon: Icons.library_music,
+        color: Color(0xFF00796B),
+        title: 'Kho di sản',
+        subtitle: 'Tra cứu, tìm kiếm bản ghi di sản, nghe bản gốc và bản phục chế',
+        page: HeritageListScreen(),
+        screenTitle: 'Kho di sản',
+      ),
+      const _Feature(
         icon: Icons.mic,
         color: Color(0xFF5B3B8C),
         title: 'Học hát Ca Huế',
@@ -34,28 +46,68 @@ class HomeScreen extends StatelessWidget {
         screenTitle: 'Học hát Ca Huế',
       ),
       const _Feature(
-        icon: Icons.library_music,
-        color: Color(0xFF00796B),
-        title: 'Kho di sản số',
-        subtitle: 'Lưu trữ bản ghi, phục dựng âm thanh, nhận diện nhạc cụ',
-        page: HeritageListScreen(),
-        screenTitle: 'Kho di sản số',
+        icon: Icons.query_stats,
+        color: Color(0xFF2A5FA5),
+        title: 'Phân tích bản thu',
+        subtitle: 'Phân tích đường cao độ F0 của một bản thu bất kỳ',
+        page: AnalysisScreen(),
+        screenTitle: 'Phân tích bản thu',
       ),
       const _Feature(
         icon: Icons.music_note,
         color: Color(0xFF8F6C00),
-        title: 'Ký âm tự động',
+        title: 'Audio -> Bản nhạc',
         subtitle: 'Chuyển bản thu âm thành file MIDI và bản nhạc MusicXML',
         page: TranscriptionScreen(),
-        screenTitle: 'Ký âm tự động',
+        screenTitle: 'Audio -> Bản nhạc',
       ),
       const _Feature(
         icon: Icons.auto_awesome,
         color: Color(0xFFAD3B6F),
         title: 'AI Sáng tạo',
-        subtitle: 'Sáng tác bản nhạc mới, cover mang âm hưởng Huế',
+        subtitle: 'Sáng tác bản nhạc mới mang âm hưởng Huế (cần model đã huấn luyện)',
         page: CreationScreen(),
         screenTitle: 'AI Sáng tạo',
+      ),
+      const _Feature(
+        icon: Icons.shuffle,
+        color: Color(0xFFB34700),
+        title: 'Cover',
+        subtitle: 'Tạo phiên bản cover từ bản ghi di sản (cần model đã huấn luyện)',
+        page: CreationScreen(coverMode: true),
+        screenTitle: 'Cover',
+      ),
+      const _Feature(
+        icon: Icons.healing,
+        color: Color(0xFF00695C),
+        title: 'Phục dựng',
+        subtitle: 'Khử nhiễu, phục hồi bản ghi cũ trong kho di sản',
+        page: HeritageListScreen(restorationMode: true),
+        screenTitle: 'Phục dựng bản ghi',
+      ),
+      const _Feature(
+        icon: Icons.piano,
+        color: Color(0xFF4A5F2A),
+        title: 'Nhạc cụ',
+        subtitle: 'Nhận diện nhạc cụ truyền thống xuất hiện trong bản thu',
+        page: InstrumentsScreen(),
+        screenTitle: 'Nhận diện nhạc cụ',
+      ),
+      const _Feature(
+        icon: Icons.history,
+        color: Color(0xFF5D4037),
+        title: 'Lịch sử',
+        subtitle: 'Xem lại các tác vụ đã thực hiện và trạng thái của chúng',
+        page: HistoryScreen(),
+        screenTitle: 'Lịch sử tác vụ',
+      ),
+      const _Feature(
+        icon: Icons.info_outline,
+        color: Color(0xFF455A64),
+        title: 'Thông tin dự án',
+        subtitle: 'Triết lý, nhãn dữ liệu và thông tin bản quyền của hệ thống',
+        page: InfoScreen(),
+        screenTitle: 'Thông tin dự án',
       ),
     ];
     return Scaffold(

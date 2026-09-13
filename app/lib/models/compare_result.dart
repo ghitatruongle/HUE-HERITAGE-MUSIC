@@ -4,6 +4,7 @@ class CompareMetrics {
   final double meanOffsetMs;
   final double startOffsetMs;
   final int pairs;
+  final double dtwDistance;
   final double pitchScore;
   final double timeScore;
   final double score;
@@ -14,6 +15,7 @@ class CompareMetrics {
     required this.meanOffsetMs,
     required this.startOffsetMs,
     required this.pairs,
+    required this.dtwDistance,
     required this.pitchScore,
     required this.timeScore,
     required this.score,
@@ -26,6 +28,7 @@ class CompareMetrics {
       meanOffsetMs: (json['mean_offset_ms'] as num?)?.toDouble() ?? 0,
       startOffsetMs: (json['start_offset_ms'] as num?)?.toDouble() ?? 0,
       pairs: (json['pairs'] as num?)?.toInt() ?? 0,
+      dtwDistance: (json['dtw_distance'] as num?)?.toDouble() ?? 0,
       pitchScore: (json['pitch_score'] as num?)?.toDouble() ?? 0,
       timeScore: (json['time_score'] as num?)?.toDouble() ?? 0,
       score: (json['score'] as num?)?.toDouble() ?? 0,

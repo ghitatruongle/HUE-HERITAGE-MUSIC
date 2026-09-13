@@ -36,6 +36,12 @@ def restored_dir() -> Path:
     return d
 
 
+def generated_dir() -> Path:
+    d = settings.storage_dir / "generated"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

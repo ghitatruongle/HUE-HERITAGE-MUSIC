@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 
+import '../../api/api_client.dart';
 import '../../api/endpoints/sing_api.dart';
 import '../../models/compare_result.dart';
 import '../../models/pitch_data.dart';
+import '../../services/history_service.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
+import '../../widgets/audio_player_bar.dart';
 import '../../widgets/common_button.dart';
 import '../../widgets/compare_chart.dart';
 import '../../widgets/pitch_contour_chart.dart';
@@ -32,6 +35,7 @@ class _LearningScreenState extends State<LearningScreen> {
   CompareResult? _compare;
   String? _error;
   double _progress = 0;
+  bool _lastWasCompare = false;
 
   String _samplePath() {
     return '${Directory.systemTemp.path}/hue_sample.wav';
@@ -39,6 +43,12 @@ class _LearningScreenState extends State<LearningScreen> {
 
   String _tmpPath() {
     return '${Directory.systemTemp.path}/hue_learn.wav';
+  }
+
+  void _log(String kind, String title, String status) {
+    context.read<HistoryService>().add(
+          HistoryEntry(id: DateTime.now().microsecondsSinceEpoch.toString(), kind: kind, title: title, status: status, at: DateTime.now()),
+        );
   }
 
   Future<void> _toggle() async {
@@ -128,12 +138,14 @@ class _LearningScreenState extends State<LearningScreen> {
                 }
               },
             );
+      _log('analyze-pitch', 'Phân tích bản thu', 'done');
       if (mounted) {
         setState(() => _result = data);
       }
     } catch (e) {
+      _log('analyze-pitch', 'Phân tích bản thu', 'error');
       if (mounted) {
-        setState(() => _error = e.toString());
+        setState(() => _error = ApiClient.describe(e));
       }
     } finally {
       if (mounted) {
@@ -174,12 +186,14 @@ class _LearningScreenState extends State<LearningScreen> {
       });
       try {
         final data = await api.compareBytes(sample, user);
+        _log('compare', 'So sánh với bản mẫu', 'done');
         if (mounted) {
           setState(() => _compare = data);
         }
       } catch (e) {
+        _log('compare', 'So sánh với bản mẫu', 'error');
         if (mounted) {
-          setState(() => _error = e.toString());
+          setState(() => _error = ApiClient.describe(e));
         }
       } finally {
         if (mounted) {
@@ -204,12 +218,14 @@ class _LearningScreenState extends State<LearningScreen> {
     });
     try {
       final data = await api.compare(sample, path);
+      _log('compare', 'So sánh với bản mẫu', 'done');
       if (mounted) {
         setState(() => _compare = data);
       }
     } catch (e) {
+      _log('compare', 'So sánh với bản mẫu', 'error');
       if (mounted) {
-        setState(() => _error = e.toString());
+        setState(() => _error = ApiClient.describe(e));
       }
     } finally {
       if (mounted) {
@@ -218,51 +234,138 @@ class _LearningScreenState extends State<LearningScreen> {
     }
   }
 
+  Future<void> _retry() async {
+    if (_lastWasCompare) {
+      await _runCompare();
+    } else {
+      await _analyze();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final media = context.watch<SessionMedia>();
+    final hasSample = media.samplePath != null || media.sampleBytes != null;
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        Card(
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: hasSample
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Bản mẫu', style: Theme.of(context).textTheme.titleSmall),
+                      AudioPlayerBar(
+                        filePath: kIsWeb ? null : (media.samplePath ?? _samplePath()),
+                        bytes: media.sampleBytes,
+                        label: 'Nghe bản mẫu chuẩn trước khi hát theo',
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 18, color: scheme.primary),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Chưa chọn bản mẫu. Vào màn Kho di sản, nhấn icon trường học trên một bản ghi để dùng làm bản mẫu.'),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 12),
         CommonButton(
-          label: _recording ? 'Dừng' : 'Thu âm',
+          label: _recording ? 'Dừng thu âm' : 'Thu âm giọng hát',
           onPressed: _toggle,
         ),
         const SizedBox(height: 8),
-        if (_filePath != null) Text(_filePath!),
+        if (_recording)
+          const Row(
+            children: [
+              Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+              SizedBox(width: 6),
+              Text('Đang thu âm...'),
+            ],
+          ),
+        if (_filePath != null && !kIsWeb) Text(_filePath!, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         CommonButton(
           label: 'Phân tích cao độ',
           loading: _busy,
-          onPressed: _filePath == null ? null : _analyze,
+          onPressed: _filePath == null ? null : () {
+            setState(() => _lastWasCompare = false);
+            _analyze();
+          },
         ),
-        if (_busy) LinearProgressIndicator(value: _progress > 0 ? _progress : null),
-        if (_error != null)
-          Text(_error!, style: const TextStyle(color: Colors.red)),
-        if (_result != null) ...[
-          Text('Mean F0: ${_result!.meanF0} Hz - ${_result!.frames} frames'),
-          PitchContourChart(data: _result!),
-        ],
         const SizedBox(height: 8),
         CommonButton(
           label: 'So sánh với bản mẫu',
           loading: _comparing,
-          onPressed: _filePath == null ? null : _runCompare,
+          onPressed: _filePath == null ? null : () {
+            setState(() => _lastWasCompare = true);
+            _runCompare();
+          },
         ),
-        if (_compare != null) ...[
-          Text(
-            'Điểm: ${_compare!.metrics.score}',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        const SizedBox(height: 8),
+        if (_error != null)
+          Card(
+            color: scheme.errorContainer,
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  Expanded(child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer))),
+                  TextButton(onPressed: _retry, child: const Text('Thử lại')),
+                ],
+              ),
+            ),
           ),
-          Text('Cao độ: ${_compare!.metrics.pitchScore} · Thời gian: ${_compare!.metrics.timeScore}'),
-          Text('Lệch cao độ TB: ${_compare!.metrics.meanAbsCents} cents'),
-          Text('Vào sớm/trễ: ${_compare!.metrics.startOffsetMs} ms'),
+        if (_busy) LinearProgressIndicator(value: _progress > 0 ? _progress : null),
+        if (_result != null) ...[
+          const SizedBox(height: 12),
+          Text('Mean F0: ${_result!.meanF0} Hz - ${_result!.frames} frames'),
+          PitchContourChart(data: _result!),
+        ],
+        if (_compare != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            color: scheme.primaryContainer,
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Text(
+                    'Điểm tổng thể: ${_compare!.metrics.score}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Cao độ: ${_compare!.metrics.pitchScore} · Thời gian: ${_compare!.metrics.timeScore}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Lệch cao độ trung bình: ${_compare!.metrics.meanAbsCents} cents (trung vị ${_compare!.metrics.medianCents})'),
+          Text('Vào câu sớm/trễ: ${_compare!.metrics.startOffsetMs} ms'),
+          Text('Khoảng cách DTW: ${_compare!.metrics.dtwDistance.toStringAsFixed(2)}'),
+          const SizedBox(height: 8),
           CompareChart(
             times: _compare!.times,
             sampleF0: _compare!.sampleF0,
             warpedF0: _compare!.warpedF0,
           ),
+          const SizedBox(height: 4),
           for (final n in _compare!.notes)
             ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
               title: Text(n.name),
               subtitle: Text('${n.start}s - ${n.end}s'),
               trailing: Text('${n.errCents} cents - ${n.verdict}'),

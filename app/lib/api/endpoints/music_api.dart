@@ -23,11 +23,50 @@ class MusicApi {
     required String prompt,
     int duration = 60,
     String lora = '',
+    double strength = 0.8,
+    int seed = 0,
+    String lyrics = '',
+    String genre = '',
+    String instruments = '',
+    String tempo = '',
+    String mood = '',
+    String vocal = '',
   }) async {
     final res = await dio.post('/api/music/generate', queryParameters: {
       'prompt': prompt,
       'duration': duration,
       'lora': lora,
+      'strength': strength,
+      'seed': seed,
+      'lyrics': lyrics,
+      'genre': genre,
+      'instruments': instruments,
+      'tempo': tempo,
+      'mood': mood,
+      'vocal': vocal,
+    });
+    return MusicTask.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<MusicTask> cover({
+    required String heritageId,
+    required String style,
+    int duration = 60,
+    String lora = '',
+    double strength = 0.8,
+    String tempo = '',
+    String mood = '',
+    String vocal = '',
+  }) async {
+    final res = await dio.post('/api/music/cover', queryParameters: {
+      'heritage_id': heritageId,
+      'style': style,
+      'duration': duration,
+      'lora': lora,
+      'strength': strength,
+      'tempo': tempo,
+      'mood': mood,
+      'vocal': vocal,
     });
     return MusicTask.fromJson(res.data as Map<String, dynamic>);
   }

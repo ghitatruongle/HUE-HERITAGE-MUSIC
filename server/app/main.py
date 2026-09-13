@@ -3,10 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .api.router import api_router
 
-app = FastAPI(title=settings.app_name, version="0.0.0-demo")
+app = FastAPI(title=settings.app_name, version="0.0.0-alpha1")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in settings.allowed_origins.split(",") if o.strip()],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
