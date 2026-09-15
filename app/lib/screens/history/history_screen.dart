@@ -36,8 +36,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
     try {
       final tasks = await TasksApi(config.api.dio).list();
+      if (!mounted) return;
       setState(() => _serverTasks = tasks);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = ApiClient.describe(e));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -121,7 +123,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: Icon(_kindIcon(t.kind)),
-        title: Text('${_kindLabel(t.kind)} • ${t.id.substring(0, 8)}'),
+        title: Text('${_kindLabel(t.kind)} • ${t.id.length >= 8 ? t.id.substring(0, 8) : t.id}'),
         subtitle: Text(t.createdAt),
         trailing: _statusChip(t.status),
         onTap: t.status == 'running' || t.status == 'pending' ? _refresh : null,

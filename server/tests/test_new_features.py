@@ -92,8 +92,9 @@ def test_heritage_metadata_and_search():
 
 
 def test_transcribe_basic_pitch_detects_440hz():
+    import pytest
     if not bp_amt.available():
-        return
+        pytest.skip("basic_pitch unavailable")
     client = TestClient(app)
     data = make_sine_wav(freq=440.0, duration=1.2)
     r = client.post("/api/music/transcribe", files={"file": ("t.wav", data, "audio/wav")}, data={"bpm": "60", "engine": "basic_pitch"})
@@ -130,6 +131,8 @@ def test_tasks_persisted_in_db():
 def test_task_api_roundtrip():
     client = TestClient(app)
     r = client.post("/api/task", params={"kind": "restore"})
+    assert r.status_code == 400
+    r = client.post("/api/task", json={"kind": "generic"}, params={"kind": "generic"})
     assert r.status_code == 200
     tid = r.json()["id"]
     r = client.get(f"/api/task/{tid}")
@@ -147,12 +150,13 @@ def test_musicxml_dotted_output():
     assert "<dot" in xml
 
 
-def test_task_dispatch_inline(monkeypatch, tmp_path):
+def test_task_dispatch_inline(monkeypatch):
     from server.app.workers import queue as task_queue
+    from server.app.storage import manager as storage_manager
 
     monkeypatch.setattr(task_queue, "_enqueue_rq", lambda *a, **k: False)
     wav = make_sine_wav(freq=523.25, duration=0.8)
-    audio_path = tmp_path / "clip.wav"
+    audio_path = storage_manager.temp_dir() / "clip.wav"
     audio_path.write_bytes(wav)
     client = TestClient(app)
     r = client.post("/api/task", json={"params": {"audio_path": str(audio_path), "bpm": 60}}, params={"kind": "transcribe"})

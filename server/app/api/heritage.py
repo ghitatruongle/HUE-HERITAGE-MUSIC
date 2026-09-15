@@ -4,14 +4,13 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, R
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ..database.session import get_db, init_db
+from ..database.session import get_db
 from ..database import crud
 from ..services import heritage_service
 from ..storage import manager
 from .auth import require_user
 
 router = APIRouter(prefix="/heritage", tags=["heritage"])
-init_db()
 
 METADATA_FORM_FIELDS = [
     "genre", "composer", "performers", "artisans", "collector", "recorded_time",
@@ -48,7 +47,7 @@ async def upload_heritage(
     tonal: str = Form(""),
     description: str = Form(""),
     notes: str = Form(""),
-    bpm: float | None = Form(None),
+    bpm: str = Form(""),
     source: str = Form(""),
     license: str = Form(""),
     db: Session = Depends(get_db),
@@ -65,11 +64,20 @@ async def upload_heritage(
     ext = Path(file.filename or "").suffix.lower()
     if ext not in manager.ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="unsupported type")
+    bpm_val = None
+    bpm_raw = (bpm or "").strip()
+    if bpm_raw:
+        try:
+            bpm_val = float(bpm_raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="bad bpm")
+        if not (0.0 < bpm_val <= 500.0):
+            raise HTTPException(status_code=400, detail="bad bpm")
     metadata = _collect_metadata(
         genre=genre, composer=composer, performers=performers, artisans=artisans,
         collector=collector, recorded_time=recorded_time, location=location,
         lyrics=lyrics, instruments=instruments, tonal=tonal,
-        description=description, notes=notes, bpm=bpm, source=source, license=license,
+        description=description, notes=notes, bpm=bpm_val, source=source, license=license,
     )
     item, created = heritage_service.ingest_upload(db, data, file.filename or "audio.wav", title, type, artist, **metadata)
     result = heritage_service.item_to_dict(item)

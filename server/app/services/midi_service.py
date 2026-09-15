@@ -33,7 +33,7 @@ def write_midi(notes, bpm):
         if off <= on:
             off = on + 1
         vel = nt.get("velocity", 80)
-        pitch = int(nt["midi"]) & 0x7F
+        pitch = max(0, min(127, int(nt["midi"])))
         events.append((on, bytes([0x90, pitch, vel & 0x7F])))
         events.append((off, bytes([0x80, pitch, 64])))
     events.append((max([t for t, _ in events] + [0]) + 1, b"\xFF\x2F\x00"))
@@ -80,6 +80,7 @@ def read_midi(data):
                 pos += 1
                 ln, pos = read_varlen(data, pos)
                 pos += ln
+                status = 0
             elif (status & 0xF0) == 0x90 or (status & 0xF0) == 0x80:
                 if pos + 1 >= end:
                     break
@@ -95,6 +96,7 @@ def read_midi(data):
             elif status == 0xF0 or status == 0xF7:
                 ln, pos = read_varlen(data, pos)
                 pos += ln
+                status = 0
             elif (status & 0xF0) == 0xF0:
                 if status in (0xF1, 0xF3):
                     pos += 1

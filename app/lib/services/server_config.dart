@@ -3,10 +3,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_client.dart';
-import '../core/constants/app_constants.dart';
 
 class ServerConfig extends ChangeNotifier {
   static const String _configAsset = 'GHITA_API.json';
@@ -37,22 +35,10 @@ class ServerConfig extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final override = prefs.getString(AppConstants.serverUrlPrefKey);
-    var url = (override != null && override.trim().isNotEmpty) ? override : await _readConfigUrl();
+    final url = await _readConfigUrl();
     _baseUrl = normalize(url ?? '');
     _api = ApiClient(baseUrl: _baseUrl);
     notifyListeners();
-  }
-
-  Future<void> setOverride(String? raw) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (raw == null || raw.trim().isEmpty) {
-      await prefs.remove(AppConstants.serverUrlPrefKey);
-    } else {
-      await prefs.setString(AppConstants.serverUrlPrefKey, normalize(raw));
-    }
-    await load();
   }
 
   Future<String?> _readConfigUrl() async {

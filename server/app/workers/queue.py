@@ -52,6 +52,12 @@ def dispatch(kind: str, params: dict) -> str:
         task_id = task.id
     finally:
         db.close()
-    if not _enqueue_rq(task_id, kind, params):
+    if settings.use_rq and redis_available() and _enqueue_rq(task_id, kind, params):
+        db = SessionLocal()
+        try:
+            crud.update_task(db, task_id, status="queued")
+        finally:
+            db.close()
+    else:
         _run_inline(task_id, kind, params)
     return task_id

@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
+import '../../api/endpoints/heritage_api.dart';
 import '../../api/endpoints/music_api.dart';
+import '../../models/heritage_item.dart';
 import '../../models/music_task.dart';
 import '../../services/history_service.dart';
 import '../../services/server_config.dart';
@@ -38,11 +40,30 @@ class _CreationScreenState extends State<CreationScreen> {
   String? _info;
   List<LoraAdapter> _loras = [];
   String _lora = '';
+  List<HeritageItem> _heritageItems = [];
+  String _heritageId = '';
 
   @override
   void initState() {
     super.initState();
     _loadModels();
+    if (widget.coverMode) {
+      _loadHeritage();
+    }
+  }
+
+  Future<void> _loadHeritage() async {
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final items = await HeritageApi(dio).list();
+      if (mounted) {
+        setState(() => _heritageItems = items);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _info = 'Không tải được danh sách di sản để chọn bản mẫu cover.');
+      }
+    }
   }
 
   Future<void> _loadModels() async {
@@ -71,6 +92,10 @@ class _CreationScreenState extends State<CreationScreen> {
       setState(() => _error = 'Nhập phong cách cover mong muốn');
       return;
     }
+    if (widget.coverMode && _heritageId.isEmpty) {
+      setState(() => _error = 'Chọn bản di sản cần cover');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -83,7 +108,7 @@ class _CreationScreenState extends State<CreationScreen> {
       final api = MusicApi(dio);
       final t = widget.coverMode
           ? await api.cover(
-              heritageId: '',
+              heritageId: _heritageId,
               style: _style.text.trim(),
               duration: _duration,
               lora: _lora,
@@ -215,6 +240,17 @@ class _CreationScreenState extends State<CreationScreen> {
           ]),
           const SizedBox(height: 10),
         ] else ...[
+          DropdownButtonFormField<String>(
+            initialValue: _heritageId.isEmpty ? '' : _heritageId,
+            decoration: const InputDecoration(labelText: 'Bản di sản cần cover *', border: OutlineInputBorder()),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Chọn bản mẫu')),
+              for (final item in _heritageItems)
+                DropdownMenuItem(value: item.id, child: Text(item.title)),
+            ],
+            onChanged: (v) => setState(() => _heritageId = v ?? ''),
+          ),
+          const SizedBox(height: 10),
           TextField(
             controller: _style,
             maxLines: 2,
@@ -233,7 +269,7 @@ class _CreationScreenState extends State<CreationScreen> {
         ]),
         const SizedBox(height: 10),
         _row([
-          _dropdown('Thời lượng (giây)', '$_duration', ['30', '60', '120', '180'], (v) => setState(() => _duration = int.parse(v))),
+          _dropdown('Thời lượng (giây)', '$_duration', ['10', '30', '60', '120', '180'], (v) => setState(() => _duration = int.parse(v))),
           _dropdown('LoRA strength', _strength.toStringAsFixed(1), ['0.4', '0.6', '0.8', '1.0'],
               (v) => setState(() => _strength = double.parse(v))),
         ]),

@@ -10,8 +10,34 @@ from pathlib import Path
 MAX_BYTES = 15 * 1024 * 1024
 
 
+def _safe_audio_path(params: dict) -> Path:
+    raw = params.get("audio_path") or ""
+    if not raw:
+        raise ValueError("audio_path required")
+    path = Path(raw).resolve()
+    roots = [
+        manager.original_dir().resolve(),
+        manager.temp_dir().resolve(),
+        manager.restored_dir().resolve(),
+        manager.generated_dir().resolve(),
+    ]
+    allowed = False
+    for root in roots:
+        try:
+            path.relative_to(root)
+            allowed = True
+            break
+        except ValueError:
+            continue
+    if not allowed:
+        raise ValueError("audio_path outside allowed storage")
+    if not path.is_file():
+        raise ValueError("audio_path not found")
+    return path
+
+
 def _transcribe(params):
-    path = Path(params["audio_path"])
+    path = _safe_audio_path(params)
     data = path.read_bytes()
     if len(data) > MAX_BYTES:
         raise ValueError("file too large")
@@ -30,15 +56,16 @@ def _transcribe(params):
         notes = amt_service.segment_notes(times, f0s)
     notes = post_quantizer.quantize(notes, bpm)
     digest = manager.sha256_bytes(data)
-    mid = manager.midi_dir() / (digest + ".mid")
+    stem = f"{digest}_{int(bpm)}"
+    mid = manager.midi_dir() / (stem + ".mid")
     mid.write_bytes(midi_service.write_midi(notes, bpm))
-    xm = manager.xml_dir() / (digest + ".musicxml")
+    xm = manager.xml_dir() / (stem + ".musicxml")
     xm.write_text(musicxml_service.build_musicxml(notes, bpm, path.stem), encoding="utf-8")
-    return {"kind": "transcribe", "engine": used, "sha": digest, "count": len(notes), "bpm": bpm}
+    return {"kind": "transcribe", "engine": used, "sha": digest, "artifact": stem, "count": len(notes), "bpm": bpm}
 
 
 def _restore(params):
-    path = Path(params["audio_path"])
+    path = _safe_audio_path(params)
     data = path.read_bytes()
     out, report = restoration_service.restore(data)
     digest = manager.sha256_bytes(data)
@@ -50,7 +77,7 @@ def _restore(params):
 
 
 def _instruments(params):
-    path = Path(params["audio_path"])
+    path = _safe_audio_path(params)
     return instrument_service.detect(path.read_bytes())
 
 

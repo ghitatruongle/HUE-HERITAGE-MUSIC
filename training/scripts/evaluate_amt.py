@@ -13,21 +13,25 @@ from app.audio_dsp import post_quantizer
 
 def run_engine(engine, data, bpm):
     samples, sr = pitch_service.read_mono_wav(data)
+    engine_error = None
     if engine == "basic_pitch" and bp_amt.available():
         try:
             notes = bp_amt.transcribe(samples, sr)
             used = "basic_pitch"
-        except Exception:
+        except Exception as e:
             notes = None
+            engine_error = str(e)
     else:
         notes = None
+        if engine == "basic_pitch":
+            engine_error = "basic_pitch unavailable"
     if notes is None:
         times, f0s = pitch_service.estimate_f0(samples, sr)
         notes = amt_service.segment_notes(times, f0s)
         used = "dsp"
     notes = post_quantizer.quantize(notes, bpm)
     pred = [{"midi": n["midi"], "start": n["start"], "end": n["end"]} for n in notes]
-    return pred, used
+    return pred, used, engine_error
 
 
 def main():
@@ -42,7 +46,7 @@ def main():
     if not amt_eval.valid_truth(items):
         raise SystemExit("bad truth")
     data = Path(args.audio).read_bytes()
-    pred, used = run_engine(args.engine, data, args.bpm)
+    pred, used, engine_error = run_engine(args.engine, data, args.bpm)
     grid = 60.0 / args.bpm / 4.0 if args.bpm > 0 else 0.0
     if grid > amt_eval.ONSET_TOL:
         print(json.dumps({"warning": "quantize grid %.3fs > onset tolerance %.3fs" % (grid, amt_eval.ONSET_TOL)}))
@@ -51,9 +55,13 @@ def main():
     report["bpm"] = args.bpm
     report["engine_requested"] = args.engine
     report["engine_used"] = used
+    if engine_error:
+        report["engine_error"] = engine_error
     report["timestamp"] = time.strftime("%Y-%m-%d %H:%M:%S")
     report["config"] = {"onset_tol": amt_eval.ONSET_TOL, "offset_ratio": amt_eval.OFFSET_RATIO, "offset_min": amt_eval.OFFSET_MIN}
-    Path(args.report).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    out = Path(args.report)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

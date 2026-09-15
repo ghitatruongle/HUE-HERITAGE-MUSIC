@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     token_ttl_hours: int = 72
     allowed_origins: str = "*"
     redis_url: str = "redis://127.0.0.1:6379/0"
+    use_rq: bool = False
     acestep_api_url: str = ""
 
 

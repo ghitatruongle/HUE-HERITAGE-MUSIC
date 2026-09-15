@@ -42,7 +42,7 @@ def main():
             )
             if lyrics:
                 (root / f"{stem}.lyrics.txt").write_text(lyrics + "\n", encoding="utf-8")
-        written += 1
+            written += 1
 
     print(json.dumps({"entries": len(entries), "written": written, "problems": problems}, ensure_ascii=False, indent=2))
     if problems:

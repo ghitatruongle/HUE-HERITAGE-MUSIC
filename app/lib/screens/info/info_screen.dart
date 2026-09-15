@@ -17,6 +17,7 @@ class InfoScreen extends StatelessWidget {
               width: 96,
               height: 96,
               fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Icon(Icons.music_note, size: 64),
             ),
           ),
         ),

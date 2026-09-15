@@ -1,15 +1,16 @@
 import asyncio
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 
 from ..services import pitch_service, compare_service
+from .auth import require_user
 
 router = APIRouter(tags=["sing"])
 MAX_BYTES = 15 * 1024 * 1024
 
 
 @router.post("/music/analyze-pitch")
-async def analyze_pitch(file: UploadFile = File(...)):
+async def analyze_pitch(file: UploadFile = File(...), user_id: str | None = Depends(require_user)):
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
@@ -34,7 +35,7 @@ async def analyze_pitch(file: UploadFile = File(...)):
 
 
 @router.post("/music/compare")
-async def compare_sing(sample: UploadFile = File(...), user: UploadFile = File(...)):
+async def compare_sing(sample: UploadFile = File(...), user: UploadFile = File(...), user_id: str | None = Depends(require_user)):
     s_data = await sample.read()
     u_data = await user.read()
     if len(s_data) == 0 or len(u_data) == 0:
@@ -43,5 +44,8 @@ async def compare_sing(sample: UploadFile = File(...), user: UploadFile = File(.
         raise HTTPException(status_code=413, detail="file too large")
     try:
         return await asyncio.to_thread(compare_service.compare, s_data, u_data)
-    except ValueError:
+    except ValueError as e:
+        msg = str(e)
+        if "empty contour" in msg:
+            raise HTTPException(status_code=400, detail="empty pitch contour (silence or unvoiced audio)")
         raise HTTPException(status_code=400, detail="wav decode failed")

@@ -4,10 +4,11 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ..database.session import get_db
+from ..database.session import SessionLocal, get_db
 from ..database import crud
 from ..services import restoration_service
 from ..storage import manager
+from .auth import require_user
 
 router = APIRouter(tags=["restoration"])
 MAX_BYTES = 15 * 1024 * 1024
@@ -17,7 +18,7 @@ def restored_dir():
     return manager.restored_dir()
 
 
-def run_restore(data, heritage_id, db):
+def run_restore(data, heritage_id):
     try:
         out, report = restoration_service.restore(data)
     except ValueError:
@@ -27,25 +28,29 @@ def run_restore(data, heritage_id, db):
     if not dest.exists():
         dest.write_bytes(out)
     if heritage_id:
-        item = crud.get_item(db, heritage_id)
-        if item and not crud.has_audio(db, item.id, "restored", str(dest)):
-            crud.create_audio(db, item.id, "restored", str(dest), digest, dest.stat().st_size)
+        db = SessionLocal()
+        try:
+            item = crud.get_item(db, heritage_id)
+            if item and not crud.has_audio(db, item.id, "restored", str(dest)):
+                crud.create_audio(db, item.id, "restored", str(dest), digest, dest.stat().st_size)
+        finally:
+            db.close()
     report["sha"] = digest
     return report
 
 
 @router.post("/music/restore")
-async def restore_upload(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def restore_upload(file: UploadFile = File(...), user_id: str | None = Depends(require_user)):
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
-    return await asyncio.to_thread(run_restore, data, "", db)
+    return await asyncio.to_thread(run_restore, data, "")
 
 
 @router.post("/music/restore-item/{item_id}")
-def restore_item(item_id: str, db: Session = Depends(get_db)):
+def restore_item(item_id: str, db: Session = Depends(get_db), user_id: str | None = Depends(require_user)):
     item = crud.get_item(db, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="not found")
@@ -54,7 +59,7 @@ def restore_item(item_id: str, db: Session = Depends(get_db)):
     path = manager.original_dir() / item.filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="file missing")
-    return run_restore(path.read_bytes(), item.id, db)
+    return run_restore(path.read_bytes(), item.id)
 
 
 @router.get("/music/restored/{sha}")

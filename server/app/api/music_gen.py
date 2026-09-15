@@ -1,8 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
+from ..database.session import get_db
+from ..database import crud
 from ..services import generator_service
 from ..storage import manager
+from .auth import require_user
 
 router = APIRouter(tags=["music_gen"])
 
@@ -41,10 +45,11 @@ def generate(
     tempo: str = "",
     mood: str = "",
     vocal: str = "",
+    user_id: str | None = Depends(require_user),
 ):
     if not prompt.strip():
         raise HTTPException(status_code=400, detail="empty prompt")
-    if duration < 5 or duration > 300:
+    if duration < 10 or duration > 300:
         raise HTTPException(status_code=400, detail="bad duration")
     if strength < 0 or strength > 1:
         raise HTTPException(status_code=400, detail="bad strength")
@@ -64,13 +69,18 @@ def cover(
     tempo: str = "",
     mood: str = "",
     vocal: str = "",
+    db: Session = Depends(get_db),
+    user_id: str | None = Depends(require_user),
 ):
     if not heritage_id.strip() or not style.strip():
         raise HTTPException(status_code=400, detail="missing params")
-    if duration < 5 or duration > 300:
+    if duration < 10 or duration > 300:
         raise HTTPException(status_code=400, detail="bad duration")
     if strength < 0 or strength > 1:
         raise HTTPException(status_code=400, detail="bad strength")
+    item = crud.get_item(db, heritage_id.strip())
+    if not item:
+        raise HTTPException(status_code=404, detail="heritage item not found")
     prompt = f"cover heritage {heritage_id.strip()}: {style.strip()}"
     return generator_service.create_task(
         "cover", prompt, duration, lora.strip(), strength, 0,

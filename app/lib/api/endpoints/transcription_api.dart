@@ -13,19 +13,22 @@ class TranscriptionApi {
   Future<TranscribeResult> transcribe(
     String filePath, {
     double bpm = 60,
+    String engine = 'basic_pitch',
     void Function(int, int)? onProgress,
   }) async {
     final bytes = await XFile(filePath).readAsBytes();
-    return transcribeBytes(bytes, bpm: bpm, onProgress: onProgress);
+    return transcribeBytes(bytes, bpm: bpm, engine: engine, onProgress: onProgress);
   }
 
   Future<TranscribeResult> transcribeBytes(
     Uint8List bytes, {
     double bpm = 60,
+    String engine = 'basic_pitch',
     void Function(int, int)? onProgress,
   }) async {
     final form = FormData.fromMap({
       'bpm': bpm.toString(),
+      'engine': engine,
       'file': MultipartFile.fromBytes(bytes, filename: 'transcribe.wav'),
     });
     final res = await dio.post(
@@ -36,12 +39,12 @@ class TranscriptionApi {
     return TranscribeResult.fromJson(res.data as Map<String, dynamic>);
   }
 
-  String midiUrl(String sha) {
-    return '${dio.options.baseUrl}/api/music/midi/$sha';
+  String midiUrl(String sha, {double bpm = 60}) {
+    return '${dio.options.baseUrl}/api/music/midi/$sha?bpm=${bpm.round()}';
   }
 
-  String xmlUrl(String sha) {
-    return '${dio.options.baseUrl}/api/music/musicxml/$sha';
+  String xmlUrl(String sha, {double bpm = 60}) {
+    return '${dio.options.baseUrl}/api/music/musicxml/$sha?bpm=${bpm.round()}';
   }
 
   Future<String> download(String url, String savePath) async {

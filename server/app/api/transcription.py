@@ -45,20 +45,24 @@ async def transcribe(
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
-    if bpm < 4 or bpm > 300:
+    if bpm < 1 or bpm > 300:
         raise HTTPException(status_code=400, detail="bad bpm")
     try:
         samples, sr = pitch_service.read_mono_wav(data)
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
     used = "dsp"
+    engine_error = None
     notes = None
     if engine == "basic_pitch" and bp_amt.available():
         try:
             notes = await asyncio.to_thread(bp_amt.transcribe, samples, sr)
             used = "basic_pitch"
-        except Exception:
+        except Exception as e:
             notes = None
+            engine_error = str(e)
+    elif engine == "basic_pitch":
+        engine_error = "basic_pitch unavailable"
     if notes is None:
         notes = await asyncio.to_thread(_dsp_notes, samples, sr)
     notes = post_quantizer.quantize(notes, bpm)
@@ -67,9 +71,10 @@ async def transcribe(
         item = crud.get_item(db, heritage_id)
         if item and item.sha256 != digest:
             raise HTTPException(status_code=400, detail="sha mismatch with heritage item")
-    mid = midi_dir() / (digest + ".mid")
+    stem = f"{digest}_{int(bpm)}"
+    mid = midi_dir() / (stem + ".mid")
     mid.write_bytes(midi_service.write_midi(notes, bpm))
-    xm = xml_dir() / (digest + ".musicxml")
+    xm = xml_dir() / (stem + ".musicxml")
     xm.write_text(musicxml_service.build_musicxml(notes, bpm, file.filename or "hue"), encoding="utf-8")
     if heritage_id:
         item = crud.get_item(db, heritage_id)
@@ -78,29 +83,47 @@ async def transcribe(
                 crud.create_audio(db, item.id, "midi", str(mid), digest, mid.stat().st_size)
             if not crud.has_audio(db, item.id, "musicxml", str(xm)):
                 crud.create_audio(db, item.id, "musicxml", str(xm), digest, xm.stat().st_size)
-    return {
+    result = {
         "label": LABEL,
         "engine": used,
         "filename": file.filename,
         "bpm": bpm,
         "sha": digest,
+        "artifact": stem,
         "count": len(notes),
         "notes": notes,
     }
+    if engine_error:
+        result["engine_error"] = engine_error
+    return result
+
+
+def _find_artifact(directory, sha: str, ext: str, bpm: float = 0.0):
+    if not manager.is_sha256(sha):
+        return None
+    if bpm > 0:
+        p = directory / f"{sha}_{int(bpm)}.{ext}"
+        if p.exists():
+            return p
+    legacy = directory / f"{sha}.{ext}"
+    if legacy.exists():
+        return legacy
+    matches = sorted(directory.glob(f"{sha}_*.{ext}"))
+    return matches[-1] if matches else None
 
 
 @router.get("/music/midi/{sha}")
-def download_midi(sha: str):
-    path = midi_dir() / (sha + ".mid")
-    if not manager.is_sha256(sha) or not path.exists():
+def download_midi(sha: str, bpm: float = 0.0):
+    path = _find_artifact(midi_dir(), sha, "mid", bpm)
+    if not path:
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(path, media_type="audio/midi")
 
 
 @router.get("/music/musicxml/{sha}")
-def download_xml(sha: str):
-    path = xml_dir() / (sha + ".musicxml")
-    if not manager.is_sha256(sha) or not path.exists():
+def download_xml(sha: str, bpm: float = 0.0):
+    path = _find_artifact(xml_dir(), sha, "musicxml", bpm)
+    if not path:
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(path, media_type="application/xml")
 
@@ -111,6 +134,7 @@ async def evaluate_transcription(
     truth: str = Form("[]"),
     bpm: float = Form(60.0),
     engine: str = Form("basic_pitch"),
+    user_id: str | None = Depends(require_user),
 ):
     data = await file.read()
     if len(data) == 0:

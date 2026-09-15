@@ -51,12 +51,24 @@ def is_sha256(value: str) -> bool:
 
 
 def save_original(data: bytes, filename: str):
+    import os
+    import tempfile
     ext = Path(filename).suffix.lower()
     digest = sha256_bytes(data)
     dest = original_dir() / (digest + ext)
     if dest.exists():
         return dest, digest, False
-    dest.write_bytes(data)
+    fd, tmp = tempfile.mkstemp(dir=original_dir(), suffix=".part")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dest)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     return dest, digest, True
 
 

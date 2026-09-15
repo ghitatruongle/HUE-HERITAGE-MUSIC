@@ -41,13 +41,13 @@ def match(pred, truth):
         if best < 0:
             continue
         onset_hits += 1
+        used[best] = True
         p = pp[best]
         tol = t["end"] - t["start"]
         tol = tol * OFFSET_RATIO
         if tol < OFFSET_MIN:
             tol = OFFSET_MIN
         if p["midi"] == t["midi"] and abs(p["end"] - t["end"]) <= tol + 0.000001:
-            used[best] = True
             hits += 1
     return hits, onset_hits
 

@@ -28,21 +28,27 @@ class ApiClient {
         case DioExceptionType.receiveTimeout:
           return 'Kết nối máy chủ quá chậm hoặc quá hạn.';
         case DioExceptionType.connectionError:
-          return 'Không kết nối được máy chủ. Kiểm tra mạng hoặc địa chỉ máy chủ trong Cài đặt.';
+          return 'Không kết nối được máy chủ AI. Kiểm tra kết nối mạng của bạn.';
         case DioExceptionType.badResponse:
           if (code == 401) return 'Cần đăng nhập hoặc token không hợp lệ.';
           if (code == 404) return 'Không tìm thấy dữ liệu trên máy chủ.';
           if (code == 413) return 'Tệp quá lớn.';
           final detail = error.response?.data;
           if (detail is Map && detail['detail'] != null) {
-            return 'Máy chủ từ chối: ${detail['detail']}';
+            return 'Máy chủ từ chối: ${_sanitize(detail['detail'].toString())}';
           }
           return 'Máy chủ trả lỗi $code.';
         default:
           return 'Lỗi không xác định khi gọi API.';
       }
     }
-    return 'Lỗi không xác định: $error';
+    return 'Lỗi không xác định: ${_sanitize(error.toString())}';
+  }
+
+  static String _sanitize(String raw) {
+    return raw
+        .replaceAll(RegExp(r'https?://\S+'), '…')
+        .replaceAll(RegExp(r'\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b'), '…');
   }
 
   Future<Response> health() => dio.get('/health');

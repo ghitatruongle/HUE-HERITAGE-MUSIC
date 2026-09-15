@@ -1,6 +1,7 @@
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -34,8 +35,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       withData: true,
     );
     final file = result?.files.single;
-    if (file == null || file.bytes == null) return;
-    await _run(file.bytes!, file.name);
+    if (file == null) return;
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && !kIsWeb && file.path != null) {
+      bytes = await File(file.path!).readAsBytes();
+    }
+    if (bytes == null) return;
+    await _run(bytes, file.name);
   }
 
   Future<void> _run(Uint8List bytes, String name) async {
@@ -60,11 +66,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       } catch (_) {
         instruments = null;
       }
+      if (!mounted) return;
       setState(() {
         _pitch = pitch;
         _instruments = instruments;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = ApiClient.describe(e));
     } finally {
       if (mounted) setState(() => _loading = false);

@@ -1,6 +1,7 @@
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,8 +26,13 @@ class _InstrumentsScreenState extends State<InstrumentsScreen> {
   Future<void> _pickAndDetect() async {
     final result = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
     final file = result?.files.single;
-    if (file == null || file.bytes == null) return;
-    await _run(file.bytes!, file.name);
+    if (file == null) return;
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && !kIsWeb && file.path != null) {
+      bytes = await File(file.path!).readAsBytes();
+    }
+    if (bytes == null) return;
+    await _run(bytes, file.name);
   }
 
   Future<void> _run(Uint8List bytes, String name) async {
@@ -43,8 +49,10 @@ class _InstrumentsScreenState extends State<InstrumentsScreen> {
     });
     try {
       final res = await InstrumentApi(config.api.dio).detectBytes(bytes, name);
+      if (!mounted) return;
       setState(() => _result = res);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = ApiClient.describe(e));
     } finally {
       if (mounted) setState(() => _loading = false);

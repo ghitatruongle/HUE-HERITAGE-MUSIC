@@ -30,7 +30,7 @@ def main():
     if not root.is_dir():
         raise SystemExit("missing dataset dir")
     exts = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
-    files = sorted([p for p in root.iterdir() if p.suffix.lower() in exts and p.is_file()])
+    files = sorted([p for p in root.rglob("*") if p.suffix.lower() in exts and p.is_file()])
     items = []
     broken = []
     skipped = []
@@ -55,7 +55,9 @@ def main():
         "metadata": meta.exists(),
         "items": items,
     }
-    Path(args.report).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    out = Path(args.report)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps({"files": len(files), "broken": len(broken), "report": args.report}))
 
 

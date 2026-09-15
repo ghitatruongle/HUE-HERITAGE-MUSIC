@@ -1,10 +1,10 @@
 from ..config import settings
-from . import runner
-from redis import Redis
-from rq import Worker, Queue
 
 
 def main():
+    from redis import Redis
+    from rq import Worker, Queue
+
     conn = Redis.from_url(settings.redis_url)
     w = Worker([Queue("hue", connection=conn)], connection=conn)
     w.work()

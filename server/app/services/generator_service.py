@@ -1,9 +1,7 @@
 import threading
 import time
-import uuid
 
 from ..ai import ace_step_engine, lora_adapter
-from ..ai.ace_step_engine import EngineUnavailable
 from ..database.session import SessionLocal
 from ..database import crud
 from ..storage import manager
@@ -23,7 +21,6 @@ def models_info():
 
 
 def create_task(kind, prompt, duration, lora, strength, seed, extra=None):
-    tid = str(uuid.uuid4())
     extra = extra or {}
     reason = ""
     if lora and not lora_adapter.resolve(lora):
@@ -34,34 +31,51 @@ def create_task(kind, prompt, duration, lora, strength, seed, extra=None):
         reason = "engine offline (acestep-api not reachable)"
     else:
         status = "running"
-    task = {"id": tid, "kind": kind, "status": status, "created_at": time.time()}
-    if reason:
-        task["reason"] = reason
-    if len(TASKS) >= MAX_TASKS:
-        oldest = sorted(TASKS, key=lambda k: TASKS[k]["created_at"])
-        for k in oldest[: len(TASKS) - MAX_TASKS + 1]:
-            TASKS.pop(k, None)
-    TASKS[tid] = task
     params = {"prompt": prompt, "duration": duration, "lora": lora, "strength": strength, "seed": seed, **extra}
     db = SessionLocal()
     try:
         saved = crud.create_task(db, kind, params)
+        tid = saved.id
         if reason:
             crud.update_task(db, saved.id, status=status, error=reason, finished=True)
         else:
             crud.update_task(db, saved.id, status="running")
     finally:
         db.close()
-    task["task_db_id"] = saved.id
+    task = {"id": tid, "kind": kind, "status": status, "created_at": time.time()}
+    if reason:
+        task["reason"] = reason
+    task["task_db_id"] = tid
+    if len(TASKS) >= MAX_TASKS:
+        oldest = [k for k in sorted(TASKS, key=lambda k: TASKS[k]["created_at"]) if TASKS[k].get("status") != "running"]
+        for k in oldest[: max(0, len(TASKS) - MAX_TASKS + 1)]:
+            TASKS.pop(k, None)
+    TASKS[tid] = task
     if status == "running":
-        threading.Thread(target=_run_generation, args=(tid, saved.id, prompt, duration, seed), daemon=True).start()
+        threading.Thread(
+            target=_run_generation,
+            args=(tid, tid, prompt, duration, seed, lora, strength, extra),
+            daemon=True,
+        ).start()
     return task
 
 
-def _run_generation(tid, db_task_id, prompt, duration, seed):
+def _fold_extra(prompt: str, extra: dict) -> str:
+    if not extra:
+        return prompt
+    bits = [prompt]
+    for key in ("lyrics", "genre", "instruments", "tempo", "mood", "vocal"):
+        val = extra.get(key)
+        if val not in (None, ""):
+            bits.append(f"{key}: {val}")
+    return "; ".join(bits)
+
+
+def _run_generation(tid, db_task_id, prompt, duration, seed, lora="", strength=0.8, extra=None):
     db = SessionLocal()
     try:
-        result = ace_step_engine.generate(prompt, duration, seed)
+        engine_prompt = _fold_extra(prompt, extra or {})
+        result = ace_step_engine.generate(engine_prompt, duration, seed, lora=lora, strength=strength)
         dest = manager.generated_dir() / f"{tid}.mp3"
         dest.write_bytes(result["audio"])
         audio_url = f"/api/music/generated/{tid}.mp3"
@@ -82,4 +96,22 @@ def _run_generation(tid, db_task_id, prompt, duration, seed):
 
 
 def get_task(task_id):
-    return TASKS.get(task_id)
+    cached = TASKS.get(task_id)
+    if cached:
+        return cached
+    db = SessionLocal()
+    try:
+        task = crud.get_task(db, task_id)
+        if not task:
+            return None
+        payload = crud.task_to_dict(task)
+        if task.kind:
+            result = payload.get("result") or {}
+            audio_url = result.get("audio_url")
+            if audio_url:
+                payload["audio_url"] = audio_url
+            if result.get("info"):
+                payload["info"] = result.get("info")
+        return payload
+    finally:
+        db.close()

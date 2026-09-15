@@ -57,7 +57,7 @@ def models_list():
     return r.json()
 
 
-def _release(prompt: str, duration: int, seed: int) -> str:
+def _release(prompt: str, duration: int, seed: int, lora: str = "", strength: float = 0.8) -> str:
     payload = {
         "prompt": prompt,
         "audio_duration": duration,
@@ -66,6 +66,10 @@ def _release(prompt: str, duration: int, seed: int) -> str:
     if seed > 0:
         payload["use_random_seed"] = False
         payload["seed"] = seed
+    if lora:
+        from . import lora_adapter
+        payload["lora_path"] = lora_adapter.resolve(lora) or ""
+        payload["lora_weight"] = strength
     r = httpx.post(_api_url() + "/release_task", json=payload, timeout=30.0)
     r.raise_for_status()
     body = r.json()
@@ -92,11 +96,11 @@ def _download(url_path: str) -> bytes:
     return r.content
 
 
-def generate(prompt, duration=60, seed=0):
+def generate(prompt, duration=60, seed=0, lora="", strength=0.8):
     if not api_available():
         raise EngineUnavailable("engine offline (acestep-api not reachable)")
     duration = max(10, min(int(duration), 300))
-    task_id = _release(prompt, duration, seed)
+    task_id = _release(prompt, duration, seed, lora=lora, strength=strength)
     deadline = time.time() + POLL_TIMEOUT
     while time.time() < deadline:
         time.sleep(POLL_INTERVAL)

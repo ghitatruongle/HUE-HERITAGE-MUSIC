@@ -9,6 +9,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/transcription_api.dart';
 import '../../models/transcribe_result.dart';
 import '../../services/history_service.dart';
+import '../../services/download_helper.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
@@ -35,9 +36,14 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   Future<void> _pickFile() async {
     final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
     final file = picked?.files.single;
-    if (file == null || file.bytes == null) return;
+    if (file == null) return;
+    Uint8List? bytes = file.bytes;
+    if (bytes == null && !kIsWeb && file.path != null) {
+      bytes = await File(file.path!).readAsBytes();
+    }
+    if (bytes == null) return;
     setState(() {
-      _pickedBytes = file.bytes;
+      _pickedBytes = bytes;
       _sourceLabel = file.name;
       _result = null;
       _error = null;
@@ -80,6 +86,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       final data = await TranscriptionApi(dio).transcribeBytes(
         _pickedBytes!,
         bpm: bpm,
+        engine: _engine,
         onProgress: (a, b) {
           if (mounted && b > 0) {
             setState(() => _progress = a / b);
@@ -121,21 +128,23 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final api = TranscriptionApi(dio);
+      final ext = midi ? 'mid' : 'musicxml';
+      final name = 'hue_${r.sha.substring(0, 8)}.$ext';
       if (kIsWeb) {
-        final url = midi ? api.midiUrl(r.sha) : api.xmlUrl(r.sha);
+        final url = midi ? api.midiUrl(r.sha, bpm: r.bpm) : api.xmlUrl(r.sha, bpm: r.bpm);
+        triggerDownload(url, name);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Mở link để tải: $url')),
+            SnackBar(content: Text('Đã tải xuống $name')),
           );
         }
         return;
       }
-      final ext = midi ? 'mid' : 'musicxml';
-      final savePath = '${Directory.systemTemp.path}/hue_${r.sha.substring(0, 8)}.$ext';
-      await api.download(midi ? api.midiUrl(r.sha) : api.xmlUrl(r.sha), savePath);
+      final savePath = '${Directory.systemTemp.path}/$name';
+      await api.download(midi ? api.midiUrl(r.sha, bpm: r.bpm) : api.xmlUrl(r.sha, bpm: r.bpm), savePath);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã lưu $savePath')),
+          SnackBar(content: Text('Đã lưu $name vào thư mục tạm')),
         );
       }
     } catch (e) {

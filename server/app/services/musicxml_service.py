@@ -99,30 +99,44 @@ def build_musicxml(notes, bpm, title):
             ET.SubElement(clef, "sign").text = "G"
             ET.SubElement(clef, "line").text = "2"
         used = 0
+        bar_len = DIVISIONS * BEATS_PER_BAR
         if not bar:
-            append_rest(m, DIVISIONS * BEATS_PER_BAR)
+            append_rest(m, bar_len)
             continue
+        by_onset = {}
         for nt in bar:
-            pos_div = int(round(nt["pos"] * DIVISIONS))
+            key = int(round(nt["pos"] * DIVISIONS))
+            by_onset.setdefault(key, []).append(nt)
+        for pos_div in sorted(by_onset):
             if pos_div > used:
-                append_rest(m, pos_div - used)
+                append_rest(m, min(pos_div, bar_len) - used)
                 used = pos_div
-            step, alter, octave = midi_to_step(nt["midi"])
-            dur = max(1, int(round(nt["dur"] * DIVISIONS)))
-            n = ET.SubElement(m, "note")
-            p = ET.SubElement(n, "pitch")
-            ET.SubElement(p, "step").text = step
-            if alter:
-                ET.SubElement(p, "alter").text = "1"
-            ET.SubElement(p, "octave").text = str(octave)
-            ET.SubElement(n, "duration").text = str(dur)
-            t, dots = duration_type(dur / DIVISIONS)
-            if t:
-                ET.SubElement(n, "type").text = t
-                for _ in range(1 if dots else 0):
-                    ET.SubElement(n, "dot")
-            used += dur
-        remain = DIVISIONS * BEATS_PER_BAR - used
+            if used >= bar_len:
+                break
+            chord = by_onset[pos_div]
+            for ci, nt in enumerate(chord):
+                step, alter, octave = midi_to_step(nt["midi"])
+                dur = max(1, int(round(nt["dur"] * DIVISIONS)))
+                if used + dur > bar_len:
+                    dur = bar_len - used
+                n = ET.SubElement(m, "note")
+                if ci > 0:
+                    ET.SubElement(n, "chord")
+                p = ET.SubElement(n, "pitch")
+                ET.SubElement(p, "step").text = step
+                if alter:
+                    ET.SubElement(p, "alter").text = "1"
+                ET.SubElement(p, "octave").text = str(octave)
+                ET.SubElement(n, "duration").text = str(dur)
+                t, dots = duration_type(dur / DIVISIONS)
+                if t:
+                    ET.SubElement(n, "type").text = t
+                    for _ in range(1 if dots else 0):
+                        ET.SubElement(n, "dot")
+            used += max(1, int(round(max(nt["dur"] for nt in chord) * DIVISIONS)))
+            if used > bar_len:
+                used = bar_len
+        remain = bar_len - used
         if remain > 0:
             append_rest(m, remain)
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(score, encoding="unicode")

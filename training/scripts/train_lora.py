@@ -18,19 +18,22 @@ def main():
     ap.add_argument("--execute", action="store_true")
     args = ap.parse_args()
     cfg_path = Path(args.config).resolve()
-    root = cfg_path.parents[2] if len(cfg_path.parents) > 2 else cfg_path.parent
+    root = Path(__file__).resolve().parents[2]
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-    base = Path(cfg.get("base_model", ""))
-    ds = Path(cfg.get("dataset", ""))
-    out = Path(cfg.get("output", ""))
+    errors = []
+    for key in ("base_model", "dataset", "output"):
+        if not str(cfg.get(key, "")).strip():
+            errors.append(f"missing {key}")
+    base = Path(cfg.get("base_model") or "missing")
+    ds = Path(cfg.get("dataset") or "missing")
+    out = Path(cfg.get("output") or "missing")
     if not base.is_absolute():
         base = root / base
     if not ds.is_absolute():
         ds = root / ds
     if not out.is_absolute():
         out = root / out
-    errors = []
-    if not ds.is_dir():
+    if not errors and not ds.is_dir():
         errors.append("missing dataset")
     rank = cfg.get("rank")
     if isinstance(rank, bool) or not isinstance(rank, (int, float)) or rank <= 0:
@@ -55,7 +58,8 @@ def main():
     if errors:
         raise SystemExit("invalid plan")
     if not args.execute:
-        raise SystemExit("dry run only")
+        print("dry run only")
+        return
     if not all(deps.values()):
         raise SystemExit("missing deps")
     if not base.exists():

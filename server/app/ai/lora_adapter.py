@@ -18,7 +18,7 @@ def list_adapters():
         if not sub.is_dir():
             continue
         w = sub / ADAPTER_FILE
-        out.append({"name": sub.name, "ready": w.exists(), "path": str(w)})
+        out.append({"name": sub.name, "ready": w.exists()})
     return out
 
 

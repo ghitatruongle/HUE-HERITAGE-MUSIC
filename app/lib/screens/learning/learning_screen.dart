@@ -95,7 +95,7 @@ class _LearningScreenState extends State<LearningScreen> {
       if (!mounted) {
         return;
       }
-      setState(() => _error = e.toString());
+      setState(() => _error = 'Không bắt đầu được ghi âm. Kiểm tra quyền microphone của trình duyệt/thiết bị.');
       return;
     }
     if (!mounted) {
@@ -121,9 +121,10 @@ class _LearningScreenState extends State<LearningScreen> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final api = SingApi(dio);
+      final media = context.read<SessionMedia>();
       final data = kIsWeb
           ? await api.analyzePitchBytes(
-              context.read<SessionMedia>().recordingBytes!,
+              media.recordingBytes ?? (await XFile(path).readAsBytes()),
               onProgress: (a, b) {
                 if (mounted && b > 0) {
                   setState(() => _progress = a / b);
@@ -138,10 +139,9 @@ class _LearningScreenState extends State<LearningScreen> {
                 }
               },
             );
+      if (!mounted) return;
       _log('analyze-pitch', 'Phân tích bản thu', 'done');
-      if (mounted) {
-        setState(() => _result = data);
-      }
+      setState(() => _result = data);
     } catch (e) {
       _log('analyze-pitch', 'Phân tích bản thu', 'error');
       if (mounted) {
@@ -186,10 +186,9 @@ class _LearningScreenState extends State<LearningScreen> {
       });
       try {
         final data = await api.compareBytes(sample, user);
+        if (!mounted) return;
         _log('compare', 'So sánh với bản mẫu', 'done');
-        if (mounted) {
-          setState(() => _compare = data);
-        }
+        setState(() => _compare = data);
       } catch (e) {
         _log('compare', 'So sánh với bản mẫu', 'error');
         if (mounted) {

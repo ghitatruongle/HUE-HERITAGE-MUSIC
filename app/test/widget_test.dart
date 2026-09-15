@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hue_heritage_music/models/compare_result.dart';
 import 'package:hue_heritage_music/models/pitch_data.dart';
 import 'package:hue_heritage_music/screens/settings/settings_screen.dart';
+import 'package:hue_heritage_music/services/locale_provider.dart';
 import 'package:hue_heritage_music/services/server_config.dart';
 import 'package:hue_heritage_music/services/theme_provider.dart';
 import 'package:hue_heritage_music/widgets/common_button.dart';
@@ -25,12 +26,13 @@ void main() {
     expect(ServerConfig.normalize(''), '');
   });
 
-  testWidgets('Settings screen shows server configuration UI', (tester) async {
+  testWidgets('Settings screen never shows server configuration UI', (tester) async {
+    final locale = LocaleProvider();
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<ServerConfig>.value(value: ServerConfig()),
           ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
+          ChangeNotifierProvider<LocaleProvider>.value(value: locale),
         ],
         child: const MaterialApp(
           home: Scaffold(body: SettingsScreen()),
@@ -39,10 +41,12 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Địa chỉ máy chủ API'), findsOneWidget);
-    expect(find.text('Lưu'), findsOneWidget);
-    expect(find.text('Kiểm tra'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.textContaining('Kết nối máy chủ AI'), findsNothing);
+    expect(find.textContaining('Địa chỉ máy chủ'), findsNothing);
+    expect(find.textContaining('URL máy chủ'), findsNothing);
+    expect(find.textContaining('Kiểm tra'), findsNothing);
   });
 
   testWidgets('CommonButton renders and responds to tap', (tester) async {

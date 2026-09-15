@@ -5,6 +5,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -75,7 +76,10 @@ def register(creds: Credentials, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="bad username or password")
     if crud.get_user(db, creds.username.strip()):
         raise HTTPException(status_code=409, detail="username exists")
-    user = crud.create_user(db, creds.username.strip(), hash_password(creds.password))
+    try:
+        user = crud.create_user(db, creds.username.strip(), hash_password(creds.password))
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="username exists")
     return {"id": user.id, "username": user.username, "token": make_token(user.id)}
 
 

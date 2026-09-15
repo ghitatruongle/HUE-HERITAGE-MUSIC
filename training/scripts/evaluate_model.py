@@ -18,7 +18,9 @@ def main():
         "ready": ready,
         "size": size,
     }
-    Path(args.report).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    out = Path(args.report)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report))
 
 

@@ -9,10 +9,12 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/heritage_api.dart';
 import '../../api/endpoints/instrument_api.dart';
 import '../../api/endpoints/restoration_api.dart';
+import '../../core/theme/app_theme.dart';
 import '../../models/heritage_item.dart';
 import '../../models/instrument_result.dart';
 import '../../models/restore_result.dart';
 import '../../services/history_service.dart';
+import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/audio_player_bar.dart';
@@ -30,6 +32,7 @@ class HeritageListScreen extends StatefulWidget {
 class _HeritageListScreenState extends State<HeritageListScreen> {
   final _search = TextEditingController();
   Future<List<HeritageItem>>? _future;
+  HeritageItem? _selectedItem;
 
   @override
   void initState() {
@@ -48,13 +51,32 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
 
   void _log(String kind, String title, String status) {
     context.read<HistoryService>().add(
-          HistoryEntry(id: DateTime.now().microsecondsSinceEpoch.toString(), kind: kind, title: title, status: status, at: DateTime.now()),
+          HistoryEntry(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            kind: kind,
+            title: title,
+            status: status,
+            at: DateTime.now(),
+          ),
         );
   }
 
-  void _play(HeritageItem item) {
+  void _playTrack(HeritageItem item) {
     final dio = context.read<ServerConfig>().api.dio;
     final url = HeritageApi(dio).audioUrl(item.id);
+
+    context.read<SessionMedia>().playTrack(
+      title: item.title,
+      subtitle: [item.artist, item.type].where((s) => s.isNotEmpty).join(' • '),
+      url: url,
+    );
+  }
+
+  void _play(HeritageItem item) {
+    final strings = context.read<LocaleProvider>().strings;
+
+    _playTrack(item);
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -62,10 +84,8 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AudioPlayerBar(url: url),
-            const SizedBox(height: 8),
             CommonButton(
-              label: 'Xem thông tin chi tiết',
+              label: strings.detailsBtn,
               onPressed: () {
                 Navigator.pop(context);
                 _showDetail(item);
@@ -73,7 +93,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
             ),
             const SizedBox(height: 8),
             CommonButton(
-              label: 'Phục dựng bản ghi',
+              label: strings.restoreActionBtn,
               onPressed: () {
                 Navigator.pop(context);
                 _restore(item);
@@ -81,7 +101,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
             ),
             const SizedBox(height: 8),
             CommonButton(
-              label: 'Nhận diện nhạc cụ',
+              label: strings.detectInstrumentsBtn,
               onPressed: () {
                 Navigator.pop(context);
                 _detect(item);
@@ -92,7 +112,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
+            child: Text(strings.closeBtn),
           ),
         ],
       ),
@@ -101,9 +121,11 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
 
   void _showDetail(HeritageItem item) {
     final rows = item.metadataRows();
+
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (_) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: SingleChildScrollView(
@@ -111,10 +133,10 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(item.title, style: Theme.of(context).textTheme.titleLarge),
+              Text(item.title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(
-                'Mã SHA-256: ${item.sha256.substring(0, 16)}...',
+                'SHA-256: ${item.sha256.length > 16 ? item.sha256.substring(0, 16) : item.sha256}...',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               const Divider(height: 24),
@@ -138,7 +160,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
               ],
               if (item.lyrics.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text('Lời bài hát', style: Theme.of(context).textTheme.titleSmall),
+                Text('Lyrics / Lời bài hát', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(item.lyrics),
               ],
@@ -159,26 +181,28 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
 
   Future<void> _uploadDialog() async {
     final config = context.read<ServerConfig>();
+    final strings = context.read<LocaleProvider>().strings;
+
     if (!config.hasServer) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chưa cấu hình máy chủ. Vào Cài đặt để nhập địa chỉ.')),
+        SnackBar(content: Text(strings.isVi ? 'Chưa cấu hình máy chủ. Vào Cài đặt để nhập địa chỉ.' : 'Server not configured. Please set URL in Settings.')),
       );
       return;
     }
-    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: !kIsWeb);
+    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
     final file = picked?.files.single;
     if (file == null) return;
     final data = await _metadataForm();
     if (data == null) return;
     try {
       final api = HeritageApi(config.api.dio);
-      final item = kIsWeb
-          ? await api.uploadBytes(bytes: file.bytes!, filename: file.name, data: data)
+      final item = kIsWeb || file.bytes != null
+          ? await api.uploadBytes(bytes: file.bytes ?? (await File(file.path!).readAsBytes()), filename: file.name, data: data)
           : await api.upload(filePath: file.path!, data: data);
       _log('heritage-upload', item.title, 'done');
       _reload();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã thêm "${item.title}" vào kho di sản.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.isVi ? 'Đã thêm "${item.title}" vào kho di sản.' : 'Added "${item.title}" to heritage archive.')));
       }
     } catch (e) {
       _log('heritage-upload', file.name, 'error');
@@ -189,6 +213,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
   }
 
   Future<HeritageUploadData?> _metadataForm() async {
+    final strings = context.read<LocaleProvider>().strings;
     final ctrls = {
       'title': TextEditingController(),
       'type': TextEditingController(),
@@ -210,31 +235,31 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
       'bpm': TextEditingController(),
     };
     final labels = {
-      'title': 'Tên tác phẩm *',
-      'type': 'Loại hình (Ca Huế, Nhã nhạc...)',
-      'artist': 'Nghệ nhân / Nghệ sĩ',
-      'genre': 'Thể loại',
-      'composer': 'Tác giả',
-      'performers': 'Người biểu diễn',
-      'artisans': 'Nghệ nhân liên quan',
-      'collector': 'Người sưu tầm',
-      'recorded_time': 'Thời gian thu',
-      'location': 'Địa điểm',
-      'source': 'Nguồn',
-      'license': 'Quyền sử dụng',
-      'instruments': 'Nhạc cụ',
-      'tonal': 'Cung bậc / Tông',
-      'description': 'Mô tả',
-      'notes': 'Ghi chú nghiên cứu',
-      'lyrics': 'Lời bài hát',
-      'bpm': 'BPM (nếu biết)',
+      'title': strings.isVi ? 'Tên tác phẩm *' : 'Title *',
+      'type': strings.isVi ? 'Loại hình (Ca Huế, Nhã nhạc...)' : 'Type (Ca Hue, Court Music...)',
+      'artist': strings.isVi ? 'Nghệ nhân / Nghệ sĩ' : 'Artisan / Artist',
+      'genre': strings.isVi ? 'Thể loại' : 'Genre',
+      'composer': strings.isVi ? 'Tác giả' : 'Composer',
+      'performers': strings.isVi ? 'Người biểu diễn' : 'Performers',
+      'artisans': strings.isVi ? 'Nghệ nhân liên quan' : 'Related Artisans',
+      'collector': strings.isVi ? 'Người sưu tầm' : 'Collector',
+      'recorded_time': strings.isVi ? 'Thời gian thu' : 'Recorded Date',
+      'location': strings.isVi ? 'Địa điểm' : 'Location',
+      'source': strings.isVi ? 'Nguồn' : 'Source',
+      'license': strings.isVi ? 'Quyền sử dụng' : 'License',
+      'instruments': strings.isVi ? 'Nhạc cụ' : 'Instruments',
+      'tonal': strings.isVi ? 'Cung bậc / Tông' : 'Tonal / Scale',
+      'description': strings.isVi ? 'Mô tả' : 'Description',
+      'notes': strings.isVi ? 'Ghi chú nghiên cứu' : 'Research Notes',
+      'lyrics': strings.isVi ? 'Lời bài hát' : 'Lyrics',
+      'bpm': strings.isVi ? 'BPM (nếu biết)' : 'BPM',
     };
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Thông tin tác phẩm'),
+        title: Text(strings.isVi ? 'Thông tin tác phẩm' : 'Work Metadata'),
         content: SizedBox(
-          width: 420,
+          width: 460,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -254,8 +279,8 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Thêm vào kho')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(strings.cancelBtn)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(strings.submitBtn)),
         ],
       ),
     );
@@ -286,25 +311,27 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
     final dio = context.read<ServerConfig>().api.dio;
     final fut = RestorationApi(dio).restoreItem(item.id);
     _log('restore', item.title, 'running');
+    final strings = context.read<LocaleProvider>().strings;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Bản phục dựng'),
+        title: Text(strings.featRestorationTitle),
         content: FutureBuilder<RestoreResult>(
           future: fut,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
-              return const Column(
+              return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 8),
-                  Text('Đang xử lý...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 12),
+                  Text(strings.processing),
                 ],
               );
             }
             if (snap.hasError) {
-              return Text('Lỗi: ${ApiClient.describe(snap.error!)}');
+              return Text('${strings.isVi ? 'Lỗi' : 'Error'}: ${ApiClient.describe(snap.error!)}');
             }
             final r = snap.data!;
             final url = RestorationApi(dio).restoredUrl(r.sha);
@@ -312,9 +339,11 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(r.label),
+                Text(r.label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
                 Text('DC: ${r.dcRemoved} · Clicks: ${r.clicksFixed}'),
                 Text('Peak: ${r.peakBefore} -> ${r.peakAfter}'),
+                const SizedBox(height: 12),
                 AudioPlayerBar(url: url),
               ],
             );
@@ -323,7 +352,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
+            child: Text(strings.closeBtn),
           ),
         ],
       ),
@@ -331,29 +360,26 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
   }
 
   void _useAsSample(HeritageItem item) async {
+    final strings = context.read<LocaleProvider>().strings;
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final api = HeritageApi(dio);
       final media = context.read<SessionMedia>();
       if (kIsWeb) {
         final bytes = await api.audioBytes(item.id);
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         media.setSample(bytes: bytes);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã chọn bản mẫu')),
+          SnackBar(content: Text(strings.isVi ? 'Đã chọn làm bản mẫu luyện hát' : 'Set as singing sample')),
         );
         return;
       }
       final savePath = '${Directory.systemTemp.path}/hue_sample.wav';
       await api.downloadAudio(item.id, savePath);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       media.setSample(path: savePath);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã tải bản mẫu')),
+        SnackBar(content: Text(strings.isVi ? 'Đã tải bản mẫu luyện hát' : 'Singing sample downloaded')),
       );
     } catch (e) {
       if (mounted) {
@@ -367,25 +393,27 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
   void _detect(HeritageItem item) {
     final dio = context.read<ServerConfig>().api.dio;
     final fut = InstrumentApi(dio).detectByItem(item.id);
+    final strings = context.read<LocaleProvider>().strings;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Nhạc cụ'),
+        title: Text(strings.featInstrumentsTitle),
         content: FutureBuilder<InstrumentResult>(
           future: fut,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
-              return const Column(
+              return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 8),
-                  Text('Đang phân tích...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 12),
+                  Text(strings.processing),
                 ],
               );
             }
             if (snap.hasError) {
-              return Text('Lỗi: ${ApiClient.describe(snap.error!)}');
+              return Text('${strings.isVi ? 'Lỗi' : 'Error'}: ${ApiClient.describe(snap.error!)}');
             }
             final r = snap.data!;
             return Flexible(
@@ -393,9 +421,11 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(r.label),
+                    Text(r.label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
                     for (final s in r.segments)
                       ListTile(
+                        dense: true,
                         title: Text(s.instrument),
                         subtitle: Text('${s.start}s - ${s.end}s'),
                         trailing: Text('${(s.confidence * 100).toInt()}%'),
@@ -409,7 +439,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
+            child: Text(strings.closeBtn),
           ),
         ],
       ),
@@ -424,101 +454,313 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
+    final width = MediaQuery.of(context).size.width;
+    final isMasterDetail = width >= 900;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'heritage-upload',
         onPressed: _uploadDialog,
         icon: const Icon(Icons.upload_file),
-        label: const Text('Thêm bản ghi'),
+        label: Text(strings.addRecordingBtn),
       ),
-      body: Column(
+      body: isMasterDetail ? _buildMasterDetail(context, strings) : _buildSingleList(context, strings),
+    );
+  }
+
+  Widget _buildSingleList(BuildContext context, dynamic strings) {
+    return Column(
+      children: [
+        _buildSearchBar(strings),
+        Expanded(
+          child: _buildItemsFuture(
+            (items) => ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (context, i) => _buildItemTile(items[i], strings, false),
+            ),
+            strings,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMasterDetail(BuildContext context, dynamic strings) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? const Color(0xFF2E2B48) : const Color(0xFFE4DFEE);
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 380,
+          child: Column(
+            children: [
+              _buildSearchBar(strings),
+              Expanded(
+                child: _buildItemsFuture(
+                  (items) {
+                    if (_selectedItem == null && items.isNotEmpty) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _selectedItem = items.first);
+                      });
+                    }
+                    return ListView.builder(
+                      itemCount: items.length,
+                      itemBuilder: (context, i) {
+                        final it = items[i];
+                        final isSel = _selectedItem?.id == it.id;
+                        return _buildItemTile(it, strings, isSel);
+                      },
+                    );
+                  },
+                  strings,
+                ),
+              ),
+            ],
+          ),
+        ),
+        VerticalDivider(width: 1, color: borderColor),
+        Expanded(
+          child: _selectedItem == null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.library_music, size: 64, color: AppTheme.primaryPurple.withValues(alpha: 0.4)),
+                      const SizedBox(height: 16),
+                      Text(strings.masterDetailEmptyTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 6),
+                      Text(strings.masterDetailEmptySubtitle, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
+                )
+              : _buildDetailPane(_selectedItem!, strings),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchBar(dynamic strings) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8),
+          Expanded(
+            child: TextField(
+              controller: _search,
+              onSubmitted: (_) => _reload(),
+              decoration: InputDecoration(
+                hintText: strings.searchHint,
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          CommonButton(
+            label: strings.searchBtn,
+            onPressed: _reload,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemsFuture(Widget Function(List<HeritageItem>) builder, dynamic strings) {
+    return FutureBuilder<List<HeritageItem>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return Center(child: Text('${strings.isVi ? 'Lỗi' : 'Error'}: ${ApiClient.describe(snap.error!)}'));
+        }
+        final items = snap.data ?? [];
+        if (items.isEmpty) {
+          return Center(child: Text(strings.noRecordings));
+        }
+        return builder(items);
+      },
+    );
+  }
+
+  Widget _buildItemTile(HeritageItem it, dynamic strings, bool isSelected) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? AppTheme.primaryPurple.withValues(alpha: isDark ? 0.25 : 0.12)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        border: isSelected
+            ? Border.all(color: AppTheme.primaryPurpleLight, width: 1.5)
+            : null,
+      ),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(it.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+        subtitle: Text(
+          [
+            if (it.type.isNotEmpty) it.type,
+            if (it.artist.isNotEmpty) it.artist,
+            if (it.recordedTime.isNotEmpty) it.recordedTime,
+          ].join(' • '),
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+        ),
+        onTap: () {
+          setState(() => _selectedItem = it);
+        },
+        trailing: IconButton(
+          icon: const Icon(Icons.play_circle_filled, color: AppTheme.primaryPurpleLight),
+          tooltip: strings.originalAudio,
+          onPressed: () => _play(it),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailPane(HeritageItem item, dynamic strings) {
+    final rows = item.metadataRows();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 20, 28, 40),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      if (item.type.isNotEmpty)
+                        Chip(
+                          label: Text(item.type, style: const TextStyle(fontSize: 12)),
+                          backgroundColor: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                        ),
+                      if (item.artist.isNotEmpty)
+                        Chip(
+                          label: Text(item.artist, style: const TextStyle(fontSize: 12)),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _search,
-                    onSubmitted: (_) => _reload(),
-                    decoration: const InputDecoration(
-                      hintText: 'Tìm theo tên, nghệ nhân, nhạc cụ, thời gian, địa điểm...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
+                const Icon(Icons.audiotrack, size: 18, color: AppTheme.amberGold),
                 const SizedBox(width: 8),
-                CommonButton(
-                  label: 'Tìm',
-                  onPressed: _reload,
+                Expanded(
+                  child: Text(strings.originalAudio, style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                FilledButton.icon(
+                  onPressed: () => _playTrack(item),
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: Text(strings.playBtn),
                 ),
               ],
             ),
           ),
-          Expanded(
-            child: FutureBuilder<List<HeritageItem>>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(child: Text('Lỗi: ${ApiClient.describe(snap.error!)}'));
-                }
-                final items = snap.data ?? [];
-                if (items.isEmpty) {
-                  return const Center(child: Text('Chưa có bản ghi'));
-                }
-                return ListView.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, i) {
-                    final it = items[i];
-                    return ListTile(
-                      title: Text(it.title),
-                      subtitle: Text(
-                        [
-                          if (it.type.isNotEmpty) it.type,
-                          if (it.artist.isNotEmpty) it.artist,
-                          if (it.recordedTime.isNotEmpty) it.recordedTime,
-                        ].join(' • '),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              icon: const Icon(Icons.school, size: 18),
+              label: Text(strings.useAsSampleBtn),
+              onPressed: () => _useAsSample(item),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.healing, size: 18),
+              label: Text(strings.restoreActionBtn),
+              onPressed: () => _restore(item),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.piano, size: 18),
+              label: Text(strings.detectInstrumentsBtn),
+              onPressed: () => _detect(item),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Text('Metadata / Thông tin lưu trữ', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                for (final e in rows.entries)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 160,
+                          child: Text(e.key, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        ),
+                        Expanded(child: Text(e.value)),
+                      ],
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 160,
+                        child: Text('SHA-256', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.play_arrow),
-                            tooltip: 'Nghe bản gốc',
-                            onPressed: () => _play(it),
-                          ),
-                          if (widget.restorationMode)
-                            IconButton(
-                              icon: const Icon(Icons.healing),
-                              tooltip: 'Phục dựng',
-                              onPressed: () => _restore(it),
-                            )
-                          else ...[
-                            IconButton(
-                              icon: const Icon(Icons.info_outline),
-                              tooltip: 'Chi tiết',
-                              onPressed: () => _showDetail(it),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.school),
-                              tooltip: 'Dùng làm bản mẫu luyện hát',
-                              onPressed: () => _useAsSample(it),
-                            ),
-                          ],
-                        ],
+                      Expanded(
+                        child: SelectableText(item.sha256, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
                       ),
-                    );
-                  },
-                );
-              },
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (item.lyrics.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text('Lyrics / Lời bài hát', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(
+                item.lyrics,
+                style: const TextStyle(height: 1.6),
+              ),
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }

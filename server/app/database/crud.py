@@ -34,9 +34,10 @@ def list_items(db: Session, q: str = "", limit: int = 50):
 
 
 def create_item(db: Session, title: str, type: str, sha256: str, filename: str, size: int, artist: str = "", **metadata):
+    fields = {k: v for k, v in metadata.items() if k != "bpm"}
     item = HeritageItem(
         title=title, type=type, artist=artist, sha256=sha256, filename=filename, size=size,
-        bpm=metadata.get("bpm"), **{k: v for k, v in metadata.items() if k != "bpm"},
+        bpm=metadata.get("bpm"), **fields,
     )
     db.add(item)
     db.commit()
@@ -65,9 +66,14 @@ def get_user_by_id(db: Session, user_id: str):
 
 
 def create_user(db: Session, username: str, password_hash: str):
+    from sqlalchemy.exc import IntegrityError
     user = User(username=username, password_hash=password_hash)
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise
     db.refresh(user)
     return user
 
