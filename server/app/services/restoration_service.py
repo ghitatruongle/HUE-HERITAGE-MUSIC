@@ -15,7 +15,8 @@ LABEL = "Phục dựng – bản xử lý"
 
 
 def remove_dc(samples):
-    mean = sum(samples) / len(samples) if samples else 0.0
+    n = len(samples)
+    mean = sum(samples) / n if n else 0.0
     return [s - mean for s in samples], mean
 
 

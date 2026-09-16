@@ -15,13 +15,13 @@ def zero_crossing_rate(samples):
 
 
 def rms(samples):
-    if not samples:
+    if len(samples) == 0:
         return 0.0
     return math.sqrt(sum(s * s for s in samples) / len(samples))
 
 
 def spectrum(samples, size=2048):
-    seg = samples[:size] + [0.0] * max(0, size - len(samples))
+    seg = list(samples[:size]) + [0.0] * max(0, size - len(samples))
     win = dsp_fft.hann(size)
     spec = dsp_fft.fft([seg[i] * win[i] for i in range(size)])
     return [abs(v) for v in spec[:size // 2]]

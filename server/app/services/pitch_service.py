@@ -15,7 +15,7 @@ def read_mono_wav(data: bytes):
     try:
         w = wave.open(bio, "rb")
     except Exception:
-        raise ValueError("wav decode failed")
+        return _decode_via_librosa(data)
     n = w.getnframes()
     ch = w.getnchannels()
     sr = w.getframerate()
@@ -46,6 +46,24 @@ def read_mono_wav(data: bytes):
         samples = mono
     limit = int(sr * MAX_SECONDS)
     return samples[:limit], sr
+
+
+def _decode_via_librosa(data: bytes):
+    try:
+        import librosa
+        import numpy as np
+    except Exception:
+        raise ValueError("wav decode failed")
+    try:
+        bio = io.BytesIO(data)
+        samples, sr = librosa.load(bio, sr=None, mono=True)
+    except Exception:
+        raise ValueError("wav decode failed")
+    if sr <= 0 or samples is None or len(samples) == 0:
+        raise ValueError("bad wav header")
+    limit = int(sr * MAX_SECONDS)
+    arr = np.asarray(samples[:limit], dtype=np.float64)
+    return [float(v) for v in arr], int(sr)
 
 
 def estimate_f0(samples, sr, frame=FRAME, hop=HOP):

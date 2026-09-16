@@ -31,9 +31,7 @@ AGENTS.md
 docs/internal/
 docs/research/notes/
 docs/research/drafts/
-docs/**
-!docs/**/
-!docs/**/.gitkeep
+docs/
 *.internal.*
 notes/
 scratch/
