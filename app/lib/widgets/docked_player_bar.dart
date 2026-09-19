@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../core/theme/app_theme.dart';
 import '../services/locale_provider.dart';
+import '../services/server_config.dart';
 import '../services/session_media.dart';
 
 class DockedPlayerBar extends StatefulWidget {
@@ -30,6 +31,29 @@ class _DockedPlayerBarState extends State<DockedPlayerBar> {
     super.dispose();
   }
 
+  String _normalizeUrl(String rawUrl, String baseUrl) {
+    if (kIsWeb) {
+      final parsed = Uri.tryParse(rawUrl);
+      if (parsed == null) return rawUrl;
+      if (!parsed.hasScheme || parsed.host.isEmpty) {
+        return Uri.base.resolve(rawUrl).toString();
+      }
+      if ((parsed.host == '127.0.0.1' || parsed.host == 'localhost') &&
+          (Uri.base.host == '127.0.0.1' || Uri.base.host == 'localhost')) {
+        return parsed.replace(host: Uri.base.host, port: Uri.base.port).toString();
+      }
+      return rawUrl;
+    }
+    if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+      if (baseUrl.isNotEmpty) {
+        final prefix = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+        final path = rawUrl.startsWith('/') ? rawUrl : '/$rawUrl';
+        return '$prefix$path';
+      }
+    }
+    return rawUrl;
+  }
+
   Future<void> _loadTrack(SessionMedia media) async {
     final key = '${media.currentAudioUrl}_${media.currentAudioPath}_${media.currentAudioBytes?.length}';
     if (_loadedKey == key) {
@@ -39,7 +63,9 @@ class _DockedPlayerBarState extends State<DockedPlayerBar> {
 
     try {
       if (media.currentAudioUrl != null && media.currentAudioUrl!.isNotEmpty) {
-        await _player.setUrl(media.currentAudioUrl!);
+        final server = context.read<ServerConfig>();
+        final finalUrl = _normalizeUrl(media.currentAudioUrl!, server.baseUrl);
+        await _player.setUrl(finalUrl);
       } else if (media.currentAudioPath != null && media.currentAudioPath!.isNotEmpty) {
         await _player.setFilePath(media.currentAudioPath!);
       } else if (media.currentAudioBytes != null) {

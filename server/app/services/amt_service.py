@@ -52,7 +52,7 @@ def segment_notes(times, f0):
                     continue
                 close = i - len(buf) if buf else i
                 flush = [v for v in sm[start:close] if v > 0]
-                if flush and times[close - 1] - times[start] + step >= MIN_DUR - 0.001:
+                if flush and close > start and times[close - 1] - times[start] + step >= MIN_DUR - 0.001:
                     m = median(flush)
                     notes.append({
                         "midi": freq_to_midi(m),

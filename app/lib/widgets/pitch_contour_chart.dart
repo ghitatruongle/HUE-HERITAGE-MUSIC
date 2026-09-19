@@ -17,9 +17,14 @@ class PitchContourChart extends StatelessWidget {
     if (data.times.length > 500) {
       step = data.times.length ~/ 500;
     }
+    if (step < 1) step = 1;
     final spots = <FlSpot>[];
     for (var i = 0; i < data.times.length && i < data.f0.length; i += step) {
-      spots.add(FlSpot(data.times[i], data.f0[i]));
+      final t = data.times[i];
+      final f = data.f0[i];
+      if (t.isFinite && f.isFinite) {
+        spots.add(FlSpot(t, f));
+      }
     }
     var peak = 100.0;
     for (final f in data.f0) {

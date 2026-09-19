@@ -170,18 +170,38 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                       : Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                                 const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _resolveNavLabel(item.labelKey, locale),
-                                    style: TextStyle(
-                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                      fontSize: 13,
-                                      color: isSelected
-                                          ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
-                                          : Theme.of(context).colorScheme.onSurface,
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            _resolveNavLabel(item.labelKey, locale),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                              fontSize: 13,
+                                              color: isSelected
+                                                  ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
+                                                  : Theme.of(context).colorScheme.onSurface,
+                                            ),
+                                          ),
+                                        ),
+                                        if (item.labelKey == 'restoration') ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.amberGold.withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: AppTheme.amberGold, width: 0.8),
+                                            ),
+                                            child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 9, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
-                                ),
                                 if (isSelected)
                                   Container(
                                     width: 4,

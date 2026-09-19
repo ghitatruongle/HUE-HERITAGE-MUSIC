@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://127.0.0.1:6379/0"
     use_rq: bool = False
     acestep_api_url: str = ""
+    web_dir: Path = BASE_DIR / "app" / "build" / "web"
 
 
 settings = Settings()

@@ -1,3 +1,4 @@
+from typing import Optional
 import asyncio
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
@@ -10,7 +11,7 @@ MAX_BYTES = 15 * 1024 * 1024
 
 
 @router.post("/music/analyze-pitch")
-async def analyze_pitch(file: UploadFile = File(...), user_id: str | None = Depends(require_user)):
+async def analyze_pitch(file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
@@ -35,7 +36,7 @@ async def analyze_pitch(file: UploadFile = File(...), user_id: str | None = Depe
 
 
 @router.post("/music/compare")
-async def compare_sing(sample: UploadFile = File(...), user: UploadFile = File(...), user_id: str | None = Depends(require_user)):
+async def compare_sing(sample: UploadFile = File(...), user: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
     s_data = await sample.read()
     u_data = await user.read()
     if len(s_data) == 0 or len(u_data) == 0:

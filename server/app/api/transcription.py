@@ -1,3 +1,4 @@
+from typing import Optional
 import asyncio
 import json
 
@@ -38,7 +39,7 @@ async def transcribe(
     heritage_id: str = Form(""),
     engine: str = Form("basic_pitch"),
     db: Session = Depends(get_db),
-    user_id: str | None = Depends(require_user),
+    user_id: Optional[str] = Depends(require_user),
 ):
     data = await file.read()
     if len(data) == 0:
@@ -48,7 +49,7 @@ async def transcribe(
     if bpm < 1 or bpm > 300:
         raise HTTPException(status_code=400, detail="bad bpm")
     try:
-        samples, sr = pitch_service.read_mono_wav(data)
+        samples, sr = pitch_service.read_mono_wav(data, max_seconds=300.0)
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
     used = "dsp"
@@ -134,7 +135,7 @@ async def evaluate_transcription(
     truth: str = Form("[]"),
     bpm: float = Form(60.0),
     engine: str = Form("basic_pitch"),
-    user_id: str | None = Depends(require_user),
+    user_id: Optional[str] = Depends(require_user),
 ):
     data = await file.read()
     if len(data) == 0:
@@ -150,7 +151,7 @@ async def evaluate_transcription(
     if not amt_eval.valid_truth(items):
         raise HTTPException(status_code=400, detail="bad truth")
     try:
-        samples, sr = pitch_service.read_mono_wav(data)
+        samples, sr = pitch_service.read_mono_wav(data, max_seconds=300.0)
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
     used = "dsp"

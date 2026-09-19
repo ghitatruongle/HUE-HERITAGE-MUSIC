@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from .models import HeritageItem, AudioFile, User, Task
@@ -8,11 +11,14 @@ from .models import HeritageItem, AudioFile, User, Task
 METADATA_FIELDS = [
     "genre", "composer", "performers", "artisans", "collector", "recorded_time",
     "location", "source", "license", "lyrics", "instruments", "tonal", "description", "notes",
+    "mode_system", "verse_structure", "rhyme_guide", "lyrics_with_ornaments",
+    "is_instrumental", "audio_backing_path", "featured_in_creation",
 ]
 
 SEARCH_FIELDS = [
     "title", "type", "genre", "artist", "composer", "performers", "artisans",
     "collector", "recorded_time", "location", "instruments", "description",
+    "mode_system", "verse_structure",
 ]
 
 
@@ -31,6 +37,22 @@ def list_items(db: Session, q: str = "", limit: int = 50):
         conds = [getattr(HeritageItem, f).like(like) for f in SEARCH_FIELDS]
         query = query.filter(or_(*conds))
     return query.order_by(HeritageItem.created_at.desc()).limit(limit).all()
+
+
+def get_creation_tunes(db: Session):
+    return db.query(HeritageItem).filter(HeritageItem.featured_in_creation.is_(True)).order_by(HeritageItem.title.asc()).all()
+
+
+def update_item_metadata(db: Session, item_id: str, **fields):
+    item = db.get(HeritageItem, item_id)
+    if not item:
+        return None
+    for k, v in fields.items():
+        if hasattr(item, k) and v is not None:
+            setattr(item, k, v)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 def create_item(db: Session, title: str, type: str, sha256: str, filename: str, size: int, artist: str = "", **metadata):
@@ -78,7 +100,7 @@ def create_user(db: Session, username: str, password_hash: str):
     return user
 
 
-def create_task(db: Session, kind: str, params: dict | None = None):
+def create_task(db: Session, kind: str, params: Optional[dict] = None):
     task = Task(kind=kind, params_json=json.dumps(params or {}))
     db.add(task)
     db.commit()
@@ -86,7 +108,7 @@ def create_task(db: Session, kind: str, params: dict | None = None):
     return task
 
 
-def update_task(db: Session, task_id: str, status: str | None = None, result: dict | None = None, error: str | None = None, finished: bool = False):
+def update_task(db: Session, task_id: str, status: Optional[str] = None, result: Optional[dict] = None, error: Optional[str] = None, finished: bool = False):
     task = db.get(Task, task_id)
     if not task:
         return None
@@ -116,13 +138,23 @@ def list_tasks(db: Session, kind: str = "", status: str = "", limit: int = 100):
     return query.order_by(Task.created_at.desc()).limit(limit).all()
 
 
+def _safe_json_loads(val: str) -> dict:
+    if not val:
+        return {}
+    try:
+        data = json.loads(val)
+        return data if isinstance(data, dict) else {"data": data}
+    except Exception:
+        return {}
+
+
 def task_to_dict(task: Task):
     return {
         "id": task.id,
         "kind": task.kind,
         "status": task.status,
-        "params": json.loads(task.params_json or "{}"),
-        "result": json.loads(task.result_json or "{}"),
+        "params": _safe_json_loads(task.params_json),
+        "result": _safe_json_loads(task.result_json),
         "error": task.error or "",
         "created_at": str(task.created_at),
         "finished_at": str(task.finished_at) if task.finished_at else None,

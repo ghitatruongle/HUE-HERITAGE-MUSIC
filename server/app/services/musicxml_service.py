@@ -20,10 +20,13 @@ def seconds_to_beats(notes, bpm):
     b = bpm if bpm > 0 else 60.0
     out = []
     for nt in notes:
+        s = max(0.0, float(nt.get("start", 0.0)))
+        e = max(s + 0.01, float(nt.get("end", s + 0.01)))
+        m = max(0, min(127, int(nt.get("midi", 60))))
         out.append({
-            "midi": nt["midi"],
-            "start": nt["start"] * b / 60.0,
-            "end": nt["end"] * b / 60.0,
+            "midi": m,
+            "start": s * b / 60.0,
+            "end": e * b / 60.0,
         })
     return out
 
@@ -80,7 +83,7 @@ def build_musicxml(notes, bpm, title):
     bars = split_bars(bnotes)
     score = ET.Element("score-partwise", version="3.1")
     work = ET.SubElement(score, "work")
-    ET.SubElement(work, "work-title").text = title
+    ET.SubElement(work, "work-title").text = title or "Hue"
     plist = ET.SubElement(score, "part-list")
     sp = ET.SubElement(plist, "score-part", id="P1")
     ET.SubElement(sp, "part-name").text = "Hue"

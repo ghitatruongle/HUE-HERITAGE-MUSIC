@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, func
+from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column
 from .session import Base
 
@@ -34,6 +34,13 @@ class HeritageItem(Base):
     tonal: Mapped[str] = mapped_column(String(128), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    mode_system: Mapped[str] = mapped_column(String(128), default="")
+    verse_structure: Mapped[str] = mapped_column(String(128), default="")
+    rhyme_guide: Mapped[str] = mapped_column(Text, default="")
+    lyrics_with_ornaments: Mapped[str] = mapped_column(Text, default="")
+    is_instrumental: Mapped[bool] = mapped_column(Boolean, default=False)
+    audio_backing_path: Mapped[str] = mapped_column(String(512), default="")
+    featured_in_creation: Mapped[bool] = mapped_column(Boolean, default=True)
     sha256: Mapped[str] = mapped_column(String(64), unique=True)
     filename: Mapped[str] = mapped_column(String(256))
     size: Mapped[int] = mapped_column(Integer, default=0)

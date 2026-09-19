@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import asyncio
+from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -14,7 +17,7 @@ MAX_BYTES = 15 * 1024 * 1024
 
 
 @router.post("/music/instruments")
-async def detect_instruments(file: UploadFile = File(...), user_id: str | None = Depends(require_user)):
+async def detect_instruments(file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
@@ -27,7 +30,7 @@ async def detect_instruments(file: UploadFile = File(...), user_id: str | None =
 
 
 @router.post("/music/instruments-item/{item_id}")
-def detect_item(item_id: str, db: Session = Depends(get_db), user_id: str | None = Depends(require_user)):
+def detect_item(item_id: str, db: Session = Depends(get_db), user_id: Optional[str] = Depends(require_user)):
     item = crud.get_item(db, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="not found")

@@ -2,11 +2,12 @@ TPQ = 480
 
 
 def varlen(value):
-    out = [value & 0x7F]
-    value >>= 7
-    while value:
-        out.append(0x80 | (value & 0x7F))
-        value >>= 7
+    val = max(0, int(value))
+    out = [val & 0x7F]
+    val >>= 7
+    while val:
+        out.append(0x80 | (val & 0x7F))
+        val >>= 7
     return bytes(reversed(out))
 
 
@@ -28,12 +29,14 @@ def write_midi(notes, bpm):
         mpq = 500000
     events = [(0, b"\xFF\x51\x03" + mpq.to_bytes(3, "big"))]
     for nt in notes:
-        on = int(round(nt["start"] * bpm / 60.0 * TPQ)) if bpm > 0 else 0
-        off = int(round(nt["end"] * bpm / 60.0 * TPQ)) if bpm > 0 else 0
+        s = max(0.0, float(nt.get("start", 0.0)))
+        e = max(s + 0.001, float(nt.get("end", s + 0.001)))
+        on = int(round(s * bpm / 60.0 * TPQ)) if bpm > 0 else 0
+        off = int(round(e * bpm / 60.0 * TPQ)) if bpm > 0 else 0
         if off <= on:
             off = on + 1
-        vel = nt.get("velocity", 80)
-        pitch = max(0, min(127, int(nt["midi"])))
+        vel = int(nt.get("velocity", 80))
+        pitch = max(0, min(127, int(nt.get("midi", 60))))
         events.append((on, bytes([0x90, pitch, vel & 0x7F])))
         events.append((off, bytes([0x80, pitch, 64])))
     events.append((max([t for t, _ in events] + [0]) + 1, b"\xFF\x2F\x00"))

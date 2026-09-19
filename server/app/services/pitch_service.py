@@ -1,6 +1,14 @@
+from __future__ import annotations
+
 import io
 import wave
 import struct
+from typing import Optional
+
+try:
+    import numpy as np
+except Exception:
+    np = None
 
 FRAME = 1024
 HOP = 1024
@@ -10,12 +18,12 @@ MAX_SECONDS = 15.0
 MAX_FRAMES = 4000
 
 
-def read_mono_wav(data: bytes):
+def read_mono_wav(data: bytes, max_seconds: Optional[float] = MAX_SECONDS):
     bio = io.BytesIO(data)
     try:
         w = wave.open(bio, "rb")
     except Exception:
-        return _decode_via_librosa(data)
+        return _decode_via_librosa(data, max_seconds=max_seconds)
     n = w.getnframes()
     ch = w.getnchannels()
     sr = w.getframerate()
@@ -44,11 +52,13 @@ def read_mono_wav(data: bytes):
                 s += samples[i * ch + c]
             mono.append(s / ch)
         samples = mono
-    limit = int(sr * MAX_SECONDS)
-    return samples[:limit], sr
+    if max_seconds is not None and max_seconds > 0:
+        limit = int(sr * max_seconds)
+        samples = samples[:limit]
+    return samples, sr
 
 
-def _decode_via_librosa(data: bytes):
+def _decode_via_librosa(data: bytes, max_seconds: Optional[float] = MAX_SECONDS):
     try:
         import librosa
         import numpy as np
@@ -61,8 +71,10 @@ def _decode_via_librosa(data: bytes):
         raise ValueError("wav decode failed")
     if sr <= 0 or samples is None or len(samples) == 0:
         raise ValueError("bad wav header")
-    limit = int(sr * MAX_SECONDS)
-    arr = np.asarray(samples[:limit], dtype=np.float64)
+    arr = np.asarray(samples, dtype=np.float64)
+    if max_seconds is not None and max_seconds > 0:
+        limit = int(sr * max_seconds)
+        arr = arr[:limit]
     return [float(v) for v in arr], int(sr)
 
 
@@ -95,14 +107,22 @@ def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
         best = 0.0
         norms = []
         top = min(lmax, frame // 2)
-        for lag in range(lmin, top):
-            v = 0.0
-            for i in range(frame - lag):
-                v += seg[i] * seg[i + lag]
-            nv = v / ((frame - lag) * (e + 0.000000001))
-            norms.append(nv)
-            if nv > best:
-                best = nv
+        if np is not None:
+            s_arr = np.asarray(seg, dtype=np.float64)
+            corr = np.correlate(s_arr, s_arr, mode="full")[len(s_arr) - 1 :]
+            lens = np.arange(frame, frame - top, -1, dtype=np.float64)
+            raw_norms = corr[:top] / (lens * (e + 1e-9))
+            norms = raw_norms[lmin:top].tolist()
+            best = max(norms) if norms else 0.0
+        else:
+            for lag in range(lmin, top):
+                v = 0.0
+                for i in range(frame - lag):
+                    v += seg[i] * seg[i + lag]
+                nv = v / ((frame - lag) * (e + 0.000000001))
+                norms.append(nv)
+                if nv > best:
+                    best = nv
         if best < 0.3:
             f = 0.0
         else:
@@ -116,16 +136,18 @@ def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
                     if nv == best:
                         pick = k
                         break
-            lag = lmin + pick
+            lag = float(lmin + pick)
             if 0 < pick < len(norms) - 1:
                 y0 = norms[pick - 1]
                 y1 = norms[pick]
                 y2 = norms[pick + 1]
                 den = y0 - 2 * y1 + y2
-                if den < 0:
-                    lag = lag + 0.5 * (y0 - y2) / den
-            if lag < 1:
-                lag = 1
+                if den < -1e-12:
+                    delta = 0.5 * (y0 - y2) / den
+                    if -1.0 <= delta <= 1.0:
+                        lag = lag + delta
+            if lag < 1.0:
+                lag = 1.0
             f = round(sr / lag, 1)
         times.append(t)
         f0s.append(f)

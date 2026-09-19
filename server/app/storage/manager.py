@@ -73,5 +73,7 @@ def save_original(data: bytes, filename: str):
 
 
 def safe_original_name(filename: str) -> bool:
+    if not filename or "\0" in filename or "/" in filename or "\\" in filename:
+        return False
     name = Path(filename).name
-    return name == filename and name not in ("", ".", "..") and "/" not in filename and "\\" not in filename
+    return name == filename and name not in ("", ".", "..")

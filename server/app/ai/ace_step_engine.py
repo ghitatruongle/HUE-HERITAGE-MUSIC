@@ -110,16 +110,28 @@ def generate(prompt, duration=60, seed=0, lora="", strength=0.8):
         if entry.get("status") == 2:
             raise EngineUnavailable("generation failed")
         if entry.get("status") == 1:
-            results = json.loads(entry.get("result") or "[]")
-            files = [x["file"] for x in results if x.get("file")]
+            raw_res = entry.get("result")
+            if isinstance(raw_res, str):
+                try:
+                    results = json.loads(raw_res or "[]")
+                except Exception:
+                    results = []
+            elif isinstance(raw_res, list):
+                results = raw_res
+            elif isinstance(raw_res, dict):
+                results = [raw_res]
+            else:
+                results = []
+            files = [x.get("file") for x in results if isinstance(x, dict) and x.get("file")]
             if not files:
                 raise EngineUnavailable("no audio returned")
             audio = _download(files[0])
+            first_info = results[0] if results and isinstance(results[0], dict) else {}
             return {
                 "remote_task_id": task_id,
                 "audio": audio,
-                "info": results[0].get("generation_info", ""),
-                "dit_model": results[0].get("dit_model", ENGINE),
-                "lm_model": results[0].get("lm_model", ""),
+                "info": first_info.get("generation_info", ""),
+                "dit_model": first_info.get("dit_model", ENGINE),
+                "lm_model": first_info.get("lm_model", ""),
             }
     raise EngineUnavailable("generation timed out")

@@ -1,3 +1,4 @@
+from typing import Optional
 import hashlib
 import hmac
 import secrets
@@ -58,7 +59,7 @@ class Credentials(BaseModel):
     password: str
 
 
-def require_user(request: Request, db: Session = Depends(get_db)) -> str | None:
+def require_user(request: Request, db: Session = Depends(get_db)) -> Optional[str]:
     if not settings.auth_required:
         return None
     header = request.headers.get("Authorization", "")

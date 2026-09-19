@@ -1,3 +1,4 @@
+from typing import Optional
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
@@ -51,7 +52,7 @@ async def upload_heritage(
     source: str = Form(""),
     license: str = Form(""),
     db: Session = Depends(get_db),
-    user_id: str | None = Depends(require_user),
+    user_id: Optional[str] = Depends(require_user),
 ):
     content_length = request.headers.get("content-length")
     if content_length and content_length.isdigit() and int(content_length) > manager.MAX_SIZE + 1024 * 1024:

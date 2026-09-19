@@ -52,13 +52,24 @@ Các giá trị mặc định đã hợp lệ cho chạy local:
 | `USE_RQ` | false | queue bất đồng bộ (cần Redis) |
 | `ACESTEP_API_URL` | http://127.0.0.1:8001 | model AI sinh nhạc (tùy chọn) |
 
-## Bước 4 — Khởi động
+## Bước 4 — Nạp dữ liệu di sản mẫu (Khuyến nghị)
+
+Để nạp ngay 13 bài bản di sản kinh điển (Ca Huế & Nhã nhạc/Nhạc cụ) cùng toàn bộ siêu dữ liệu âm nhạc học, cấu trúc thể thơ và lời ca luyến láy vào cơ sở dữ liệu:
+
+```bash
+python -m app.database.seed_heritage
+```
+
+## Bước 5 — Khởi động Server (Phục vụ cả Web App & API)
 
 ```bash
 python run_server.py
 ```
 
-Server chạy tại `http://127.0.0.1:8000` — mở `http://127.0.0.1:8000/docs` để xem OpenAPI/Swagger.
+Server chạy tại `http://127.0.0.1:8000`:
+- **Web App**: Mở `http://127.0.0.1:8000` trên trình duyệt để sử dụng ngay giao diện ứng dụng web di sản (hỗ trợ nén Gzip, định tuyến SPA fallback).
+- **Tài liệu API**: Mở `http://127.0.0.1:8000/docs` để xem OpenAPI/Swagger.
+- **Build lại Web App (khi cần)**: `cd ../app && flutter build web --release`.
 
 Database tự tạo tại `<repo>/hue_heritage.db` (SQLite) ở lần chạy đầu tiên.
 
@@ -69,7 +80,7 @@ curl http://127.0.0.1:8000/health
 # => {"status":"ok","app":"Hue Heritage Music API",...}
 
 curl http://127.0.0.1:8000/api/heritage
-# => []  (danh sách di sản, rỗng ban đầu)
+# => danh sách di sản
 
 curl http://127.0.0.1:8000/api/music/models
 # => {"base":"ACE-Step 1.5","base_ready":false,...}
@@ -93,7 +104,7 @@ Tính năng sinh nhạc/ca/cover cần máy chủ ACE-Step riêng (ngoài repo n
 ```bash
 cd server
 pytest -q
-# 26 tests pass
+# 29 tests pass
 ```
 
 ## Khắc phục sự cố

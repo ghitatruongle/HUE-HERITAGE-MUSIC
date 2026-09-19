@@ -3,14 +3,25 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:provider/provider.dart';
+
+import '../services/session_media.dart';
 
 class AudioPlayerBar extends StatefulWidget {
   final String? url;
   final String? filePath;
   final Uint8List? bytes;
   final String label;
+  final bool autoPlay;
 
-  const AudioPlayerBar({super.key, this.url, this.filePath, this.bytes, this.label = ''});
+  const AudioPlayerBar({
+    super.key,
+    this.url,
+    this.filePath,
+    this.bytes,
+    this.label = '',
+    this.autoPlay = false,
+  });
 
   @override
   State<AudioPlayerBar> createState() => _AudioPlayerBarState();
@@ -29,10 +40,42 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant AudioPlayerBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url ||
+        oldWidget.filePath != widget.filePath ||
+        oldWidget.bytes != widget.bytes) {
+      _load();
+    }
+  }
+
+  String _normalizeUrl(String rawUrl) {
+    if (!kIsWeb) return rawUrl;
+    final parsed = Uri.tryParse(rawUrl);
+    if (parsed == null) return rawUrl;
+    if (!parsed.hasScheme || parsed.host.isEmpty) {
+      return Uri.base.resolve(rawUrl).toString();
+    }
+    if ((parsed.host == '127.0.0.1' || parsed.host == 'localhost') &&
+        (Uri.base.host == '127.0.0.1' || Uri.base.host == 'localhost')) {
+      return parsed.replace(host: Uri.base.host, port: Uri.base.port).toString();
+    }
+    return rawUrl;
+  }
+
   Future<void> _load() async {
     try {
+      if (mounted) {
+        setState(() {
+          _ready = false;
+          _error = null;
+        });
+      }
+      await _player.stop();
       if (widget.url != null && widget.url!.isNotEmpty) {
-        await _player.setUrl(widget.url!);
+        final finalUrl = _normalizeUrl(widget.url!);
+        await _player.setUrl(finalUrl);
       } else if (widget.filePath != null && widget.filePath!.isNotEmpty) {
         await _player.setFilePath(widget.filePath!);
       } else if (widget.bytes != null) {
@@ -42,6 +85,12 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
       }
       if (mounted) {
         setState(() => _ready = true);
+        if (widget.autoPlay) {
+          try {
+            context.read<SessionMedia>().closePlayer();
+          } catch (_) {}
+          await _player.play();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -77,10 +126,31 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return Text(_error!);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Expanded(
+              child: Text(
+                _error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 18),
+              onPressed: _load,
+              tooltip: 'Thử lại',
+            ),
+          ],
+        ),
+      );
     }
     if (!_ready) {
-      return const Center(child: CircularProgressIndicator());
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -101,6 +171,9 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
                 if (playing) {
                   _player.pause();
                 } else {
+                  try {
+                    context.read<SessionMedia>().closePlayer();
+                  } catch (_) {}
                   _player.play();
                 }
               },

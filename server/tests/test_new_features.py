@@ -174,3 +174,63 @@ def test_task_dispatch_inline(monkeypatch):
     assert client.get(f"/api/task/{tid}").json()["result"]["engine"] in ("basic_pitch", "dsp")
     listed = client.get("/api/task", params={"kind": "transcribe"}).json()
     assert any(t["id"] == tid for t in listed)
+
+
+def test_heritage_tunes_and_sing_endpoints():
+    client = TestClient(app)
+    r = client.get("/api/music/heritage-tunes")
+    assert r.status_code == 200
+    tunes = r.json()
+    assert isinstance(tunes, list)
+    assert len(tunes) > 0
+    first = tunes[0]
+    assert "mode_system" in first
+    assert "verse_structure" in first
+    assert "rhyme_guide" in first
+    assert "lyrics_with_ornaments" in first
+    assert "featured_in_creation" in first
+
+    r_orig = client.post("/api/music/sing-original", params={"heritage_id": first["id"], "vocal": "Nữ", "duration": 60})
+    assert r_orig.status_code == 200
+    task_orig = r_orig.json()
+    assert task_orig["kind"] == "sing_original"
+
+    r_new = client.post("/api/music/sing-new-lyrics", params={"heritage_id": first["id"], "new_lyrics": "Thương ai chín đợi mười chờ", "vocal": "Nữ", "duration": 60})
+    assert r_new.status_code == 200
+    task_new = r_new.json()
+    assert task_new["kind"] == "sing_new_lyrics"
+
+    bad = client.post("/api/music/sing-original", params={"heritage_id": ""})
+    assert bad.status_code == 400
+    not_found = client.post("/api/music/sing-original", params={"heritage_id": "non-existent-id-999"})
+    assert not_found.status_code == 404
+
+
+def test_web_app_serving_and_spa_routing():
+    client = TestClient(app)
+    r_root = client.get("/")
+    assert r_root.status_code == 200
+    assert "text/html" in r_root.headers.get("content-type", "")
+
+    r_spa = client.get("/creation")
+    assert r_spa.status_code == 200
+    assert "text/html" in r_spa.headers.get("content-type", "")
+
+    r_api_404 = client.get("/api/unknown-endpoint-test-404")
+    assert r_api_404.status_code == 404
+    assert r_api_404.json() == {"detail": "Not Found"}
+
+    r_static = client.get("/flutter.js")
+    assert r_static.status_code == 200
+    assert "Cache-Control" in r_static.headers
+
+    r_traversal = client.get("/%2e%2e/etc/passwd")
+    assert r_traversal.status_code == 400
+
+
+def test_gzip_compression_enabled():
+    client = TestClient(app)
+    r = client.get("/api/heritage", headers={"Accept-Encoding": "gzip"})
+    assert r.status_code == 200
+    assert len(r.content) > 0
+

@@ -11,7 +11,11 @@ class InstrumentApi {
 
   Future<InstrumentResult> detectByItem(String itemId) async {
     final res = await dio.post('/api/music/instruments-item/$itemId');
-    return InstrumentResult.fromJson(res.data as Map<String, dynamic>);
+    final data = res.data;
+    if (data is Map) {
+      return InstrumentResult.fromJson(Map<String, dynamic>.from(data));
+    }
+    return InstrumentResult(label: 'Chưa rõ', segments: []);
   }
 
   Future<InstrumentResult> detectBytes(Uint8List bytes, String filename) async {
@@ -19,6 +23,10 @@ class InstrumentApi {
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
     final res = await dio.post('/api/music/instruments', data: form);
-    return InstrumentResult.fromJson(res.data as Map<String, dynamic>);
+    final data = res.data;
+    if (data is Map) {
+      return InstrumentResult.fromJson(Map<String, dynamic>.from(data));
+    }
+    return InstrumentResult(label: 'Chưa rõ', segments: []);
   }
 }

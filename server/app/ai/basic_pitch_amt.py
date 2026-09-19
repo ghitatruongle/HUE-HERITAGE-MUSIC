@@ -33,7 +33,7 @@ def _load():
                 return MODEL
             except Exception as e:
                 last_error = e
-        raise last_error
+        raise last_error or RuntimeError("no basic-pitch model candidates found")
 
 
 def _freq_from_midi(midi: int) -> float:
@@ -65,7 +65,8 @@ def transcribe(samples, sr: int) -> list:
             w.writeframes(pcm.tobytes())
         _, _, note_events = predict(tmp_path, model)
     finally:
-        os.unlink(tmp_path)
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
     notes = []
     for ev in note_events:
         start, end, midi, velocity = float(ev[0]), float(ev[1]), int(ev[2]), int(ev[3])

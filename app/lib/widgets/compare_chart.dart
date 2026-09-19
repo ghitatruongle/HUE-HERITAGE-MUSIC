@@ -5,12 +5,16 @@ class CompareChart extends StatelessWidget {
   final List<double> times;
   final List<double> sampleF0;
   final List<double> warpedF0;
+  final String sampleLabel;
+  final String targetLabel;
 
   const CompareChart({
     super.key,
     required this.times,
     required this.sampleF0,
     required this.warpedF0,
+    this.sampleLabel = 'Bản ghi mẫu',
+    this.targetLabel = 'Bản ghi đối chiếu',
   });
 
   List<FlSpot> _spots(List<double> f0) {
@@ -19,8 +23,13 @@ class CompareChart extends StatelessWidget {
     if (times.length > 300) {
       step = times.length ~/ 300;
     }
+    if (step < 1) step = 1;
     for (var i = 0; i < times.length && i < f0.length; i += step) {
-      out.add(FlSpot(times[i], f0[i]));
+      final t = times[i];
+      final f = f0[i];
+      if (t.isFinite && f.isFinite) {
+        out.add(FlSpot(t, f));
+      }
     }
     return out;
   }
@@ -43,11 +52,11 @@ class CompareChart extends StatelessWidget {
     }
     return Column(
       children: [
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Text('Mẫu', style: TextStyle(color: Colors.blue)),
-            Text('Bạn hát', style: TextStyle(color: Colors.red)),
+            Text(sampleLabel, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(targetLabel, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12)),
           ],
         ),
         SizedBox(

@@ -53,8 +53,12 @@ class HeritageApi {
 
   Future<List<HeritageItem>> list({String q = ''}) async {
     final res = await dio.get('/api/heritage', queryParameters: {'q': q});
-    final data = res.data as List;
-    return data.map((e) => HeritageItem.fromJson(e as Map<String, dynamic>)).toList();
+    final data = res.data;
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((e) => HeritageItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   Future<HeritageItem> upload({
@@ -67,7 +71,14 @@ class HeritageApi {
       'file': await MultipartFile.fromFile(filePath, filename: name),
     });
     final res = await dio.post('/api/heritage/upload', data: form);
-    return HeritageItem.fromJson(res.data as Map<String, dynamic>);
+    final resData = res.data;
+    if (resData is Map) {
+      return HeritageItem.fromJson(Map<String, dynamic>.from(resData));
+    }
+    throw DioException(
+      requestOptions: res.requestOptions,
+      error: 'Invalid response from server',
+    );
   }
 
   Future<HeritageItem> uploadBytes({
@@ -80,7 +91,14 @@ class HeritageApi {
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
     final res = await dio.post('/api/heritage/upload', data: form);
-    return HeritageItem.fromJson(res.data as Map<String, dynamic>);
+    final resData = res.data;
+    if (resData is Map) {
+      return HeritageItem.fromJson(Map<String, dynamic>.from(resData));
+    }
+    throw DioException(
+      requestOptions: res.requestOptions,
+      error: 'Invalid response from server',
+    );
   }
 
   Map<String, dynamic> _metaMap(HeritageUploadData d) => {

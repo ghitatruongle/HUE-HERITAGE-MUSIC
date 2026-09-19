@@ -24,7 +24,7 @@ def classify(fe):
 
 
 def detect(data):
-    samples, sr = pitch_service.read_mono_wav(data)
+    samples, sr = pitch_service.read_mono_wav(data, max_seconds=60.0)
     win_n = int(sr * WIN)
     hop_n = int(sr * HOP)
     if hop_n <= 0:

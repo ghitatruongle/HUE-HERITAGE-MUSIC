@@ -7,6 +7,7 @@ from ..database import crud
 from ..storage import manager
 
 TASKS = {}
+TASKS_LOCK = threading.Lock()
 MAX_TASKS = 200
 
 
@@ -46,11 +47,12 @@ def create_task(kind, prompt, duration, lora, strength, seed, extra=None):
     if reason:
         task["reason"] = reason
     task["task_db_id"] = tid
-    if len(TASKS) >= MAX_TASKS:
-        oldest = [k for k in sorted(TASKS, key=lambda k: TASKS[k]["created_at"]) if TASKS[k].get("status") != "running"]
-        for k in oldest[: max(0, len(TASKS) - MAX_TASKS + 1)]:
-            TASKS.pop(k, None)
-    TASKS[tid] = task
+    with TASKS_LOCK:
+        if len(TASKS) >= MAX_TASKS:
+            oldest = [k for k in sorted(TASKS, key=lambda k: TASKS[k]["created_at"]) if TASKS[k].get("status") != "running"]
+            for k in oldest[: max(0, len(TASKS) - MAX_TASKS + 1)]:
+                TASKS.pop(k, None)
+        TASKS[tid] = task
     if status == "running":
         threading.Thread(
             target=_run_generation,
@@ -79,26 +81,29 @@ def _run_generation(tid, db_task_id, prompt, duration, seed, lora="", strength=0
         dest = manager.generated_dir() / f"{tid}.mp3"
         dest.write_bytes(result["audio"])
         audio_url = f"/api/music/generated/{tid}.mp3"
-        task = TASKS.get(tid)
-        if task is not None:
-            task["status"] = "done"
-            task["audio_url"] = audio_url
-            task["info"] = result.get("info", "")
+        with TASKS_LOCK:
+            task = TASKS.get(tid)
+            if task is not None:
+                task["status"] = "done"
+                task["audio_url"] = audio_url
+                task["info"] = result.get("info", "")
         crud.update_task(db, db_task_id, status="done", result={"audio_url": audio_url, "info": result.get("info", "")}, finished=True)
     except Exception as e:
-        task = TASKS.get(tid)
-        if task is not None:
-            task["status"] = "error"
-            task["reason"] = str(e)
+        with TASKS_LOCK:
+            task = TASKS.get(tid)
+            if task is not None:
+                task["status"] = "error"
+                task["reason"] = str(e)
         crud.update_task(db, db_task_id, status="error", error=str(e), finished=True)
     finally:
         db.close()
 
 
 def get_task(task_id):
-    cached = TASKS.get(task_id)
-    if cached:
-        return cached
+    with TASKS_LOCK:
+        cached = TASKS.get(task_id)
+        if cached:
+            return dict(cached)
     db = SessionLocal()
     try:
         task = crud.get_task(db, task_id)

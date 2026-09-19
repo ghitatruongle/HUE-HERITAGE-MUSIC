@@ -31,7 +31,11 @@ class SingApi {
       data: form,
       onSendProgress: onProgress,
     );
-    return PitchData.fromJson(res.data as Map<String, dynamic>);
+    final data = res.data;
+    if (data is Map) {
+      return PitchData.fromJson(Map<String, dynamic>.from(data));
+    }
+    return PitchData(meanF0: 0, frames: 0, times: [], f0: []);
   }
 
   Future<CompareResult> compare(String samplePath, String userPath) async {
@@ -46,6 +50,10 @@ class SingApi {
       'user': MultipartFile.fromBytes(userBytes, filename: 'user.wav'),
     });
     final res = await dio.post('/api/music/compare', data: form);
-    return CompareResult.fromJson(res.data as Map<String, dynamic>);
+    final data = res.data;
+    if (data is Map) {
+      return CompareResult.fromJson(Map<String, dynamic>.from(data));
+    }
+    throw DioException(requestOptions: res.requestOptions, error: 'Invalid response from server');
   }
 }

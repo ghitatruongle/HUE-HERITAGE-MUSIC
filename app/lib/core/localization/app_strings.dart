@@ -20,15 +20,15 @@ class AppStrings {
   String get navLearning => isVi ? 'Học hát Ca Huế' : 'Singing Practice';
   String get navAnalysis => isVi ? 'Phân tích F0' : 'Pitch Analysis';
   String get navTranscription => isVi ? 'Audio -> Bản nhạc' : 'Audio to Sheet';
-  String get navCreation => isVi ? 'AI Sáng tạo' : 'AI Creation';
+  String get navCreation => isVi ? 'Sáng tạo cùng Ca Huế' : 'Hue Heritage Studio';
   String get navCover => isVi ? 'Cover' : 'Cover Song';
   String get navRestoration => isVi ? 'Phục dựng' : 'Restoration';
   String get navInstruments => isVi ? 'Nhạc cụ' : 'Instruments';
 
-  String get featHeritageTitle => isVi ? 'Kho di sản' : 'Heritage Archive';
+  String get featHeritageTitle => isVi ? 'Kho di sản số' : 'Heritage Archive';
   String get featHeritageDesc => isVi
-      ? 'Tra cứu, tìm kiếm bản ghi di sản, nghe bản gốc và bản phục chế'
-      : 'Browse and search heritage recordings, listen to original and restored audio';
+      ? 'Lưu trữ, tra cứu và thưởng thức các bản ghi âm cổ truyền nguyên bản (Chỉ nghe nhạc)'
+      : 'Browse, search, and listen to authentic historical heritage recordings';
 
   String get featLearningTitle => isVi ? 'Học hát Ca Huế' : 'Singing Practice';
   String get featLearningDesc => isVi
@@ -45,20 +45,20 @@ class AppStrings {
       ? 'Chuyển bản thu âm thành file MIDI và bản nhạc MusicXML'
       : 'Transcribe audio recordings into MIDI and MusicXML sheet music';
 
-  String get featCreationTitle => isVi ? 'AI Sáng tạo' : 'AI Creation';
+  String get featCreationTitle => isVi ? 'Sáng tạo cùng Ca Huế' : 'Hue Heritage Studio';
   String get featCreationDesc => isVi
-      ? 'Sáng tác bản nhạc mới mang âm hưởng Huế (cần model đã huấn luyện)'
-      : 'Compose new music pieces imbued with Hue heritage melodies';
+      ? 'Hát nguyên bản di sản hoặc sáng tạo lời thơ mới trên lòng bản cố định'
+      : 'Recreate original heritage pieces or sing new verses over classical melodies';
 
   String get featCoverTitle => isVi ? 'Cover' : 'Cover Song';
   String get featCoverDesc => isVi
       ? 'Tạo phiên bản cover từ bản ghi di sản (cần model đã huấn luyện)'
       : 'Generate cover variations from heritage source recordings';
 
-  String get featRestorationTitle => isVi ? 'Phục dựng' : 'Restoration';
+  String get featRestorationTitle => isVi ? 'Phục dựng (Beta)' : 'Restoration (Beta)';
   String get featRestorationDesc => isVi
-      ? 'Khử nhiễu, phục hồi bản ghi cũ trong kho di sản'
-      : 'Denoise and enhance vintage historical Hue recordings';
+      ? 'Đối chiếu bản ghi tìm tên bài & Khôi phục chất lượng âm thanh'
+      : 'Cross-match recordings to find titles & restore audio quality';
 
   String get featInstrumentsTitle => isVi ? 'Nhạc cụ' : 'Instruments';
   String get featInstrumentsDesc => isVi
@@ -126,6 +126,50 @@ class AppStrings {
       ? 'Chọn một tác phẩm từ danh sách'
       : 'Select a recording from the archive';
   String get masterDetailEmptySubtitle => isVi
-      ? 'Xem thông tin lịch sử, phổ F0, lời ca và nghe bản gốc hoặc phục dựng'
-      : 'Inspect metadata, pitch contour, lyrics, and play original or restored audio';
+      ? 'Xem thông tin lịch sử, lời ca và thưởng thức bản thu âm di sản'
+      : 'Inspect metadata, lyrics, and listen to authentic heritage recordings';
+
+  String get heritageArchiveTitle => isVi ? 'Kho Di sản Âm nhạc Số' : 'Digital Heritage Archive';
+  String get heritageArchiveSubtitle => isVi
+      ? 'Lưu trữ và thưởng thức các bản ghi âm cổ truyền nguyên bản'
+      : 'Preserve and enjoy authentic traditional heritage recordings';
+
+  String get restorationLabTitle => isVi
+      ? 'Phân hệ Nghiên cứu Phục dựng Âm thanh Cổ truyền (Beta)'
+      : 'Heritage Audio Restoration Research Lab (Beta)';
+  String get restorationLabDesc => isVi
+      ? 'Công cụ DSP chuyên sâu phục vụ nghiên cứu bảo tồn: Khử nhiễu nền, bù trừ DC-offset, triệt tiêu xung nhiễu (clicks & pops) và cân bằng phổ âm thanh bản ghi lịch sử.'
+      : 'Dedicated DSP tools for heritage acoustic research: broadband denoising, DC-offset filtering, click/pop suppression, and spectral normalization.';
+
+  String get restorationBeforeLabel => isVi ? 'Bản thu gốc (Trước phục dựng)' : 'Original (Before Restoration)';
+  String get restorationAfterLabel => isVi ? 'Bản phục dựng (Sau xử lý DSP)' : 'Restored (After DSP Processing)';
+  String get restorationRunBtn => isVi ? 'Chạy phục dựng (Beta)' : 'Run Restoration (Beta)';
+  String get restorationMetricsTitle => isVi ? 'Chỉ số Kỹ thuật Phục dựng DSP' : 'DSP Restoration Metrics';
+  String get restorationDcRemoved => isVi ? 'Thành phần DC đã khử' : 'DC Offset Removed';
+  String get restorationClicksFixed => isVi ? 'Xung nhiễu đã sửa' : 'Clicks & Pops Fixed';
+  String get restorationPeakChange => isVi ? 'Mức đỉnh biên độ' : 'Peak Amplitude Level';
+  String get restorationNoiseFloor => isVi ? 'Mức nền nhiễu ước lượng' : 'Estimated Noise Floor';
+  String get restorationAlgorithm => isVi
+      ? 'Giải thuật: Median Filter + High-pass IIR + Adaptive Limiter'
+      : 'Algorithm: Median Filter + High-pass IIR + Adaptive Limiter';
+  String get restorationNotice => isVi
+      ? 'Tính năng đang trong giai đoạn Beta thử nghiệm phục vụ nghiên cứu âm học di sản.'
+      : 'Experimental Beta feature for heritage acoustic research.';
+  String get restorationEmptyTitle => isVi
+      ? 'Chọn một bản thu để nghiên cứu phục dựng'
+      : 'Select a recording to research restoration';
+  String get restorationEmptySubtitle => isVi
+      ? 'Thực hiện khử nhiễu, sửa xung click/pop và so sánh trực tiếp A/B'
+      : 'Perform denoising, click/pop repair, and compare audio A/B directly';
+
+  String get restorationTabDsp => isVi ? 'Khôi phục chất lượng âm thanh' : 'Audio Restoration';
+  String get restorationTabCompare => isVi ? 'Đối chiếu & Tìm tên bài' : 'Cross-Compare & Identify';
+  String get comparePickSample => isVi ? 'Bản ghi mẫu (Kho di sản)' : 'Reference Heritage Track';
+  String get comparePickTarget => isVi ? 'Bản ghi cần đối chiếu / nhận diện' : 'Target Track to Identify';
+  String get compareRunBtn => isVi ? 'Đối chiếu âm học & Nhận diện bài' : 'Run Acoustic Matching & Identify';
+  String get compareSimilarityScore => isVi ? 'Độ tương đồng âm học' : 'Acoustic Similarity Score';
+  String get compareIdentifiedMatch => isVi ? 'Làn điệu nhận diện khớp nhất' : 'Best Matching Tune';
+  String get compareContourTitle => isVi ? 'Biểu đồ đối chiếu cao độ F0' : 'F0 Pitch Contour Alignment';
+  String get compareUploadPrompt => isVi ? 'Nạp file âm thanh cần nhận diện' : 'Upload Audio to Identify';
+  String get restorationUploadVintageBtn => isVi ? 'Tải lên bản thu cũ để phục dựng' : 'Upload Vintage Recording';
 }

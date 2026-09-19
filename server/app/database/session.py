@@ -29,6 +29,13 @@ MIGRATION_COLUMNS = {
         "tonal": "VARCHAR(128) DEFAULT '' NOT NULL",
         "description": "TEXT DEFAULT '' NOT NULL",
         "notes": "TEXT DEFAULT '' NOT NULL",
+        "mode_system": "VARCHAR(128) DEFAULT '' NOT NULL",
+        "verse_structure": "VARCHAR(128) DEFAULT '' NOT NULL",
+        "rhyme_guide": "TEXT DEFAULT '' NOT NULL",
+        "lyrics_with_ornaments": "TEXT DEFAULT '' NOT NULL",
+        "is_instrumental": "BOOLEAN DEFAULT 0 NOT NULL",
+        "audio_backing_path": "VARCHAR(512) DEFAULT '' NOT NULL",
+        "featured_in_creation": "BOOLEAN DEFAULT 1 NOT NULL",
     },
 }
 

@@ -9,10 +9,10 @@ def quantize(notes, bpm):
             e = s + grid
         out.append({
             "midi": nt["midi"],
-            "freq": nt["freq"],
+            "freq": nt.get("freq", 0.0),
             "start": round(s, 3),
             "end": round(e, 3),
-            "velocity": nt["velocity"],
+            "velocity": nt.get("velocity", 80),
         })
     out.sort(key=lambda x: (x["start"], x["midi"]))
     merged = []

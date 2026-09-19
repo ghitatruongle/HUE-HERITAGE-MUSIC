@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,7 +12,7 @@ router = APIRouter(prefix="/task", tags=["tasks"])
 
 
 @router.post("")
-def create_task(body: dict | None = None, kind: str = "generic", db: Session = Depends(get_db), user_id: str | None = Depends(require_user)):
+def create_task(body: Optional[dict] = None, kind: str = "generic", db: Session = Depends(get_db), user_id: Optional[str] = Depends(require_user)):
     if kind in queue.KINDS:
         params = (body or {}).get("params", body or {})
         if not isinstance(params, dict) or not params.get("audio_path"):

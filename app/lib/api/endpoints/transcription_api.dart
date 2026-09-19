@@ -36,7 +36,11 @@ class TranscriptionApi {
       data: form,
       onSendProgress: onProgress,
     );
-    return TranscribeResult.fromJson(res.data as Map<String, dynamic>);
+    final data = res.data;
+    if (data is Map) {
+      return TranscribeResult.fromJson(Map<String, dynamic>.from(data));
+    }
+    throw DioException(requestOptions: res.requestOptions, error: 'Invalid response from server');
   }
 
   String midiUrl(String sha, {double bpm = 60}) {

@@ -54,14 +54,17 @@ class CompareNote {
   });
 
   factory CompareNote.fromJson(Map<String, dynamic> json) {
-    final m = (json['midi'] as num?)?.toInt() ?? 60;
+    final rawM = (json['midi'] as num?)?.toInt() ?? 60;
+    final m = rawM < 0 ? 0 : (rawM > 127 ? 127 : rawM);
+    final noteName = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][m % 12];
+    final octave = m ~/ 12 - 1;
     return CompareNote(
       midi: m,
-      name: '${['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][m % 12]}${m ~/ 12 - 1}',
+      name: '$noteName$octave',
       start: (json['start'] as num?)?.toDouble() ?? 0,
       end: (json['end'] as num?)?.toDouble() ?? 0,
       errCents: (json['err_cents'] as num?)?.toDouble() ?? 0,
-      verdict: json['verdict'] as String? ?? '',
+      verdict: json['verdict']?.toString() ?? '',
     );
   }
 }
@@ -83,20 +86,31 @@ class CompareResult {
 
   static List<double> _doubles(dynamic v) {
     if (v is List) {
-      return v.map((e) => (e as num).toDouble()).toList();
+      final out = <double>[];
+      for (final e in v) {
+        if (e is num) {
+          out.add(e.toDouble());
+        } else if (e is String) {
+          final p = double.tryParse(e);
+          if (p != null) out.add(p);
+        }
+      }
+      return out;
     }
     return <double>[];
   }
 
   factory CompareResult.fromJson(Map<String, dynamic> json) {
-    final m = json['metrics'] as Map<String, dynamic>? ?? {};
-    final s = json['sample'] as Map<String, dynamic>? ?? {};
-    final w = json['user_warped'] as Map<String, dynamic>? ?? {};
+    final m = json['metrics'] is Map ? Map<String, dynamic>.from(json['metrics'] as Map) : <String, dynamic>{};
+    final s = json['sample'] is Map ? Map<String, dynamic>.from(json['sample'] as Map) : <String, dynamic>{};
+    final w = json['user_warped'] is Map ? Map<String, dynamic>.from(json['user_warped'] as Map) : <String, dynamic>{};
     final raw = json['notes'];
     final list = <CompareNote>[];
     if (raw is List) {
       for (final e in raw) {
-        list.add(CompareNote.fromJson(e as Map<String, dynamic>));
+        if (e is Map) {
+          list.add(CompareNote.fromJson(Map<String, dynamic>.from(e)));
+        }
       }
     }
     return CompareResult(

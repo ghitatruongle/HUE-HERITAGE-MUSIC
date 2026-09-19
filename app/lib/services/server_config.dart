@@ -36,7 +36,15 @@ class ServerConfig extends ChangeNotifier {
 
   Future<void> load() async {
     final url = await _readConfigUrl();
-    _baseUrl = normalize(url ?? '');
+    var normalized = normalize(url ?? '');
+    if (kIsWeb) {
+      if (normalized.isEmpty ||
+          normalized.contains('127.0.0.1') ||
+          normalized.contains('localhost')) {
+        normalized = normalize(Uri.base.origin);
+      }
+    }
+    _baseUrl = normalized;
     _api = ApiClient(baseUrl: _baseUrl);
     notifyListeners();
   }

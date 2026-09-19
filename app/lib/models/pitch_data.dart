@@ -13,7 +13,16 @@ class PitchData {
 
   static List<double> _doubles(dynamic v) {
     if (v is List) {
-      return v.map((e) => (e as num).toDouble()).toList();
+      final out = <double>[];
+      for (final e in v) {
+        if (e is num) {
+          out.add(e.toDouble());
+        } else if (e is String) {
+          final p = double.tryParse(e);
+          if (p != null) out.add(p);
+        }
+      }
+      return out;
     }
     return <double>[];
   }

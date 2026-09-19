@@ -37,12 +37,20 @@ class TasksApi {
 
   Future<List<ServerTask>> list({String kind = '', String status = ''}) async {
     final res = await dio.get('/api/task', queryParameters: {'kind': kind, 'status': status});
-    final data = res.data as List;
-    return data.map((e) => ServerTask.fromJson(e as Map<String, dynamic>)).toList();
+    final data = res.data;
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((e) => ServerTask.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   Future<ServerTask> get(String id) async {
     final res = await dio.get('/api/task/$id');
-    return ServerTask.fromJson(res.data as Map<String, dynamic>);
+    final data = res.data;
+    if (data is Map) {
+      return ServerTask.fromJson(Map<String, dynamic>.from(data));
+    }
+    return ServerTask(id: id, kind: '', status: 'unknown');
   }
 }

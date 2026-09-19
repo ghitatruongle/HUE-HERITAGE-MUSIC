@@ -5,16 +5,13 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
-import '../../services/theme_provider.dart';
-import '../../widgets/docked_player_bar.dart';
 import '../../widgets/responsive_layout.dart';
 import '../analysis/analysis_screen.dart';
 import '../creation/creation_screen.dart';
 import '../heritage/heritage_list_screen.dart';
 import '../history/history_screen.dart';
-import '../info/info_screen.dart';
-import '../instruments/instruments_screen.dart';
 import '../learning/learning_screen.dart';
+import '../restoration/restoration_screen.dart';
 import '../settings/settings_screen.dart';
 import '../transcription/transcription_screen.dart';
 
@@ -28,34 +25,26 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _navIndex = 0;
 
-  void _openPage(BuildContext context, String title, Widget page) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: Text(title)),
-          body: SafeArea(child: page),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final isDesktop = width >= 860;
-
     final destinations = [
       NavigationDestinationItem(
         icon: Icons.home_outlined,
         selectedIcon: Icons.home,
         labelKey: 'home',
-        screen: _HomeContent(onOpen: _openPage),
+        screen: _HomeContent(onSelectTab: (idx) => setState(() => _navIndex = idx)),
       ),
       const NavigationDestinationItem(
         icon: Icons.library_music_outlined,
         selectedIcon: Icons.library_music,
         labelKey: 'heritage',
         screen: HeritageListScreen(),
+      ),
+      const NavigationDestinationItem(
+        icon: Icons.healing_outlined,
+        selectedIcon: Icons.healing,
+        labelKey: 'restoration',
+        screen: RestorationScreen(),
       ),
       const NavigationDestinationItem(
         icon: Icons.mic_outlined,
@@ -82,24 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
         screen: CreationScreen(),
       ),
       const NavigationDestinationItem(
-        icon: Icons.shuffle_outlined,
-        selectedIcon: Icons.shuffle,
-        labelKey: 'cover',
-        screen: CreationScreen(coverMode: true),
-      ),
-      const NavigationDestinationItem(
-        icon: Icons.healing_outlined,
-        selectedIcon: Icons.healing,
-        labelKey: 'restoration',
-        screen: HeritageListScreen(restorationMode: true),
-      ),
-      const NavigationDestinationItem(
-        icon: Icons.piano_outlined,
-        selectedIcon: Icons.piano,
-        labelKey: 'instruments',
-        screen: InstrumentsScreen(),
-      ),
-      const NavigationDestinationItem(
         icon: Icons.history_outlined,
         selectedIcon: Icons.history,
         labelKey: 'history',
@@ -111,101 +82,20 @@ class _HomeScreenState extends State<HomeScreen> {
         labelKey: 'settings',
         screen: SettingsScreen(),
       ),
-      const NavigationDestinationItem(
-        icon: Icons.info_outline,
-        selectedIcon: Icons.info,
-        labelKey: 'info',
-        screen: InfoScreen(),
-      ),
     ];
 
-    if (isDesktop) {
-      return ResponsiveScaffold(
-        destinations: destinations,
-        selectedIndex: _navIndex,
-        onDestinationSelected: (idx) => setState(() => _navIndex = idx),
-      );
-    }
-
-    final locale = context.watch<LocaleProvider>();
-    final theme = context.watch<ThemeProvider>();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(locale.strings.appTitle),
-        actions: [
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              minimumSize: Size.zero,
-            ),
-            onPressed: () => locale.toggleLanguage(),
-            child: Text(locale.isVietnamese ? 'VI' : 'EN', style: const TextStyle(fontSize: 12)),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: Icon(theme.isDark ? Icons.light_mode : Icons.dark_mode),
-            tooltip: locale.strings.themeModeTitle,
-            onPressed: () => theme.toggleTheme(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: locale.strings.settingsTitle,
-            onPressed: () => _openPage(context, locale.strings.settingsTitle, const SettingsScreen()),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: _navIndex == 4
-                  ? _MoreContent(onOpen: _openPage)
-                  : destinations[_navIndex].screen,
-            ),
-            const DockedPlayerBar(),
-          ],
-        ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _navIndex < 5 ? _navIndex : 0,
-        onDestinationSelected: (idx) => setState(() => _navIndex = idx),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.home_outlined),
-            selectedIcon: const Icon(Icons.home),
-            label: locale.strings.navHome,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.library_music_outlined),
-            selectedIcon: const Icon(Icons.library_music),
-            label: locale.strings.navHeritage,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.mic_outlined),
-            selectedIcon: const Icon(Icons.mic),
-            label: locale.strings.navLearning,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.query_stats_outlined),
-            selectedIcon: const Icon(Icons.query_stats),
-            label: locale.strings.navAnalysis,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.more_horiz),
-            label: locale.strings.featuresHeader,
-          ),
-        ],
-      ),
+    return ResponsiveScaffold(
+      destinations: destinations,
+      selectedIndex: _navIndex,
+      onDestinationSelected: (idx) => setState(() => _navIndex = idx),
     );
   }
 }
 
 class _HomeContent extends StatelessWidget {
-  final void Function(BuildContext, String, Widget) onOpen;
+  final void Function(int) onSelectTab;
 
-  const _HomeContent({required this.onOpen});
+  const _HomeContent({required this.onSelectTab});
 
   @override
   Widget build(BuildContext context) {
@@ -219,80 +109,58 @@ class _HomeContent extends StatelessWidget {
         color: const Color(0xFF00796B),
         title: strings.featHeritageTitle,
         subtitle: strings.featHeritageDesc,
-        page: const HeritageListScreen(),
-        screenTitle: strings.featHeritageTitle,
-      ),
-      _Feature(
-        icon: Icons.mic,
-        color: AppTheme.primaryPurple,
-        title: strings.featLearningTitle,
-        subtitle: strings.featLearningDesc,
-        page: const LearningScreen(),
-        screenTitle: strings.featLearningTitle,
-      ),
-      _Feature(
-        icon: Icons.query_stats,
-        color: const Color(0xFF2A5FA5),
-        title: strings.featAnalysisTitle,
-        subtitle: strings.featAnalysisDesc,
-        page: const AnalysisScreen(),
-        screenTitle: strings.featAnalysisTitle,
-      ),
-      _Feature(
-        icon: Icons.music_note,
-        color: const Color(0xFF8F6C00),
-        title: strings.featTranscriptionTitle,
-        subtitle: strings.featTranscriptionDesc,
-        page: const TranscriptionScreen(),
-        screenTitle: strings.featTranscriptionTitle,
-      ),
-      _Feature(
-        icon: Icons.auto_awesome,
-        color: const Color(0xFFAD3B6F),
-        title: strings.featCreationTitle,
-        subtitle: strings.featCreationDesc,
-        page: const CreationScreen(),
-        screenTitle: strings.featCreationTitle,
-      ),
-      _Feature(
-        icon: Icons.shuffle,
-        color: const Color(0xFFB34700),
-        title: strings.featCoverTitle,
-        subtitle: strings.featCoverDesc,
-        page: const CreationScreen(coverMode: true),
-        screenTitle: strings.featCoverTitle,
+        tabIndex: 1,
       ),
       _Feature(
         icon: Icons.healing,
         color: const Color(0xFF00695C),
         title: strings.featRestorationTitle,
         subtitle: strings.featRestorationDesc,
-        page: const HeritageListScreen(restorationMode: true),
-        screenTitle: strings.featRestorationTitle,
+        tabIndex: 2,
       ),
       _Feature(
-        icon: Icons.piano,
-        color: const Color(0xFF4A5F2A),
-        title: strings.featInstrumentsTitle,
-        subtitle: strings.featInstrumentsDesc,
-        page: const InstrumentsScreen(),
-        screenTitle: strings.featInstrumentsTitle,
+        icon: Icons.mic,
+        color: AppTheme.primaryPurple,
+        title: strings.featLearningTitle,
+        subtitle: strings.featLearningDesc,
+        tabIndex: 3,
+      ),
+      _Feature(
+        icon: Icons.query_stats,
+        color: const Color(0xFF2A5FA5),
+        title: strings.featAnalysisTitle,
+        subtitle: strings.featAnalysisDesc,
+        tabIndex: 4,
+      ),
+      _Feature(
+        icon: Icons.music_note,
+        color: const Color(0xFF8F6C00),
+        title: strings.featTranscriptionTitle,
+        subtitle: strings.featTranscriptionDesc,
+        tabIndex: 5,
+      ),
+      _Feature(
+        icon: Icons.auto_awesome,
+        color: const Color(0xFFAD3B6F),
+        title: strings.featCreationTitle,
+        subtitle: strings.featCreationDesc,
+        tabIndex: 6,
       ),
       _Feature(
         icon: Icons.history,
         color: const Color(0xFF5D4037),
         title: strings.featHistoryTitle,
         subtitle: strings.featHistoryDesc,
-        page: const HistoryScreen(),
-        screenTitle: strings.featHistoryTitle,
+        tabIndex: 7,
       ),
       _Feature(
-        icon: Icons.info_outline,
-        color: const Color(0xFF455A64),
-        title: strings.featInfoTitle,
-        subtitle: strings.featInfoDesc,
-        page: const InfoScreen(),
-        screenTitle: strings.featInfoTitle,
+        icon: Icons.settings_outlined,
+        color: const Color(0xFF546E7A),
+        title: strings.settingsTitle,
+        subtitle: locale.isVietnamese
+            ? 'Cấu hình kết nối máy chủ AI, giao diện và ngôn ngữ'
+            : 'Configure AI server connection, UI theme and language',
+        tabIndex: 8,
       ),
     ];
 
@@ -311,45 +179,30 @@ class _HomeContent extends StatelessWidget {
           children: [
             _buildHeroBanner(context, strings, server),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Text(
-                  strings.featuresHeader,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const Spacer(),
-                Text(
-                  strings.modulesCount(features.length),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+            Text(
+              strings.featuresHeader,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
-                ),
-              ],
             ),
             const SizedBox(height: 14),
             if (crossAxisCount == 1)
               for (final f in features) ...[
-                _FeatureCard(feature: f, onOpen: onOpen),
+                _FeatureCard(feature: f, onSelect: () => onSelectTab(f.tabIndex)),
                 const SizedBox(height: 12),
               ]
             else
-              GridView.builder(
+              GridView.count(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: crossAxisCount == 3 ? 1.6 : 1.9,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: features.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  mainAxisExtent: 108,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 14,
-                ),
-                itemBuilder: (context, idx) => _FeatureCard(
-                  feature: features[idx],
-                  onOpen: onOpen,
-                ),
+                children: [
+                  for (final f in features)
+                    _FeatureCard(feature: f, onSelect: () => onSelectTab(f.tabIndex)),
+                ],
               ),
             const SizedBox(height: 24),
             Text(
@@ -456,107 +309,27 @@ class _HomeContent extends StatelessWidget {
   }
 }
 
-class _MoreContent extends StatelessWidget {
-  final void Function(BuildContext, String, Widget) onOpen;
-
-  const _MoreContent({required this.onOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = context.watch<LocaleProvider>().strings;
-    final features = [
-      _Feature(
-        icon: Icons.auto_awesome,
-        color: const Color(0xFFAD3B6F),
-        title: strings.featCreationTitle,
-        subtitle: strings.featCreationDesc,
-        page: const CreationScreen(),
-        screenTitle: strings.featCreationTitle,
-      ),
-      _Feature(
-        icon: Icons.shuffle,
-        color: const Color(0xFFB34700),
-        title: strings.featCoverTitle,
-        subtitle: strings.featCoverDesc,
-        page: const CreationScreen(coverMode: true),
-        screenTitle: strings.featCoverTitle,
-      ),
-      _Feature(
-        icon: Icons.healing,
-        color: const Color(0xFF00695C),
-        title: strings.featRestorationTitle,
-        subtitle: strings.featRestorationDesc,
-        page: const HeritageListScreen(restorationMode: true),
-        screenTitle: strings.featRestorationTitle,
-      ),
-      _Feature(
-        icon: Icons.piano,
-        color: const Color(0xFF4A5F2A),
-        title: strings.featInstrumentsTitle,
-        subtitle: strings.featInstrumentsDesc,
-        page: const InstrumentsScreen(),
-        screenTitle: strings.featInstrumentsTitle,
-      ),
-      _Feature(
-        icon: Icons.history,
-        color: const Color(0xFF5D4037),
-        title: strings.featHistoryTitle,
-        subtitle: strings.featHistoryDesc,
-        page: const HistoryScreen(),
-        screenTitle: strings.featHistoryTitle,
-      ),
-      _Feature(
-        icon: Icons.info_outline,
-        color: const Color(0xFF455A64),
-        title: strings.featInfoTitle,
-        subtitle: strings.featInfoDesc,
-        page: const InfoScreen(),
-        screenTitle: strings.featInfoTitle,
-      ),
-    ];
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-      children: [
-        Text(
-          strings.featuresHeader,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-        const SizedBox(height: 14),
-        for (final f in features) ...[
-          _FeatureCard(feature: f, onOpen: onOpen),
-          const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
-}
-
 class _Feature {
   final IconData icon;
   final Color color;
   final String title;
   final String subtitle;
-  final Widget page;
-  final String screenTitle;
+  final int tabIndex;
 
   const _Feature({
     required this.icon,
     required this.color,
     required this.title,
     required this.subtitle,
-    required this.page,
-    required this.screenTitle,
+    required this.tabIndex,
   });
 }
 
 class _FeatureCard extends StatefulWidget {
   final _Feature feature;
-  final void Function(BuildContext, String, Widget) onOpen;
+  final VoidCallback onSelect;
 
-  const _FeatureCard({required this.feature, required this.onOpen});
+  const _FeatureCard({required this.feature, required this.onSelect});
 
   @override
   State<_FeatureCard> createState() => _FeatureCardState();
@@ -602,7 +375,7 @@ class _FeatureCardState extends State<_FeatureCard> {
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(20),
-            onTap: () => widget.onOpen(context, widget.feature.screenTitle, widget.feature.page),
+            onTap: widget.onSelect,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -622,14 +395,32 @@ class _FeatureCardState extends State<_FeatureCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          widget.feature.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: scheme.onSurface,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                widget.feature.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.onSurface,
+                                    ),
                               ),
+                            ),
+                            if (widget.feature.title.contains('Beta')) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.amberGold.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: AppTheme.amberGold, width: 0.8),
+                                ),
+                                child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(

@@ -76,5 +76,7 @@ def dtw(a, b, band_ratio=BAND_RATIO):
         else:
             j -= 1
     path.reverse()
+    if not path:
+        return [], 0.0
     dist = dp[n - 1][m - 1] / len(path)
     return path, round(dist, 4)

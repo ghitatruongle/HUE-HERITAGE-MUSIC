@@ -42,7 +42,7 @@ def _transcribe(params):
     if len(data) > MAX_BYTES:
         raise ValueError("file too large")
     bpm = float(params.get("bpm", 60.0))
-    samples, sr = pitch_service.read_mono_wav(data)
+    samples, sr = pitch_service.read_mono_wav(data, max_seconds=300.0)
     used = "dsp"
     notes = None
     if params.get("engine", "basic_pitch") == "basic_pitch" and bp_amt.available():

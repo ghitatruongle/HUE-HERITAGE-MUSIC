@@ -17,12 +17,12 @@ class MusicTask {
 
   factory MusicTask.fromJson(Map<String, dynamic> json) {
     return MusicTask(
-      id: json['id'] as String? ?? '',
-      kind: json['kind'] as String? ?? '',
-      status: json['status'] as String? ?? '',
-      reason: json['reason'] as String? ?? '',
-      audioUrl: json['audio_url'] as String? ?? '',
-      info: json['info'] as String? ?? '',
+      id: json['id']?.toString() ?? '',
+      kind: json['kind']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      reason: json['reason']?.toString() ?? '',
+      audioUrl: json['audio_url']?.toString() ?? '',
+      info: json['info']?.toString() ?? '',
     );
   }
 }
@@ -35,8 +35,8 @@ class LoraAdapter {
 
   factory LoraAdapter.fromJson(Map<String, dynamic> json) {
     return LoraAdapter(
-      name: json['name'] as String? ?? '',
-      ready: json['ready'] as bool? ?? false,
+      name: json['name']?.toString() ?? '',
+      ready: json['ready'] == true,
     );
   }
 }

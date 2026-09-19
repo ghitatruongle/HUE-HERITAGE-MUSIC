@@ -27,6 +27,7 @@ GHITA_API.*.json
 DOC.txt
 PROJECT_STRUCTURE.md
 AGENTS.md
+KE_NHIEM_HUAN_LUYEN_AI.md
 .agents/
 docs/internal/
 docs/research/notes/

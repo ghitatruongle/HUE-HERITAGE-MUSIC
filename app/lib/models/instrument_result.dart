@@ -32,11 +32,13 @@ class InstrumentResult {
     final list = <InstrumentSegment>[];
     if (raw is List) {
       for (final e in raw) {
-        list.add(InstrumentSegment.fromJson(e as Map<String, dynamic>));
+        if (e is Map) {
+          list.add(InstrumentSegment.fromJson(Map<String, dynamic>.from(e)));
+        }
       }
     }
     return InstrumentResult(
-      label: json['label'] as String? ?? '',
+      label: json['label']?.toString() ?? '',
       segments: list,
     );
   }

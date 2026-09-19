@@ -87,8 +87,14 @@ def empty_result():
 
 
 def compare(sample_data, user_data):
-    s_samples, s_sr = pitch_service.read_mono_wav(sample_data)
-    u_samples, u_sr = pitch_service.read_mono_wav(user_data)
+    s_samples, s_sr = pitch_service.read_mono_wav(sample_data, max_seconds=30.0)
+    u_samples, u_sr = pitch_service.read_mono_wav(user_data, max_seconds=30.0)
+    max_s = int(s_sr * 30)
+    max_u = int(u_sr * 30)
+    if len(s_samples) > max_s:
+        s_samples = s_samples[:max_s]
+    if len(u_samples) > max_u:
+        u_samples = u_samples[:max_u]
     s_times, s_f0 = pitch_service.estimate_f0(s_samples, s_sr, hop=256)
     u_times, u_f0 = pitch_service.estimate_f0(u_samples, u_sr, hop=256)
     if not s_times or not u_times:

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import asyncio
+from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -40,7 +43,7 @@ def run_restore(data, heritage_id):
 
 
 @router.post("/music/restore")
-async def restore_upload(file: UploadFile = File(...), user_id: str | None = Depends(require_user)):
+async def restore_upload(file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
@@ -50,7 +53,7 @@ async def restore_upload(file: UploadFile = File(...), user_id: str | None = Dep
 
 
 @router.post("/music/restore-item/{item_id}")
-def restore_item(item_id: str, db: Session = Depends(get_db), user_id: str | None = Depends(require_user)):
+def restore_item(item_id: str, db: Session = Depends(get_db), user_id: Optional[str] = Depends(require_user)):
     item = crud.get_item(db, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="not found")

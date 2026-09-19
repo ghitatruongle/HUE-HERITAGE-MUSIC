@@ -16,7 +16,8 @@ class TransNote {
   ];
 
   static String noteName(int midi) {
-    return '${_names[midi % 12]}${midi ~/ 12 - 1}';
+    final m = midi < 0 ? 0 : (midi > 127 ? 127 : midi);
+    return '${_names[m % 12]}${m ~/ 12 - 1}';
   }
 
   factory TransNote.fromJson(Map<String, dynamic> json) {
@@ -48,13 +49,15 @@ class TranscribeResult {
     final list = <TransNote>[];
     if (raw is List) {
       for (final e in raw) {
-        list.add(TransNote.fromJson(e as Map<String, dynamic>));
+        if (e is Map) {
+          list.add(TransNote.fromJson(Map<String, dynamic>.from(e)));
+        }
       }
     }
     return TranscribeResult(
-      label: json['label'] as String? ?? '',
+      label: json['label']?.toString() ?? '',
       bpm: (json['bpm'] as num?)?.toDouble() ?? 60,
-      sha: json['sha'] as String? ?? '',
+      sha: json['sha']?.toString() ?? '',
       notes: list,
     );
   }
