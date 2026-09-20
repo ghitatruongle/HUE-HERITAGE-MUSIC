@@ -11,6 +11,8 @@ WEIGHT_FILES = ("lokr_weights.safetensors", "adapter_model.safetensors")
 
 def lora_root() -> Path:
     d = settings.models_dir / "lora"
+    if not d.exists():
+        return settings.models_dir
     d.mkdir(parents=True, exist_ok=True)
     return d
 

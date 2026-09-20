@@ -11,11 +11,11 @@ from tensorboard.backend.event_processing.event_accumulator import EventAccumula
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = ["Helvetica Neue", "Arial", "DejaVu Sans"]
 
-os.makedirs("training/reports/dot2_1_lokr/csv", exist_ok=True)
-os.makedirs("training/reports/dot2_1_lokr/bieu_do", exist_ok=True)
+os.makedirs("training/reports/dot2-old/dot2.1/csv", exist_ok=True)
+os.makedirs("training/reports/dot2-old/dot2.1/bieu_do", exist_ok=True)
 
-v0_dir = os.path.expanduser("~/ACE-Step-1.5/lokr_output_dot2_1/logs/version_0")
-v1_dir = os.path.expanduser("~/ACE-Step-1.5/lokr_output_dot2_1/logs/version_1")
+v0_dir = "training/logs/dot2-old/dot2.1/version_0"
+v1_dir = "training/logs/dot2-old/dot2.1/version_1"
 
 ea0 = EventAccumulator(v0_dir)
 ea0.Reload()
@@ -29,7 +29,7 @@ v1_step_lr_events = ea1.Scalars("train/lr")
 
 t0 = v1_epoch_events[0].wall_time
 
-epoch_csv_path = "training/reports/dot2_1_lokr/csv/dot2_1_epoch_loss.csv"
+epoch_csv_path = "training/reports/dot2-old/dot2.1/csv/dot2_1_epoch_loss.csv"
 with open(epoch_csv_path, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["epoch", "loss", "thoi_gian", "giay_tu_khi_bat_dau"])
@@ -38,7 +38,7 @@ with open(epoch_csv_path, "w", newline="", encoding="utf-8") as f:
         elapsed = int(e.wall_time - t0)
         writer.writerow([e.step, f"{e.value:.6f}", dt_str, elapsed])
 
-step_csv_path = "training/reports/dot2_1_lokr/csv/dot2_1_step_loss_lr.csv"
+step_csv_path = "training/reports/dot2-old/dot2.1/csv/dot2_1_step_loss_lr.csv"
 with open(step_csv_path, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["global_step", "loss", "learning_rate", "thoi_gian"])
@@ -58,14 +58,14 @@ for ep in range(10, 160, 10):
             note = "final"
         checkpoints_data.append((ep, val, note))
 
-ckpt_csv_path = "training/reports/dot2_1_lokr/csv/dot2_1_checkpoints.csv"
+ckpt_csv_path = "training/reports/dot2-old/dot2.1/csv/dot2_1_checkpoints.csv"
 with open(ckpt_csv_path, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["epoch", "loss_trung_binh", "ghi_chu"])
     for ep, val, note in checkpoints_data:
         writer.writerow([ep, f"{val:.4f}", note])
 
-v0_csv_path = "training/reports/dot2_1_lokr/csv/dot2_1_version_0_oom.csv"
+v0_csv_path = "training/reports/dot2-old/dot2.1/csv/dot2_1_version_0_oom.csv"
 with open(v0_csv_path, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
     writer.writerow(["epoch", "loss", "thoi_gian", "ghi_chu"])
@@ -94,7 +94,7 @@ summary_data = {
     "ghi_chu": "version_0 gãy ở epoch 2 do MPS out of memory (trần watermark 70%); version_1 áp dụng PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 và torch.mps.empty_cache(), hoàn thành trọn vẹn 150/150 epochs không lỗi."
 }
 
-with open("training/reports/dot2_1_lokr/csv/dot2_1_tom_tat.json", "w", encoding="utf-8") as f:
+with open("training/reports/dot2-old/dot2.1/csv/dot2_1_tom_tat.json", "w", encoding="utf-8") as f:
     json.dump(summary_data, f, ensure_ascii=False, indent=2)
 
 epochs_x = np.array([e.step for e in v1_epoch_events])
@@ -140,7 +140,7 @@ plt.ylabel("Loss", fontsize=12)
 plt.grid(True, linestyle="--", alpha=0.4)
 plt.legend(frameon=True, facecolor="white", edgecolor="#ddd", fontsize=11)
 plt.tight_layout()
-plt.savefig("training/reports/dot2_1_lokr/bieu_do/bieu_do_1_loss_theo_epoch.png")
+plt.savefig("training/reports/dot2-old/dot2.1/bieu_do/bieu_do_1_loss_theo_epoch.png")
 plt.close()
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6), dpi=300)
@@ -163,7 +163,7 @@ ax2.grid(True, linestyle="--", alpha=0.4)
 
 fig.suptitle("Biểu đồ 2 — Diễn biến chi tiết theo bước tối ưu (Đợt 2.1 Solo Nhạc cụ)", fontsize=14, y=0.98)
 plt.tight_layout()
-plt.savefig("training/reports/dot2_1_lokr/bieu_do/bieu_do_2_buoc_toi_uu_lr.png")
+plt.savefig("training/reports/dot2-old/dot2.1/bieu_do/bieu_do_2_buoc_toi_uu_lr.png")
 plt.close()
 
 plt.figure(figsize=(15, 7), dpi=300)
@@ -180,7 +180,7 @@ plt.xlabel("Epoch checkpoint", fontsize=11)
 plt.ylabel("Loss trung bình", fontsize=11)
 plt.grid(axis="y", linestyle="--", alpha=0.4)
 plt.tight_layout()
-plt.savefig("training/reports/dot2_1_lokr/bieu_do/bieu_do_3_checkpoints.png")
+plt.savefig("training/reports/dot2-old/dot2.1/bieu_do/bieu_do_3_checkpoints.png")
 plt.close()
 
 plt.figure(figsize=(14, 7), dpi=300)
@@ -205,5 +205,5 @@ plt.ylim(0.14, 0.30)
 plt.grid(True, linestyle="--", alpha=0.4)
 plt.legend(frameon=True, facecolor="white", edgecolor="#ddd", fontsize=11)
 plt.tight_layout()
-plt.savefig("training/reports/dot2_1_lokr/bieu_do/bieu_do_4_boi_canh_hai_lane_chay.png")
+plt.savefig("training/reports/dot2-old/dot2.1/bieu_do/bieu_do_4_boi_canh_hai_lane_chay.png")
 plt.close()

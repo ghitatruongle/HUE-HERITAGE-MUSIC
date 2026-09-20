@@ -1,7 +1,7 @@
 {
   "base_model": "models/ace_step",
-  "dataset": "datasets/ca_hue",
-  "output": "models/lora/lora_cahue",
+  "dataset": "datasets/dot1/ca_hue",
+  "output": "models/dot1",
   "rank": 16,
   "alpha": 16,
   "lr": 0.0001,

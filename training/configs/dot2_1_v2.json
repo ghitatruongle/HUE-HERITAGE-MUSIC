@@ -1,0 +1,13 @@
+{
+  "base_model": "checkpoints/acestep-v15-base",
+  "dataset": "data/dot2_1_instruments",
+  "output": "lokr_output_dot2_1_v2",
+  "rank": 16,
+  "alpha": 32,
+  "lr": 0.006,
+  "epochs": 35,
+  "save_every": 5,
+  "batch_size": 1,
+  "tag_position": "Prepend",
+  "precision": "bf16-mixed"
+}

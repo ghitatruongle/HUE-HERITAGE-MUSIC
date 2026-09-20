@@ -10,6 +10,9 @@
 .claude/
 .cursor/
 .zcode/
+.gemini/
+.antigravity/
+.system_generated/
 node_modules/
 
 # ------------------------------------------------------------
@@ -29,13 +32,16 @@ PROJECT_STRUCTURE.md
 AGENTS.md
 KE_NHIEM_HUAN_LUYEN_AI.md
 .agents/
-docs/internal/
-docs/research/notes/
-docs/research/drafts/
-docs/
+docs/**
+!docs/**/
+!docs/**/.gitkeep
+notes/**
+!notes/**/
+!notes/**/.gitkeep
+scratch/**
+!scratch/**/
+!scratch/**/.gitkeep
 *.internal.*
-notes/
-scratch/
 *.scratch.*
 *.tmp
 *.temp
@@ -271,17 +277,7 @@ app/ios/.flutter-plugins-dependencies
 # ------------------------------------------------------------
 # 6. TRỌNG SỐ MÔ HÌNH AI & CHECKPOINTS (DUNG LƯỢNG LỚN)
 # ------------------------------------------------------------
-# Không đẩy file weights binary lớn lên Git
-models/**/*.safetensors
-models/**/*.pt
-models/**/*.pth
-models/**/*.bin
-models/**/*.onnx
-models/**/*.ckpt
-models/**/*.h5
-models/**/*.tflite
-
-# Giữ cấu trúc thư mục models bằng .gitkeep (mọi file khác trong models/ đều bị chặn)
+# Chặn toàn bộ thư mục models (chỉ giữ cây thư mục bằng .gitkeep)
 models/**
 !models/**/
 !models/**/.gitkeep
@@ -294,8 +290,9 @@ torch_cache/
 # ------------------------------------------------------------
 # 7. NHẬT KÝ HUẤN LUYỆN & THEO DÕI THÍ NGHIỆM
 # ------------------------------------------------------------
-training/logs/*
-!training/logs/.gitkeep
+training/logs/**
+!training/logs/**/
+!training/logs/**/.gitkeep
 wandb/
 runs/
 events.out.tfevents.*
@@ -357,6 +354,10 @@ datasets/**
 *.rm
 *.mid
 *.midi
+*.musicxml
+*.mxl
+*.mscz
+*.mscx
 *.kar
 *.rmi
 *.tak
@@ -467,9 +468,19 @@ merges.txt
 *.arrow
 *.lmdb
 *.mdb
-training/reports/
+training/reports/**
+!training/reports/**/
+!training/reports/**/.gitkeep
 training/exports/
 training/checkpoints/
+outputs/
+output/
+gradio_outputs/
+test_outputs/
+batch_test_outputs/
+evaluation_outputs/
+temp/
+tmp/
 
 # ------------------------------------------------------------
 # 11. NGUỒN THIẾT KẾ & FILE NÉN (TÀI SẢN RIÊNG TƯ)
