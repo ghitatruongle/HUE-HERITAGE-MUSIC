@@ -28,6 +28,17 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hue Heritage Music requires microphone access to record your voice for Ca Hue singing practice and pitch contour comparison.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

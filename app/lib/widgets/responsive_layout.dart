@@ -40,6 +40,8 @@ class ResponsiveScaffold extends StatefulWidget {
 }
 
 class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
+  bool _isSidebarCollapsed = false;
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -76,8 +78,9 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
 
     return Row(
       children: [
-        Container(
-          width: 256,
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: _isSidebarCollapsed ? 72 : 250,
           decoration: BoxDecoration(
             color: sidebarBg,
             border: Border(right: BorderSide(color: borderColor, width: 1.5)),
@@ -85,69 +88,145 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppTheme.primaryPurple, AppTheme.primaryPurpleLight],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryPurple.withValues(alpha: 0.35),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.asset(
-                          'assets/images/app_logo.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                padding: EdgeInsets.symmetric(
+                  horizontal: _isSidebarCollapsed ? 12 : 16,
+                  vertical: 18,
+                ),
+                child: _isSidebarCollapsed
+                    ? Column(
                         children: [
-                          Text(
-                            locale.strings.appTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                          IconButton(
+                            icon: const Icon(Icons.menu, size: 22),
+                            tooltip: locale.strings.expandSidebar,
+                            onPressed: () => setState(() => _isSidebarCollapsed = false),
                           ),
-                          Text(
-                            locale.strings.sidebarTagline,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.amberGold,
-                              fontWeight: FontWeight.w600,
+                          const SizedBox(height: 8),
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppTheme.primaryPurple, AppTheme.primaryPurpleLight],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.asset(
+                                'assets/images/app_logo.png',
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white, size: 20),
+                              ),
                             ),
                           ),
                         ],
+                      )
+                    : Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppTheme.primaryPurple, AppTheme.primaryPurpleLight],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppTheme.primaryPurple.withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.asset(
+                                'assets/images/app_logo.png',
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white, size: 22),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  locale.strings.appTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                                ),
+                                Text(
+                                  locale.strings.sidebarTagline,
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    color: AppTheme.amberGold,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.menu_open, size: 20),
+                            tooltip: locale.strings.collapseSidebar,
+                            onPressed: () => setState(() => _isSidebarCollapsed = true),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
               const Divider(height: 1),
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _isSidebarCollapsed ? 8 : 10,
+                    vertical: 10,
+                  ),
                   itemCount: widget.destinations.length,
                   itemBuilder: (context, index) {
                     final item = widget.destinations[index];
                     final isSelected = widget.selectedIndex == index;
+                    final label = _resolveNavLabel(item.labelKey, locale);
+
+                    if (_isSidebarCollapsed) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Tooltip(
+                          message: label,
+                          preferBelow: false,
+                          child: Material(
+                            color: isSelected
+                                ? AppTheme.primaryPurple.withValues(alpha: isDark ? 0.3 : 0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () => widget.onDestinationSelected(index),
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  isSelected ? item.selectedIcon : item.icon,
+                                  size: 22,
+                                  color: isSelected
+                                      ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
+                                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Material(
@@ -159,7 +238,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                           borderRadius: BorderRadius.circular(12),
                           onTap: () => widget.onDestinationSelected(index),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                             child: Row(
                               children: [
                                 Icon(
@@ -170,38 +249,38 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                       : Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                                 const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            _resolveNavLabel(item.labelKey, locale),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                              fontSize: 13,
-                                              color: isSelected
-                                                  ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
-                                                  : Theme.of(context).colorScheme.onSurface,
-                                            ),
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                            fontSize: 13,
+                                            color: isSelected
+                                                ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
+                                                : Theme.of(context).colorScheme.onSurface,
                                           ),
                                         ),
-                                        if (item.labelKey == 'restoration') ...[
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.amberGold.withValues(alpha: 0.2),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: AppTheme.amberGold, width: 0.8),
-                                            ),
-                                            child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 9, fontWeight: FontWeight.bold)),
+                                      ),
+                                      if (item.labelKey == 'restoration') ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.amberGold.withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(color: AppTheme.amberGold, width: 0.8),
                                           ),
-                                        ],
+                                          child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 9, fontWeight: FontWeight.bold)),
+                                        ),
                                       ],
-                                    ),
+                                    ],
                                   ),
+                                ),
                                 if (isSelected)
                                   Container(
                                     width: 4,
@@ -222,67 +301,105 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
               ),
               const Divider(height: 1),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: Size.zero,
-                          ),
-                          onPressed: () => locale.toggleLanguage(),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.language, size: 16),
-                              const SizedBox(width: 6),
-                              Text(locale.isVietnamese ? 'VI' : 'EN', style: const TextStyle(fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          iconSize: 20,
-                          icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
-                          tooltip: locale.strings.themeModeTitle,
-                          onPressed: () => theme.toggleTheme(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1B192C) : const Color(0xFFE6E1F0),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
+                padding: EdgeInsets.symmetric(
+                  horizontal: _isSidebarCollapsed ? 8 : 14,
+                  vertical: 10,
+                ),
+                child: _isSidebarCollapsed
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: server.hasServer ? AppTheme.emeraldGreen : Colors.red,
+                          IconButton(
+                            iconSize: 18,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            icon: Text(locale.isVietnamese ? 'VI' : 'EN', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                            tooltip: locale.strings.languageTitle,
+                            onPressed: () => locale.toggleLanguage(),
+                          ),
+                          const SizedBox(height: 4),
+                          IconButton(
+                            iconSize: 18,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                            tooltip: locale.strings.themeModeTitle,
+                            onPressed: () => theme.toggleTheme(context),
+                          ),
+                          const SizedBox(height: 6),
+                          Tooltip(
+                            message: server.hasServer ? locale.strings.serverOnline : locale.strings.serverOffline,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: server.hasServer ? AppTheme.emeraldGreen : Colors.red,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              server.hasServer ? locale.strings.serverOnline : locale.strings.serverOffline,
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        ],
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  minimumSize: Size.zero,
+                                ),
+                                onPressed: () => locale.toggleLanguage(),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.language, size: 16),
+                                    const SizedBox(width: 6),
+                                    Text(locale.isVietnamese ? 'VI' : 'EN', style: const TextStyle(fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                iconSize: 20,
+                                icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                                tooltip: locale.strings.themeModeTitle,
+                                onPressed: () => theme.toggleTheme(context),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1B192C) : const Color(0xFFE6E1F0),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: server.hasServer ? AppTheme.emeraldGreen : Colors.red,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    server.hasServer ? locale.strings.serverOnline : locale.strings.serverOffline,
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -303,20 +420,133 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     return widget.destinations[widget.selectedIndex].screen;
   }
 
+  void _showAllDestinationsSheet(BuildContext context, LocaleProvider locale) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        locale.strings.navMore,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: widget.destinations.length,
+                    itemBuilder: (context, i) {
+                      final item = widget.destinations[i];
+                      final isSelected = widget.selectedIndex == i;
+                      return ListTile(
+                        leading: Icon(
+                          isSelected ? item.selectedIcon : item.icon,
+                          color: isSelected ? AppTheme.primaryPurple : null,
+                        ),
+                        title: Text(
+                          _resolveNavLabel(item.labelKey, locale),
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected ? AppTheme.primaryPurple : null,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check, color: AppTheme.primaryPurple, size: 20)
+                            : null,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          widget.onDestinationSelected(i);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildMobileBottomBar(BuildContext context, LocaleProvider locale) {
-    final bottomDestinations = widget.destinations.take(5).toList();
-    final currentIndex = widget.selectedIndex < 5 ? widget.selectedIndex : 0;
+    if (widget.destinations.length <= 5) {
+      return NavigationBar(
+        selectedIndex: widget.selectedIndex < widget.destinations.length ? widget.selectedIndex : 0,
+        onDestinationSelected: widget.onDestinationSelected,
+        destinations: [
+          for (final item in widget.destinations)
+            NavigationDestination(
+              icon: Icon(item.icon),
+              selectedIcon: Icon(item.selectedIcon),
+              label: _resolveNavLabel(item.labelKey, locale),
+            ),
+        ],
+      );
+    }
+
+    final topIndices = [0, 1, 3, 6];
+    final activeInTop = topIndices.indexOf(widget.selectedIndex);
+    final currentIndex = activeInTop != -1 ? activeInTop : 4;
 
     return NavigationBar(
       selectedIndex: currentIndex,
-      onDestinationSelected: (index) => widget.onDestinationSelected(index),
+      onDestinationSelected: (index) {
+        if (index == 4) {
+          _showAllDestinationsSheet(context, locale);
+        } else {
+          widget.onDestinationSelected(topIndices[index]);
+        }
+      },
       destinations: [
-        for (final item in bottomDestinations)
-          NavigationDestination(
-            icon: Icon(item.icon),
-            selectedIcon: Icon(item.selectedIcon),
-            label: _resolveNavLabel(item.labelKey, locale),
-          ),
+        NavigationDestination(
+          icon: Icon(widget.destinations[0].icon),
+          selectedIcon: Icon(widget.destinations[0].selectedIcon),
+          label: _resolveNavLabel(widget.destinations[0].labelKey, locale),
+        ),
+        NavigationDestination(
+          icon: Icon(widget.destinations[1].icon),
+          selectedIcon: Icon(widget.destinations[1].selectedIcon),
+          label: _resolveNavLabel(widget.destinations[1].labelKey, locale),
+        ),
+        NavigationDestination(
+          icon: Icon(widget.destinations[3].icon),
+          selectedIcon: Icon(widget.destinations[3].selectedIcon),
+          label: _resolveNavLabel(widget.destinations[3].labelKey, locale),
+        ),
+        NavigationDestination(
+          icon: Icon(widget.destinations[6].icon),
+          selectedIcon: Icon(widget.destinations[6].selectedIcon),
+          label: _resolveNavLabel(widget.destinations[6].labelKey, locale),
+        ),
+        NavigationDestination(
+          icon: const Icon(Icons.grid_view_outlined),
+          selectedIcon: const Icon(Icons.grid_view_rounded),
+          label: locale.strings.navMore,
+        ),
       ],
     );
   }

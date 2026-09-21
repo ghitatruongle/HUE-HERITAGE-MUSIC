@@ -11,7 +11,7 @@ from .database.session import init_db
 
 def create_app() -> FastAPI:
     init_db()
-    application = FastAPI(title=settings.app_name, version="0.0.0-beta1")
+    application = FastAPI(title=settings.app_name, version="0.0.0-beta2")
     application.add_middleware(GZipMiddleware, minimum_size=1000)
     application.add_middleware(
         CORSMiddleware,
@@ -24,7 +24,7 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     def health():
-        return {"status": "ok", "app": settings.app_name, "version": "0.0.0-beta1", "stage": "GD0"}
+        return {"status": "ok", "app": settings.app_name, "version": "0.0.0-beta2", "stage": "GD0"}
 
     web_dir = Path(settings.web_dir)
     if web_dir.exists() and (web_dir / "index.html").exists():

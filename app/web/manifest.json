@@ -1,12 +1,12 @@
 {
-    "name": "hue_heritage_music",
-    "short_name": "hue_heritage_music",
+    "name": "HUE HERITAGE MUSIC - AI Di sản Âm nhạc Huế",
+    "short_name": "Hue Heritage Music",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0E0F17",
+    "theme_color": "#5B3B8C",
+    "description": "Hệ thống AI bảo tồn và phát huy di sản âm nhạc truyền thống Huế",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

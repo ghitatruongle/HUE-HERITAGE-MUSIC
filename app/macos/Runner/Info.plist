@@ -28,5 +28,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hue Heritage Music requires microphone access to record your voice for Ca Hue singing practice and pitch contour comparison.</string>
 </dict>
 </plist>

@@ -24,6 +24,7 @@ class AppStrings {
   String get navCover => isVi ? 'Cover' : 'Cover Song';
   String get navRestoration => isVi ? 'Phục dựng' : 'Restoration';
   String get navInstruments => isVi ? 'Nhạc cụ' : 'Instruments';
+  String get navMore => isVi ? 'Danh mục' : 'More';
 
   String get featHeritageTitle => isVi ? 'Kho di sản số' : 'Heritage Archive';
   String get featHeritageDesc => isVi
@@ -170,6 +171,14 @@ class AppStrings {
   String get compareSimilarityScore => isVi ? 'Độ tương đồng âm học' : 'Acoustic Similarity Score';
   String get compareIdentifiedMatch => isVi ? 'Làn điệu nhận diện khớp nhất' : 'Best Matching Tune';
   String get compareContourTitle => isVi ? 'Biểu đồ đối chiếu cao độ F0' : 'F0 Pitch Contour Alignment';
-  String get compareUploadPrompt => isVi ? 'Nạp file âm thanh cần nhận diện' : 'Upload Audio to Identify';
   String get restorationUploadVintageBtn => isVi ? 'Tải lên bản thu cũ để phục dựng' : 'Upload Vintage Recording';
+
+  String get userActivityTitle => isVi ? 'Hoạt động trên thiết bị này' : 'Activity on this Device';
+  String get emptyHistory => isVi ? 'Chưa có hoạt động nào được ghi lại trên thiết bị này.' : 'No activity recorded on this device yet.';
+  String get clearHistory => isVi ? 'Xóa lịch sử' : 'Clear History';
+  String get confirmClearHistory => isVi ? 'Bạn có chắc chắn muốn xóa toàn bộ lịch sử hoạt động trên thiết bị này?' : 'Are you sure you want to clear all activity history on this device?';
+  String get historyPrivacyNote => isVi ? 'Lịch sử được lưu trữ bảo mật cục bộ trên thiết bị của bạn và không gửi lên máy chủ.' : 'Activity history is stored securely on your local device and never sent to any server.';
+  String get deleteBtn => isVi ? 'Xóa' : 'Delete';
+  String get collapseSidebar => isVi ? 'Thu gọn thanh bên' : 'Collapse sidebar';
+  String get expandSidebar => isVi ? 'Mở rộng thanh bên' : 'Expand sidebar';
 }

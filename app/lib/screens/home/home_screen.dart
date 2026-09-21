@@ -168,35 +168,51 @@ class _HomeContent extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         int crossAxisCount = 1;
-        if (width >= 1100) {
-          crossAxisCount = 3;
+        double childAspectRatio = 3.2;
+
+        if (width >= 960) {
+          crossAxisCount = 4;
+          childAspectRatio = 2.1;
         } else if (width >= 620) {
           crossAxisCount = 2;
+          childAspectRatio = 2.3;
+        } else {
+          crossAxisCount = 1;
+          childAspectRatio = 3.6;
         }
 
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          children: [
-            _buildHeroBanner(context, strings, server),
-            const SizedBox(height: 24),
-            Text(
-              strings.featuresHeader,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeroHeader(context, strings, server),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    strings.featuresHeader,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
                   ),
-            ),
-            const SizedBox(height: 14),
-            if (crossAxisCount == 1)
-              for (final f in features) ...[
-                _FeatureCard(feature: f, onSelect: () => onSelectTab(f.tabIndex)),
-                const SizedBox(height: 12),
-              ]
-            else
+                  Text(
+                    strings.modulesCount(features.length),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.amberGold,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               GridView.count(
                 crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: crossAxisCount == 3 ? 1.6 : 1.9,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: childAspectRatio,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
@@ -204,103 +220,121 @@ class _HomeContent extends StatelessWidget {
                     _FeatureCard(feature: f, onSelect: () => onSelectTab(f.tabIndex)),
                 ],
               ),
-            const SizedBox(height: 24),
-            Text(
-              'Hue Heritage Music · ${strings.versionLabel} ${AppConstants.appVersion}',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              Center(
+                child: Text(
+                  'Hue Heritage Music · ${strings.versionLabel} ${AppConstants.appVersion}',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildHeroBanner(BuildContext context, dynamic strings, ServerConfig server) {
+  Widget _buildHeroHeader(BuildContext context, dynamic strings, ServerConfig server) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
-          colors: [Color(0xFF3B1D66), Color(0xFF5B3B8C), Color(0xFF8B5CF6)],
+          colors: [Color(0xFF2A1545), Color(0xFF4A2B78), Color(0xFF6B3FA0)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5B3B8C).withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: const Color(0xFF5B3B8C).withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: Colors.white.withValues(alpha: 0.15),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(
-                    'assets/images/app_logo.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white, size: 32),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white.withValues(alpha: 0.15),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/images/app_logo.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white, size: 24),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  strings.appTitle,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      strings.appTitle,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppTheme.amberGold.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppTheme.amberGold.withValues(alpha: 0.5)),
-                      ),
-                      child: Text(
-                        server.hasServer ? strings.serverOnline : strings.serverOffline,
-                        style: const TextStyle(
-                          color: AppTheme.amberGold,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 2),
+                Text(
+                  strings.appSubtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.88),
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 18),
-          Text(
-            strings.appSubtitle,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
-              fontSize: 14,
-              height: 1.55,
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: (server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent).withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: (server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent).withValues(alpha: 0.6),
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  server.hasServer ? strings.serverOnline : strings.serverOffline,
+                  style: TextStyle(
+                    color: server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -351,22 +385,22 @@ class _FeatureCardState extends State<_FeatureCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: const Duration(milliseconds: 160),
         decoration: BoxDecoration(
           color: _isHovered
               ? scheme.surfaceContainerHighest
-              : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(20),
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: _isHovered ? hoverBorder : baseBorder,
-            width: _isHovered ? 1.5 : 1.0,
+            width: _isHovered ? 1.4 : 1.0,
           ),
           boxShadow: _isHovered
               ? [
                   BoxShadow(
-                    color: AppTheme.primaryPurple.withValues(alpha: isDark ? 0.25 : 0.12),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
+                    color: AppTheme.primaryPurple.withValues(alpha: isDark ? 0.2 : 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ]
               : null,
@@ -374,22 +408,22 @@ class _FeatureCardState extends State<_FeatureCard> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(14),
             onTap: widget.onSelect,
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color: widget.feature.color.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(16),
+                      color: widget.feature.color.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(widget.feature.icon, color: widget.feature.color, size: 28),
+                    child: Icon(widget.feature.icon, color: widget.feature.color, size: 22),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,39 +438,44 @@ class _FeatureCardState extends State<_FeatureCard> {
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                       fontWeight: FontWeight.w700,
+                                      fontSize: 13,
                                       color: scheme.onSurface,
                                     ),
                               ),
                             ),
                             if (widget.feature.title.contains('Beta')) ...[
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                 decoration: BoxDecoration(
                                   color: AppTheme.amberGold.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(color: AppTheme.amberGold, width: 0.8),
                                 ),
-                                child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 10, fontWeight: FontWeight.bold)),
+                                child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 9, fontWeight: FontWeight.bold)),
                               ),
                             ],
                           ],
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           widget.feature.subtitle,
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                                height: 1.35,
-                              ),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Icon(Icons.chevron_right, color: scheme.onSurfaceVariant, size: 20),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 13,
+                    color: _isHovered ? AppTheme.primaryPurple : scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  ),
                 ],
               ),
             ),
