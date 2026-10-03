@@ -138,6 +138,16 @@ def list_tasks(db: Session, kind: str = "", status: str = "", limit: int = 100):
     return query.order_by(Task.created_at.desc()).limit(limit).all()
 
 
+def fail_stale_running_tasks(db: Session, reason: str = "interrupted by server restart"):
+    stale = db.query(Task).filter(Task.status == "running").all()
+    for task in stale:
+        task.status = "error"
+        task.error = reason
+        task.finished_at = datetime.now()
+    db.commit()
+    return len(stale)
+
+
 def _safe_json_loads(val: str) -> dict:
     if not val:
         return {}

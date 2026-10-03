@@ -15,6 +15,15 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   String _selectedFilter = 'all';
 
+  static const Map<String, List<String>> _chipKinds = {
+    'all': [],
+    'analyze-pitch': ['analyze-pitch'],
+    'compare-tune': ['compare-tune'],
+    'transcribe': ['transcribe'],
+    'restore': ['restore', 'restore-upload'],
+    'sing': ['sing_original', 'sing_new_lyrics'],
+  };
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -22,9 +31,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final strings = locale.strings;
     final allEntries = context.watch<HistoryService>().entries;
 
+    final selectedKinds = _chipKinds[_selectedFilter] ?? const <String>[];
     final entries = _selectedFilter == 'all'
         ? allEntries
-        : allEntries.where((e) => e.kind == _selectedFilter).toList();
+        : allEntries.where((e) => selectedKinds.contains(e.kind)).toList();
 
     return Scaffold(
       body: CustomScrollView(
@@ -93,13 +103,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       children: [
                         _filterChip('all', locale.isVietnamese ? 'Tất cả' : 'All', allEntries.length),
                         const SizedBox(width: 8),
-                        _filterChip('compare', strings.navLearning, allEntries.where((e) => e.kind == 'compare').length),
+                        _filterChip('analyze-pitch', strings.featAnalysisTitle, allEntries.where((e) => _chipKinds['analyze-pitch']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
-                        _filterChip('transcribe', strings.featTranscriptionTitle, allEntries.where((e) => e.kind == 'transcribe').length),
+                        _filterChip('compare-tune', strings.restorationTabCompare, allEntries.where((e) => _chipKinds['compare-tune']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
-                        _filterChip('restore', strings.navRestoration, allEntries.where((e) => e.kind == 'restore').length),
+                        _filterChip('transcribe', strings.featTranscriptionTitle, allEntries.where((e) => _chipKinds['transcribe']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
-                        _filterChip('generate', strings.navCreation, allEntries.where((e) => e.kind == 'generate').length),
+                        _filterChip('restore', strings.navRestoration, allEntries.where((e) => _chipKinds['restore']!.contains(e.kind)).length),
+                        const SizedBox(width: 8),
+                        _filterChip('sing', strings.navCreation, allEntries.where((e) => _chipKinds['sing']!.contains(e.kind)).length),
                       ],
                     ),
                   ),
@@ -251,11 +263,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   IconData _kindIcon(String kind) => switch (kind) {
         'transcribe' => Icons.music_note,
         'restore' => Icons.healing,
+        'restore-upload' => Icons.upload_file,
         'instruments' => Icons.piano,
         'generate' => Icons.auto_awesome,
         'cover' => Icons.shuffle,
         'compare' => Icons.mic,
+        'compare-tune' => Icons.compare_arrows,
         'analyze-pitch' => Icons.query_stats,
+        'sing_original' || 'sing_new_lyrics' => Icons.auto_awesome,
         _ => Icons.task_outlined,
       };
 
@@ -263,12 +278,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final s = locale.strings;
     return switch (kind) {
       'transcribe' => s.featTranscriptionTitle,
-      'restore' => s.navRestoration,
+      'restore' || 'restore-upload' => s.navRestoration,
       'instruments' => s.navInstruments,
       'generate' => s.navCreation,
       'cover' => s.navCover,
       'compare' => s.navLearning,
+      'compare-tune' => s.restorationTabCompare,
       'analyze-pitch' => s.featAnalysisTitle,
+      'sing_original' || 'sing_new_lyrics' => s.navCreation,
       _ => kind.isEmpty ? s.taskHistoryTitle : kind,
     };
   }

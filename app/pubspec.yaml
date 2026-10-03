@@ -1,7 +1,7 @@
 name: hue_heritage_music
 description: HUE HERITAGE MUSIC - AI bao ton di san am nhac Hue (Flutter client).
 publish_to: "none"
-version: 0.0.0-beta2+4
+version: 0.0.0-beta3+5
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -31,5 +31,4 @@ flutter:
   assets:
     - assets/icons/
     - assets/images/
-    - assets/fonts/
     - GHITA_API.example.json

@@ -272,6 +272,35 @@ void main() {
 
     expect(find.byType(TabBar), findsOneWidget);
   });
+
+  testWidgets('RestorationScreen cross-compare tab opens without crashing', (tester) async {
+    final server = ServerConfig();
+    server.api.dio.httpClientAdapter = _MockHttpAdapter();
+    final locale = LocaleProvider();
+    final history = HistoryService();
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: server),
+          ChangeNotifierProvider<LocaleProvider>.value(value: locale),
+          ChangeNotifierProvider<HistoryService>.value(value: history),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: RestorationScreen()),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Đối chiếu & Tìm tên bài'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Đối chiếu âm học & Nhận diện bài'), findsOneWidget);
+    expect(find.text('Tải lên bản ghi của bạn để đối chiếu'), findsOneWidget);
+  });
 }
 
 class _MockHttpAdapter implements HttpClientAdapter {

@@ -5,7 +5,6 @@ import '../core/theme/app_theme.dart';
 import '../services/locale_provider.dart';
 import '../services/server_config.dart';
 import '../services/theme_provider.dart';
-import 'docked_player_bar.dart';
 
 class NavigationDestinationItem {
   final IconData icon;
@@ -59,7 +58,6 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                 ? _buildDesktopLayout(context, locale, theme, server)
                 : _buildMobileLayout(context, locale, theme, server),
           ),
-          const DockedPlayerBar(),
         ],
       ),
       bottomNavigationBar: isDesktop ? null : _buildMobileBottomBar(context, locale),

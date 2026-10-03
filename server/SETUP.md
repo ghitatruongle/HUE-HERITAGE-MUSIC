@@ -99,12 +99,14 @@ python -m app.workers.worker
 
 Tính năng sinh nhạc/ca/cover cần máy chủ ACE-Step riêng (ngoài repo này). Khi có, đặt URL vào `ACESTEP_API_URL` trong `.env`.
 
+Adapter LoRA cho màn "Tạo nhạc" được nhận từ thư mục `models/lora/` (mỗi adapter một thư mục con chứa `lokr_weights.safetensors` hoặc `adapter_model.safetensors`; nếu thư mục này tồn tại thì không quét thư mục `models/` khác).
+
 ## Chạy test
 
 ```bash
 cd server
 pytest -q
-# 29 tests pass
+# 44 tests pass
 ```
 
 ## Khắc phục sự cố

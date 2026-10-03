@@ -7,7 +7,6 @@ import '../../core/theme/app_theme.dart';
 import '../../models/heritage_item.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
-import '../../services/session_media.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/common_button.dart';
 
@@ -39,9 +38,6 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
   }
 
   void _select(HeritageItem item) {
-    try {
-      context.read<SessionMedia>().closePlayer();
-    } catch (_) {}
     setState(() => _selectedItem = item);
   }
 

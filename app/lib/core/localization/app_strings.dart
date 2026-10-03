@@ -51,46 +51,29 @@ class AppStrings {
       ? 'Hát nguyên bản di sản hoặc sáng tạo lời thơ mới trên lòng bản cố định'
       : 'Recreate original heritage pieces or sing new verses over classical melodies';
 
-  String get featCoverTitle => isVi ? 'Cover' : 'Cover Song';
-  String get featCoverDesc => isVi
-      ? 'Tạo phiên bản cover từ bản ghi di sản (cần model đã huấn luyện)'
-      : 'Generate cover variations from heritage source recordings';
 
   String get featRestorationTitle => isVi ? 'Phục dựng (Beta)' : 'Restoration (Beta)';
   String get featRestorationDesc => isVi
       ? 'Đối chiếu bản ghi tìm tên bài & Khôi phục chất lượng âm thanh'
       : 'Cross-match recordings to find titles & restore audio quality';
 
-  String get featInstrumentsTitle => isVi ? 'Nhạc cụ' : 'Instruments';
-  String get featInstrumentsDesc => isVi
-      ? 'Nhận diện nhạc cụ truyền thống xuất hiện trong bản thu'
-      : 'Identify traditional Vietnamese instruments appearing in audio';
 
   String get featHistoryTitle => isVi ? 'Lịch sử' : 'History';
   String get featHistoryDesc => isVi
       ? 'Xem lại các tác vụ đã thực hiện và trạng thái của chúng'
       : 'Review executed tasks, processing status, and results';
 
-  String get featInfoTitle => isVi ? 'Thông tin dự án' : 'Project Info';
-  String get featInfoDesc => isVi
-      ? 'Triết lý, nhãn dữ liệu và thông tin bản quyền của hệ thống'
-      : 'Philosophy, dataset taxonomy, ethics, and copyright terms';
 
   String get searchHint => isVi
       ? 'Tìm theo tên, nghệ nhân, nhạc cụ, thời gian, địa điểm...'
       : 'Search by title, artisan, instrument, period, location...';
   String get searchBtn => isVi ? 'Tìm' : 'Search';
-  String get addRecordingBtn => isVi ? 'Thêm bản ghi' : 'Add Recording';
   String get noRecordings => isVi ? 'Chưa có bản ghi' : 'No recordings found';
   String get originalAudio => isVi ? 'Bản gốc' : 'Original';
   String get restoredAudio => isVi ? 'Bản phục chế' : 'Restored';
-  String get detailsBtn => isVi ? 'Chi tiết' : 'Details';
-  String get useAsSampleBtn => isVi ? 'Luyện hát' : 'Use as Sample';
   String get restoreActionBtn => isVi ? 'Phục dựng' : 'Restore';
-  String get detectInstrumentsBtn => isVi ? 'Nhạc cụ' : 'Instruments';
   String get closeBtn => isVi ? 'Đóng' : 'Close';
   String get cancelBtn => isVi ? 'Hủy' : 'Cancel';
-  String get submitBtn => isVi ? 'Lưu' : 'Submit';
   String get processing => isVi ? 'Đang xử lý...' : 'Processing...';
 
   String get themeModeTitle => isVi ? 'Chế độ giao diện' : 'Appearance';
@@ -101,24 +84,17 @@ class AppStrings {
   String get languageTitle => isVi ? 'Ngôn ngữ' : 'Language';
   String get langEnglish => 'English';
   String get langVietnamese => 'Tiếng Việt';
-  String get langAuto => isVi ? 'Tự động' : 'Auto Detect';
 
   String get offlineMessage => isVi
       ? 'Mất kết nối mạng. Một số chức năng cần internet.'
       : 'No network connection. Some online features may be unavailable.';
 
-  String get playingNow => isVi ? 'Đang phát' : 'Now Playing';
-  String get loopTrack => isVi ? 'Lặp lại' : 'Loop Track';
-  String get volumeLabel => isVi ? 'Âm lượng' : 'Volume';
   String get playBtn => isVi ? 'Phát' : 'Play';
   String get versionLabel => isVi ? 'Phiên bản' : 'Version';
   String get sidebarTagline => isVi ? 'AI Di sản âm nhạc' : 'AI Heritage Music';
 
   String modulesCount(int n) => isVi ? '$n chức năng' : '$n modules';
 
-  String get statsRecordings => isVi ? 'Bản ghi di sản' : 'Heritage Tracks';
-  String get statsRestored => isVi ? 'Phục chế' : 'Restored';
-  String get statsInstruments => isVi ? 'Nhạc cụ' : 'Instruments';
 
   String get serverOnline => isVi ? 'Máy chủ AI: Trực tuyến' : 'AI Server: Online';
   String get serverOffline => isVi ? 'Máy chủ AI: Ngoại tuyến' : 'AI Server: Offline';
@@ -153,9 +129,6 @@ class AppStrings {
   String get restorationAlgorithm => isVi
       ? 'Giải thuật: Median Filter + High-pass IIR + Adaptive Limiter'
       : 'Algorithm: Median Filter + High-pass IIR + Adaptive Limiter';
-  String get restorationNotice => isVi
-      ? 'Tính năng đang trong giai đoạn Beta thử nghiệm phục vụ nghiên cứu âm học di sản.'
-      : 'Experimental Beta feature for heritage acoustic research.';
   String get restorationEmptyTitle => isVi
       ? 'Chọn một bản thu để nghiên cứu phục dựng'
       : 'Select a recording to research restoration';
@@ -168,12 +141,11 @@ class AppStrings {
   String get comparePickSample => isVi ? 'Bản ghi mẫu (Kho di sản)' : 'Reference Heritage Track';
   String get comparePickTarget => isVi ? 'Bản ghi cần đối chiếu / nhận diện' : 'Target Track to Identify';
   String get compareRunBtn => isVi ? 'Đối chiếu âm học & Nhận diện bài' : 'Run Acoustic Matching & Identify';
-  String get compareSimilarityScore => isVi ? 'Độ tương đồng âm học' : 'Acoustic Similarity Score';
   String get compareIdentifiedMatch => isVi ? 'Làn điệu nhận diện khớp nhất' : 'Best Matching Tune';
   String get compareContourTitle => isVi ? 'Biểu đồ đối chiếu cao độ F0' : 'F0 Pitch Contour Alignment';
+  String get compareUploadPrompt => isVi ? 'Tải lên bản ghi của bạn để đối chiếu' : 'Upload Your Own Recording to Compare';
   String get restorationUploadVintageBtn => isVi ? 'Tải lên bản thu cũ để phục dựng' : 'Upload Vintage Recording';
 
-  String get userActivityTitle => isVi ? 'Hoạt động trên thiết bị này' : 'Activity on this Device';
   String get emptyHistory => isVi ? 'Chưa có hoạt động nào được ghi lại trên thiết bị này.' : 'No activity recorded on this device yet.';
   String get clearHistory => isVi ? 'Xóa lịch sử' : 'Clear History';
   String get confirmClearHistory => isVi ? 'Bạn có chắc chắn muốn xóa toàn bộ lịch sử hoạt động trên thiết bị này?' : 'Are you sure you want to clear all activity history on this device?';

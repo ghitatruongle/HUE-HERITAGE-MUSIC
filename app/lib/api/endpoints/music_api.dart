@@ -92,66 +92,6 @@ class MusicApi {
     return MusicTask(id: '', kind: 'sing_new_lyrics', status: 'error', reason: 'invalid response');
   }
 
-  Future<MusicTask> generate({
-    required String prompt,
-    int duration = 60,
-    String lora = '',
-    double strength = 0.8,
-    int seed = 0,
-    String lyrics = '',
-    String genre = '',
-    String instruments = '',
-    String tempo = '',
-    String mood = '',
-    String vocal = '',
-  }) async {
-    final res = await dio.post('/api/music/generate', queryParameters: {
-      'prompt': prompt,
-      'duration': duration,
-      'lora': lora,
-      'strength': strength,
-      'seed': seed,
-      'lyrics': lyrics,
-      'genre': genre,
-      'instruments': instruments,
-      'tempo': tempo,
-      'mood': mood,
-      'vocal': vocal,
-    });
-    final data = res.data;
-    if (data is Map) {
-      return MusicTask.fromJson(Map<String, dynamic>.from(data));
-    }
-    return MusicTask(id: '', kind: 'generate', status: 'error', reason: 'invalid response');
-  }
-
-  Future<MusicTask> cover({
-    required String heritageId,
-    required String style,
-    int duration = 60,
-    String lora = '',
-    double strength = 0.8,
-    String tempo = '',
-    String mood = '',
-    String vocal = '',
-  }) async {
-    final res = await dio.post('/api/music/cover', queryParameters: {
-      'heritage_id': heritageId,
-      'style': style,
-      'duration': duration,
-      'lora': lora,
-      'strength': strength,
-      'tempo': tempo,
-      'mood': mood,
-      'vocal': vocal,
-    });
-    final data = res.data;
-    if (data is Map) {
-      return MusicTask.fromJson(Map<String, dynamic>.from(data));
-    }
-    return MusicTask(id: '', kind: 'cover', status: 'error', reason: 'invalid response');
-  }
-
   Future<MusicTask> task(String id) async {
     final res = await dio.get('/api/music/task/$id');
     final data = res.data;

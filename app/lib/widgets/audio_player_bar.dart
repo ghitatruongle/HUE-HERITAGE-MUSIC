@@ -3,9 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:provider/provider.dart';
-
-import '../services/session_media.dart';
 
 class AudioPlayerBar extends StatefulWidget {
   final String? url;
@@ -86,9 +83,6 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
       if (mounted) {
         setState(() => _ready = true);
         if (widget.autoPlay) {
-          try {
-            context.read<SessionMedia>().closePlayer();
-          } catch (_) {}
           await _player.play();
         }
       }
@@ -171,9 +165,6 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
                 if (playing) {
                   _player.pause();
                 } else {
-                  try {
-                    context.read<SessionMedia>().closePlayer();
-                  } catch (_) {}
                   _player.play();
                 }
               },
