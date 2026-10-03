@@ -11,6 +11,26 @@ from acestep.llm_inference import LLMHandler
 from acestep.inference import GenerationConfig, GenerationParams, generate_music
 
 PROMPTS = {
+    "dannguyet": {
+        "caption": (
+            "Solo Dan Nguyet moon lute piece Luu Thuy, traditional Hue court music, "
+            "flowing ornamental bends and tremolo techniques, elegant mood, "
+            "authentic Vietnamese heritage, instrumental"
+        ),
+        "lyrics": "[Instrumental]",
+        "instrumental": True,
+        "mode_str": "dannguyet",
+    },
+    "kenbop": {
+        "caption": (
+            "Solo Ken Bop double-reed shawm melody, traditional Hue royal court music, "
+            "melodic ornamentation, expressive sustained tones, solemn courtly atmosphere, "
+            "authentic Vietnamese heritage, instrumental"
+        ),
+        "lyrics": "[Instrumental]",
+        "instrumental": True,
+        "mode_str": "kenbop",
+    },
     "nhanhac": {
         "caption": (
             "Hue royal court music (Nha nhac), ceremonial court ensemble of dan nguyet moon "
@@ -19,7 +39,7 @@ PROMPTS = {
             "Nam ai pentatonic mode, dignified ritual atmosphere of the Nguyen dynasty court orchestra, "
             "UNESCO intangible heritage, authentic traditional Vietnamese palace music, instrumental"
         ),
-        "lyrics": "",
+        "lyrics": "[Instrumental]",
         "instrumental": True,
         "mode_str": "nhanhac",
     },
@@ -116,19 +136,19 @@ def resolve_model_path(name, root, lokr_dir):
                 return p
     if name.startswith("dot2.1_"):
         ep = name.replace("dot2.1_", "").replace("ep", "epoch")
-        for sub in ("dot2-old/dot2.1", "dot2.1"):
+        for sub in ("dot2_v2/dot2.1", "dot2-old/dot2.1", "dot2.1"):
             p = os.path.join(base_dir, "models", sub, ep)
             if os.path.exists(p):
                 return p
     if name.startswith("dot2.2_"):
         ep = name.replace("dot2.2_", "").replace("ep", "epoch")
-        for sub in ("dot2-old/dot2.2", "dot2.2"):
+        for sub in ("dot2_v2/dot2.2", "dot2-old/dot2.2", "dot2.2"):
             p = os.path.join(base_dir, "models", sub, ep)
             if os.path.exists(p):
                 return p
     if name.startswith("ep"):
         ep = name.replace("ep", "epoch")
-        for sub in ("dot2-old/dot2.2", "dot2.2", "dot2-old/dot2.1", "dot2.1"):
+        for sub in ("dot2_v2/dot2.2", "dot2_v2/dot2.1", "dot2-old/dot2.2", "dot2.2", "dot2-old/dot2.1", "dot2.1"):
             p = os.path.join(base_dir, "models", sub, ep)
             if os.path.exists(p):
                 return p
@@ -142,16 +162,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--suite",
-        choices=["dual", "nhanhac", "cahue", "lynguao"],
-        default="dual"
+        choices=["instruments", "dannguyet", "kenbop", "dual", "nhanhac", "cahue", "lynguao"],
+        default="dannguyet"
     )
     ap.add_argument(
         "--models",
         nargs="+",
         default=[
-            "none", "dot2.1_ep40",
-            "ep10", "ep20", "ep30", "ep40", "ep50",
-            "ep60", "ep70", "ep80", "ep90", "ep100"
+            "none",
+            "ep5", "ep10", "ep15", "ep20", "ep25",
+            "ep30", "ep35", "ep40", "ep45", "ep50"
         ]
     )
     ap.add_argument("--out", default="storage/test_outputs/dot2_v2/dot2.1")
@@ -160,6 +180,17 @@ def main():
     ap.add_argument("--duration", type=int, default=120)
     ap.add_argument("--samples_per_prompt", type=int, default=2)
     ap.add_argument("--base_seed", type=int, default=42)
+    ap.add_argument("--src_audio", default=None)
+    ap.add_argument("--cover_strength", type=float, default=0.75)
+    ap.add_argument("--cover_noise_strength", type=float, default=0.5)
+    ap.add_argument("--guidance_scale", type=float, default=4.0)
+    ap.add_argument("--cfg_interval_start", type=float, default=0.0)
+    ap.add_argument("--cfg_interval_end", type=float, default=1.0)
+    ap.add_argument("--inference_steps", type=int, default=32)
+    ap.add_argument("--sampler_mode", choices=["euler", "heun"], default="heun")
+    ap.add_argument("--mlx_vae_chunk_size", type=int, default=1024)
+    ap.add_argument("--use_mlx_dit", action="store_true", default=False)
+    ap.add_argument("--task_type", choices=["text2music", "cover"], default="text2music")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
@@ -171,12 +202,20 @@ def main():
         project_root=args.root,
         config_path="acestep-v15-base",
         device="mps",
-        use_mlx_dit=False,
+        use_mlx_dit=args.use_mlx_dit,
     )
+    dit.mlx_vae_chunk_size = args.mlx_vae_chunk_size
+    dit.use_mlx_vae = True
     print("[INIT SERVICE]", status, flush=True)
 
     selected_suites = []
-    if args.suite in ("dual", "nhanhac"):
+    if args.suite == "dannguyet":
+        selected_suites.append("dannguyet")
+    elif args.suite == "kenbop":
+        selected_suites.append("kenbop")
+    elif args.suite == "instruments":
+        selected_suites.extend(["dannguyet", "kenbop"])
+    elif args.suite in ("dual", "nhanhac"):
         selected_suites.append("nhanhac")
     if args.suite in ("dual", "cahue"):
         selected_suites.append("cahue")
@@ -186,7 +225,7 @@ def main():
     total_models = len(args.models)
 
     for idx, m in enumerate(args.models, 1):
-        clean_name = m.replace("/", "_")
+        clean_name = os.path.basename(m.rstrip("/")) if ("/" in m and not m.startswith("none")) else m.replace("/", "_")
         print(f"\n=======================================================", flush=True)
         print(f"[{idx:02d}/{total_models:02d}] PROCESSING MODEL: {m}", flush=True)
         print(f"=======================================================", flush=True)
@@ -205,9 +244,12 @@ def main():
             mode_label = cfg_suite["mode_str"]
 
             for s_idx in range(1, args.samples_per_prompt + 1):
+                suffix = "cover" if args.src_audio or args.task_type == "cover" else "gen"
+                sub_out = os.path.join(args.out, clean_name)
+                os.makedirs(sub_out, exist_ok=True)
                 dst_file = os.path.join(
-                    args.out,
-                    f"{idx:02d}_{clean_name}_{mode_label}_ban{s_idx}.mp3"
+                    sub_out,
+                    f"{idx:02d}_{clean_name}_{mode_label}_{suffix}_ban{s_idx}.mp3"
                 )
 
                 if os.path.exists(dst_file) and os.path.getsize(dst_file) > 10000:
@@ -215,7 +257,8 @@ def main():
                     continue
 
                 curr_seed = args.base_seed + (s_idx - 1)
-                print(f"  -> [GENERATE] {mode_label} (Ban {s_idx}/{args.samples_per_prompt}) | Seed={curr_seed} | Duration={args.duration}s...", flush=True)
+                eff_task = "cover" if args.src_audio or args.task_type == "cover" else "text2music"
+                print(f"  -> [GENERATE] {mode_label} [{eff_task}] (Ban {s_idx}/{args.samples_per_prompt}) | Seed={curr_seed} | Duration={args.duration}s...", flush=True)
 
                 params = GenerationParams(
                     caption=cfg_suite["caption"],
@@ -223,11 +266,17 @@ def main():
                     instrumental=cfg_suite["instrumental"],
                     vocal_language="vi",
                     duration=args.duration,
-                    inference_steps=32,
-                    guidance_scale=7.0,
+                    inference_steps=args.inference_steps,
+                    guidance_scale=args.guidance_scale,
+                    cfg_interval_start=args.cfg_interval_start,
+                    cfg_interval_end=args.cfg_interval_end,
                     shift=3.0,
                     seed=curr_seed,
-                    task_type="text2music",
+                    task_type=eff_task,
+                    src_audio=args.src_audio,
+                    audio_cover_strength=args.cover_strength,
+                    cover_noise_strength=args.cover_noise_strength,
+                    sampler_mode=args.sampler_mode,
                     thinking=False,
                 )
                 cfg = GenerationConfig(batch_size=1, use_random_seed=False, audio_format="mp3")

@@ -13,7 +13,7 @@ TRACKS = [
     {
         "id": "inst_001",
         "title": "Kim Tiền (Độc tấu Đàn Nguyệt)",
-        "source": "/Users/songthani/hueheritagemusic/datasets/dot2-old/dot2.1/instruments/inst_001.mp3",
+        "source": "/Users/songthani/Downloads/GHM1/all_ins/Kim Tiền (Đàn Nguyệt Nhã Nhạc).wav",
         "caption": "Solo Dan Nguyet moon lute piece Kim Tien, traditional Hue court music, Bac mode, rhythmic acoustic plucking, bright and elegant traditional melody, authentic Vietnamese heritage.",
         "bpm": 85,
         "keyscale": "Bac mode (Hue pentatonic)",
@@ -22,7 +22,7 @@ TRACKS = [
     {
         "id": "inst_002",
         "title": "Long Hổ (Độc tấu Đàn Nguyệt)",
-        "source": "/Users/songthani/hueheritagemusic/datasets/dot2-old/dot2.1/instruments/inst_002.mp3",
+        "source": "/Users/songthani/Downloads/GHM1/all_ins/Long Hổ (Đàn Nguyệt Nhã Nhạc).wav",
         "caption": "Solo Dan Nguyet moon lute piece Long Ho, traditional Hue court music, vigorous and spirited acoustic plucking style, Bac mode pentatonic scale, authentic Vietnamese heritage.",
         "bpm": 90,
         "keyscale": "Bac mode (Hue pentatonic)",
@@ -31,7 +31,7 @@ TRACKS = [
     {
         "id": "inst_003",
         "title": "Lưu Thủy (Độc tấu Đàn Nguyệt)",
-        "source": "/Users/songthani/hueheritagemusic/datasets/dot2-old/dot2.1/instruments/inst_003.mp3",
+        "source": "/Users/songthani/Downloads/GHM1/all_ins/Lưu Thủy (Đàn Nguyệt Nhã Nhạc).wav",
         "caption": "Solo Dan Nguyet moon lute piece Luu Thuy (Flowing Water), traditional Hue court music, flowing ornamental bends and tremolo techniques, elegant mood, authentic Vietnamese heritage.",
         "bpm": 78,
         "keyscale": "Bac mode (Hue pentatonic)",
@@ -40,7 +40,7 @@ TRACKS = [
     {
         "id": "inst_004",
         "title": "Xuân Phong (Độc tấu Đàn Nguyệt)",
-        "source": "/Users/songthani/hueheritagemusic/datasets/dot2-old/dot2.1/instruments/inst_004.mp3",
+        "source": "/Users/songthani/Downloads/GHM1/all_ins/Xuân Phong (Đàn Nguyệt Nhã Nhạc).wav",
         "caption": "Solo Dan Nguyet moon lute piece Xuan Phong (Spring Breeze), traditional Hue court music, lyrical and uplifting melody, crisp acoustic plucking, authentic Vietnamese heritage.",
         "bpm": 82,
         "keyscale": "Bac mode (Hue pentatonic)",
@@ -49,7 +49,7 @@ TRACKS = [
     {
         "id": "inst_005",
         "title": "Đăng Đàn Cung (Độc tấu Đàn Nguyệt)",
-        "source": "/Users/songthani/hueheritagemusic/datasets/dot2-old/dot2.1/instruments/inst_005.mp3",
+        "source": "/Users/songthani/Downloads/GHM1/all_ins/Đăng Đàn Cung (Đàn Nguyệt Nhã Nhạc).wav",
         "caption": "Solo Dan Nguyet moon lute piece Dang Dan Cung (Royal Hymn), solemn and dignified imperial Hue court melody, resonant ornamentation and deliberate phrasing, authentic Vietnamese heritage.",
         "bpm": 65,
         "keyscale": "Bac mode (Hue pentatonic)",
@@ -58,7 +58,7 @@ TRACKS = [
     {
         "id": "inst_006",
         "title": "Kèn Bóp Nhã Nhạc Cung Đình",
-        "source": "/Users/songthani/Downloads/nha_nhac/Kèn Bóp - Nhã Nhạc Cung Đình Huế.mp3",
+        "source": "/Users/songthani/Downloads/GHM1/all_ins/Kèn Bóp.wav",
         "caption": "Solo Ken Bop double-reed shawm melody, traditional Hue royal court music, melodic ornamentation, expressive sustained tones, solemn courtly atmosphere, authentic Vietnamese heritage.",
         "bpm": 80,
         "keyscale": "Hue court ceremonial mode",
