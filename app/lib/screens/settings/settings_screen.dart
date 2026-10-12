@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../services/locale_provider.dart';
 import '../../services/theme_provider.dart';
+import '../../widgets/app_logo.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -109,17 +110,8 @@ class SettingsScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Image.asset(
-                      'assets/images/app_logo.png',
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.music_note, size: 60),
-                    ),
-                  ),
+                const Center(
+                  child: AppLogo(size: 80, borderRadius: 18, iconSize: 60),
                 ),
                 const SizedBox(height: 14),
                 Row(

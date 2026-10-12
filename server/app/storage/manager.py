@@ -4,6 +4,7 @@ from ..config import settings
 
 ALLOWED_EXT = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
 MAX_SIZE = 50 * 1024 * 1024
+MAX_ANALYSIS_BYTES = 15 * 1024 * 1024
 
 
 def original_dir() -> Path:
@@ -48,6 +49,21 @@ def sha256_bytes(data: bytes) -> str:
 
 def is_sha256(value: str) -> bool:
     return len(value) == 64 and all(c in "0123456789abcdef" for c in value.lower())
+
+
+def audio_magic_ok(ext: str, head: bytes) -> bool:
+    ext = ext.lower()
+    if ext == ".wav":
+        return len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WAVE"
+    if ext == ".flac":
+        return head[:4] == b"fLaC"
+    if ext == ".ogg":
+        return head[:4] == b"OggS"
+    if ext == ".m4a":
+        return len(head) >= 8 and head[4:8] == b"ftyp"
+    if ext == ".mp3":
+        return head[:3] == b"ID3" or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0)
+    return True
 
 
 def save_original(data: bytes, filename: str):

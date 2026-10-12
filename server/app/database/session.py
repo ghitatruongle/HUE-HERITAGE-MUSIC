@@ -14,7 +14,10 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 MIGRATION_COLUMNS = {
-    "users": {"password_hash": "VARCHAR(256) DEFAULT '' NOT NULL"},
+    "users": {
+        "password_hash": "VARCHAR(256) DEFAULT '' NOT NULL",
+        "email": "VARCHAR(256) DEFAULT '' NOT NULL",
+    },
     "heritage_items": {
         "genre": "VARCHAR(128) DEFAULT '' NOT NULL",
         "composer": "VARCHAR(256) DEFAULT '' NOT NULL",

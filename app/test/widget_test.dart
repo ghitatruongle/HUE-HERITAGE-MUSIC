@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hue_heritage_music/api/api_client.dart';
 import 'package:hue_heritage_music/models/compare_result.dart';
 import 'package:hue_heritage_music/models/pitch_data.dart';
 import 'package:hue_heritage_music/screens/creation/creation_screen.dart';
@@ -9,13 +10,17 @@ import 'package:hue_heritage_music/screens/heritage/heritage_list_screen.dart';
 import 'package:hue_heritage_music/screens/home/home_screen.dart';
 import 'package:hue_heritage_music/screens/restoration/restoration_screen.dart';
 import 'package:hue_heritage_music/screens/settings/settings_screen.dart';
+import 'package:hue_heritage_music/screens/auth/login_screen.dart';
+import 'package:hue_heritage_music/services/auth_service.dart';
 import 'package:hue_heritage_music/services/history_service.dart';
 import 'package:hue_heritage_music/services/locale_provider.dart';
 import 'package:hue_heritage_music/services/server_config.dart';
 import 'package:hue_heritage_music/services/session_media.dart';
 import 'package:hue_heritage_music/services/theme_provider.dart';
+import 'package:hue_heritage_music/widgets/app_logo.dart';
 import 'package:hue_heritage_music/widgets/common_button.dart';
 import 'package:hue_heritage_music/widgets/compare_chart.dart';
+import 'package:hue_heritage_music/widgets/content_max_width.dart';
 import 'package:hue_heritage_music/widgets/pitch_contour_chart.dart';
 import 'package:hue_heritage_music/widgets/sheet_music_view.dart';
 import 'package:provider/provider.dart';
@@ -207,6 +212,7 @@ void main() {
           ChangeNotifierProvider<ServerConfig>.value(value: server),
           ChangeNotifierProvider<LocaleProvider>.value(value: locale),
           ChangeNotifierProvider<ThemeProvider>.value(value: theme),
+          ChangeNotifierProvider<AuthService>.value(value: AuthService()),
           ChangeNotifierProvider<SessionMedia>(create: (_) => SessionMedia()),
         ],
         child: const MaterialApp(
@@ -301,6 +307,113 @@ void main() {
     expect(find.text('Đối chiếu âm học & Nhận diện bài'), findsOneWidget);
     expect(find.text('Tải lên bản ghi của bạn để đối chiếu'), findsOneWidget);
   });
+
+  test('AuthService guest mode behaves correctly without persistence', () {
+    final auth = AuthService();
+    auth.continueAsGuest();
+    expect(auth.isGuest, isTrue);
+    expect(auth.isLoggedIn, isFalse);
+    expect(auth.username, 'Khách');
+    expect(auth.token, isNull);
+  });
+
+  testWidgets('ContentMaxWidth constraints large widths', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ContentMaxWidth(
+              maxWidth: 800,
+              child: SizedBox(width: 1200, height: 100),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(ContentMaxWidth), findsOneWidget);
+  });
+
+  testWidgets('LoginScreen renders tabs and guest button', (tester) async {
+    final server = ServerConfig();
+    final auth = AuthService();
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: server),
+          ChangeNotifierProvider<AuthService>.value(value: auth),
+          ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()),
+        ],
+        child: const MaterialApp(
+          home: LoginScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Đăng nhập'), findsWidgets);
+    expect(find.text('Trải nghiệm ngay (Chế độ Khách)'), findsOneWidget);
+    expect(find.textContaining('Bản 0.0.0 chưa hỗ trợ đặt lại mật khẩu'), findsOneWidget);
+  });
+
+  test('401 from a guarded endpoint clears the stored token', () async {
+    final auth = AuthService();
+    await auth.load();
+    await auth.save(token: 'tok123', username: 'tester');
+    expect(AuthService.currentToken, 'tok123');
+
+    final api = ApiClient(baseUrl: 'http://127.0.0.1:8000');
+    api.dio.httpClientAdapter = _UnauthorizedAdapter();
+    try {
+      await api.dio.get('/api/heritage');
+    } catch (_) {}
+
+    expect(auth.token, isNull);
+    expect(AuthService.currentToken, isNull);
+    expect(auth.isLoggedIn, isFalse);
+  });
+
+  test('401 from /auth/me keeps the token', () async {
+    final auth = AuthService();
+    await auth.load();
+    await auth.save(token: 'tok456', username: 'tester');
+    expect(auth.isLoggedIn, isTrue);
+
+    final api = ApiClient(baseUrl: 'http://127.0.0.1:8000');
+    api.dio.httpClientAdapter = _UnauthorizedAdapter();
+    try {
+      await api.dio.get('/api/auth/me');
+    } catch (_) {}
+
+    expect(auth.token, 'tok456');
+    expect(auth.isLoggedIn, isTrue);
+  });
+
+  testWidgets('AppLogo builds with size and radius parameters', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(child: AppLogo(size: 44, iconSize: 24, iconColor: Colors.white)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(AppLogo), findsOneWidget);
+  });
+}
+
+class _UnauthorizedAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    return ResponseBody.fromString(
+      '{"detail":"authentication required"}',
+      401,
+      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _MockHttpAdapter implements HttpClientAdapter {

@@ -1,10 +1,10 @@
 name: hue_heritage_music
-description: HUE HERITAGE MUSIC - AI bao ton di san am nhac Hue (Flutter client).
+description: HUE HERITAGE MUSIC - AI bảo tồn di sản âm nhạc Huế (Flutter client).
 publish_to: "none"
-version: 0.0.0-beta3+5
+version: 0.0.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -16,6 +16,8 @@ dependencies:
   fl_chart: ^0.69.0
   provider: ^6.1.2
   shared_preferences: ^2.2.0
+  path_provider: ^2.1.0
+  flutter_secure_storage: ^9.2.2
   cross_file: ^0.3.5
   file_picker: ^8.1.2
   connectivity_plus: ^6.0.5
@@ -29,6 +31,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icons/
     - assets/images/
     - GHITA_API.example.json

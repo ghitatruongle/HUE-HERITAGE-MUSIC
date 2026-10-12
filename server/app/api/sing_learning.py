@@ -4,10 +4,11 @@ import asyncio
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 
 from ..services import pitch_service, compare_service
+from ..storage import manager
 from .auth import require_user
 
 router = APIRouter(tags=["sing"])
-MAX_BYTES = 15 * 1024 * 1024
+MAX_BYTES = manager.MAX_ANALYSIS_BYTES
 
 
 @router.post("/music/analyze-pitch")

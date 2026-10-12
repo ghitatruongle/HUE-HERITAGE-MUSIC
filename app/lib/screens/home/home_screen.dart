@@ -3,10 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/auth_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
+import '../../widgets/app_logo.dart';
 import '../../widgets/responsive_layout.dart';
 import '../analysis/analysis_screen.dart';
+import '../auth/login_screen.dart';
 import '../creation/creation_screen.dart';
 import '../heritage/heritage_list_screen.dart';
 import '../history/history_screen.dart';
@@ -81,6 +84,12 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIcon: Icons.settings,
         labelKey: 'settings',
         screen: SettingsScreen(),
+      ),
+      const NavigationDestinationItem(
+        icon: Icons.account_circle_outlined,
+        selectedIcon: Icons.account_circle,
+        labelKey: 'auth',
+        screen: LoginScreen(),
       ),
     ];
 
@@ -157,9 +166,7 @@ class _HomeContent extends StatelessWidget {
         icon: Icons.settings_outlined,
         color: const Color(0xFF546E7A),
         title: strings.settingsTitle,
-        subtitle: locale.isVietnamese
-            ? 'Cấu hình kết nối máy chủ AI, giao diện và ngôn ngữ'
-            : 'Configure AI server connection, UI theme and language',
+        subtitle: strings.featSettingsSubtitle,
         tabIndex: 8,
       ),
     ];
@@ -266,14 +273,7 @@ class _HomeContent extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.15),
               border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.asset(
-                'assets/images/app_logo.png',
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white, size: 24),
-              ),
-            ),
+            child: const AppLogo(size: 44, iconSize: 24, iconColor: Colors.white),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -336,6 +336,25 @@ class _HomeContent extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          Consumer<AuthService?>(
+            builder: (context, auth, _) {
+              final loggedIn = auth?.isLoggedIn ?? false;
+              return IconButton(
+                tooltip: loggedIn ? (auth?.username ?? strings.authTooltipLoggedIn) : strings.authTooltipGuest,
+                icon: Icon(
+                  loggedIn ? Icons.account_circle : Icons.account_circle_outlined,
+                  color: Colors.white,
+                  size: 26,
+                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+              );
+            },
           ),
         ],
       ),

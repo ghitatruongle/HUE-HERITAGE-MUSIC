@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/theme/app_theme.dart';
 import 'screens/home/home_screen.dart';
+import 'services/auth_service.dart';
 import 'services/history_service.dart';
 import 'services/locale_provider.dart';
 import 'services/server_config.dart';
@@ -16,15 +17,18 @@ Future<void> main() async {
   final theme = ThemeProvider();
   final history = HistoryService();
   final locale = LocaleProvider();
+  final auth = AuthService();
   await config.load();
   await theme.load();
   await history.load();
   await locale.load();
+  await auth.load();
   runApp(HueHeritageApp(
     config: config,
     theme: theme,
     history: history,
     locale: locale,
+    auth: auth,
   ));
 }
 
@@ -33,6 +37,7 @@ class HueHeritageApp extends StatelessWidget {
   final ThemeProvider theme;
   final HistoryService history;
   final LocaleProvider locale;
+  final AuthService auth;
 
   const HueHeritageApp({
     super.key,
@@ -40,6 +45,7 @@ class HueHeritageApp extends StatelessWidget {
     required this.theme,
     required this.history,
     required this.locale,
+    required this.auth,
   });
 
   @override
@@ -50,6 +56,7 @@ class HueHeritageApp extends StatelessWidget {
         ChangeNotifierProvider<ThemeProvider>.value(value: theme),
         ChangeNotifierProvider<HistoryService>.value(value: history),
         ChangeNotifierProvider<LocaleProvider>.value(value: locale),
+        ChangeNotifierProvider<AuthService>.value(value: auth),
         ChangeNotifierProvider<SessionMedia>(create: (_) => SessionMedia()),
       ],
       child: Consumer2<ThemeProvider, LocaleProvider>(

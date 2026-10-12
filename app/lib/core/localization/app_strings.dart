@@ -25,6 +25,7 @@ class AppStrings {
   String get navRestoration => isVi ? 'Phục dựng' : 'Restoration';
   String get navInstruments => isVi ? 'Nhạc cụ' : 'Instruments';
   String get navMore => isVi ? 'Danh mục' : 'More';
+  String get authTitle => isVi ? 'Tài khoản' : 'Account';
 
   String get featHeritageTitle => isVi ? 'Kho di sản số' : 'Heritage Archive';
   String get featHeritageDesc => isVi
@@ -153,4 +154,57 @@ class AppStrings {
   String get deleteBtn => isVi ? 'Xóa' : 'Delete';
   String get collapseSidebar => isVi ? 'Thu gọn thanh bên' : 'Collapse sidebar';
   String get expandSidebar => isVi ? 'Mở rộng thanh bên' : 'Expand sidebar';
+
+  String get featSettingsSubtitle => isVi
+      ? 'Cấu hình kết nối máy chủ AI, giao diện và ngôn ngữ'
+      : 'Configure AI server connection, UI theme and language';
+
+  String get authScreenTitle => isVi ? 'Tài khoản & Xác thực' : 'Account & Authentication';
+  String get authTabLogin => isVi ? 'Đăng nhập' : 'Sign In';
+  String get authTabRegister => isVi ? 'Đăng ký (Mã mời)' : 'Register (Invite Code)';
+  String get authLoginIdLabel => isVi ? 'Tên tài khoản hoặc Gmail' : 'Username or Gmail';
+  String get authLoginIdHint => isVi ? 'user123 hoặc abc@gmail.com' : 'user123 or abc@gmail.com';
+  String get authPasswordLabel => isVi ? 'Mật khẩu' : 'Password';
+  String get authPasswordMinLabel => isVi ? 'Mật khẩu (tối thiểu 6 ký tự)' : 'Password (min 6 characters)';
+  String get authUsernameLabel => isVi ? 'Tên tài khoản' : 'Username';
+  String get authGmailLabel => 'Gmail (@gmail.com)';
+  String get authGmailHint => isVi ? 'vidu@gmail.com' : 'example@gmail.com';
+  String get authInviteLabel => isVi ? 'Mã mời tham gia' : 'Invitation code';
+  String get authInviteHint => isVi
+      ? 'Nhập mã mời do ban quản trị cấp (VD: QHH2026)'
+      : 'Enter the invite code issued by the admin (e.g. QHH2026)';
+  String get authLoginBtn => isVi ? 'Đăng nhập' : 'Sign In';
+  String get authRegisterBtn => isVi ? 'Đăng ký tài khoản' : 'Create Account';
+  String get authGuestBtn => isVi ? 'Trải nghiệm ngay (Chế độ Khách)' : 'Try now (Guest Mode)';
+  String get authGuestNote => isVi
+      ? '* Chế độ khách cho phép trải nghiệm trực tiếp nhưng không lưu lại dữ liệu sau khi thoát ứng dụng.'
+      : '* Guest mode lets you explore instantly, but nothing is saved after you exit the app.';
+  String get authNoResetNote => isVi
+      ? 'Bản 0.0.0 chưa hỗ trợ đặt lại mật khẩu. Vui lòng ghi nhớ thông tin đăng nhập.'
+      : 'Version 0.0.0 does not support password reset yet. Please remember your credentials.';
+  String get authRegisterFootnote => isVi
+      ? '* Mỗi Gmail chỉ được tạo 1 tài khoản. Bản 0.0.0 yêu cầu mã mời hợp lệ.'
+      : '* Each Gmail can create only one account. Version 0.0.0 requires a valid invite code.';
+  String get authOrDivider => isVi ? 'HOẶC' : 'OR';
+  String get authLogoutBtn => isVi ? 'Đăng xuất' : 'Sign Out';
+  String get authGuestModeBtn => isVi ? 'Chế độ Khách' : 'Guest Mode';
+  String get authLoggedInChip => isVi
+      ? 'Chế độ Tài khoản — Lưu phiên đăng nhập trên máy này'
+      : 'Account Mode — sign-in saved on this device';
+  String get authDefaultUser => isVi ? 'Người dùng' : 'User';
+  String get authGuestUsername => isVi ? 'Khách' : 'Guest';
+  String get authTooltipLoggedIn => isVi ? 'Tài khoản' : 'Account';
+  String get authTooltipGuest => isVi ? 'Tài khoản / Chế độ Khách' : 'Account / Guest Mode';
+  String get authErrLoginId => isVi ? 'Vui lòng nhập tên tài khoản hoặc Gmail' : 'Please enter your username or Gmail';
+  String get authErrPasswordEmpty => isVi ? 'Vui lòng nhập mật khẩu' : 'Please enter your password';
+  String get authErrUsernameShort => isVi
+      ? 'Tên tài khoản phải có ít nhất 3 ký tự'
+      : 'Username must be at least 3 characters';
+  String get authErrGmail => isVi
+      ? 'Chỉ chấp nhận địa chỉ email có đuôi @gmail.com'
+      : 'Only @gmail.com addresses are accepted';
+  String get authErrPasswordShort => isVi
+      ? 'Mật khẩu phải có ít nhất 6 ký tự'
+      : 'Password must be at least 6 characters';
+  String get authErrInvite => isVi ? 'Vui lòng nhập mã mời hợp lệ' : 'Please enter a valid invite code';
 }

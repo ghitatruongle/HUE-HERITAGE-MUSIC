@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 
 from ..database.session import SessionLocal, get_db
 from ..database import crud
-from ..services import restoration_service
+from ..services import media_pipeline
 from ..storage import manager
 from .auth import require_user
 
 router = APIRouter(tags=["restoration"])
-MAX_BYTES = 15 * 1024 * 1024
+MAX_BYTES = manager.MAX_ANALYSIS_BYTES
 
 
 def restored_dir():
@@ -23,13 +23,10 @@ def restored_dir():
 
 def run_restore(data, heritage_id):
     try:
-        out, report = restoration_service.restore(data)
+        report, dest = media_pipeline.restore_audio(data)
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
-    digest = manager.sha256_bytes(data)
-    dest = restored_dir() / (digest + "_restored.wav")
-    if not dest.exists():
-        dest.write_bytes(out)
+    digest = report["sha"]
     if heritage_id:
         db = SessionLocal()
         try:
@@ -38,7 +35,6 @@ def run_restore(data, heritage_id):
                 crud.create_audio(db, item.id, "restored", str(dest), digest, dest.stat().st_size)
         finally:
             db.close()
-    report["sha"] = digest
     return report
 
 

@@ -65,6 +65,8 @@ async def upload_heritage(
     ext = Path(file.filename or "").suffix.lower()
     if ext not in manager.ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="unsupported type")
+    if not manager.audio_magic_ok(ext, data[:16]):
+        raise HTTPException(status_code=400, detail="file content does not match its extension")
     bpm_val = None
     bpm_raw = (bpm or "").strip()
     if bpm_raw:
@@ -72,7 +74,7 @@ async def upload_heritage(
             bpm_val = float(bpm_raw)
         except ValueError:
             raise HTTPException(status_code=400, detail="bad bpm")
-        if not (0.0 < bpm_val <= 500.0):
+        if not (0.0 < bpm_val <= 300.0):
             raise HTTPException(status_code=400, detail="bad bpm")
     metadata = _collect_metadata(
         genre=genre, composer=composer, performers=performers, artisans=artisans,

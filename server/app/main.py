@@ -4,20 +4,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from .config import settings
+from .config import settings, INSECURE_DEFAULT_SECRET_KEY
 from .api.router import api_router
 from .database.session import init_db, SessionLocal
 from .database import crud
 
 
 def create_app() -> FastAPI:
+    if settings.auth_required and settings.secret_key == INSECURE_DEFAULT_SECRET_KEY:
+        raise RuntimeError(
+            "AUTH_REQUIRED=true requires a real SECRET_KEY in server/.env; "
+            "the default key is public in the repository and cannot protect tokens"
+        )
     init_db()
     db = SessionLocal()
     try:
         crud.fail_stale_running_tasks(db)
     finally:
         db.close()
-    application = FastAPI(title=settings.app_name, version="0.0.0-beta3")
+    application = FastAPI(title=settings.app_name, version="0.0.0")
     application.add_middleware(GZipMiddleware, minimum_size=1000)
     application.add_middleware(
         CORSMiddleware,
@@ -30,7 +35,7 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     def health():
-        return {"status": "ok", "app": settings.app_name, "version": "0.0.0-beta3", "stage": "GD0"}
+        return {"status": "ok", "app": settings.app_name, "version": "0.0.0", "stage": "GD0"}
 
     web_dir = Path(settings.web_dir)
     if web_dir.exists() and (web_dir / "index.html").exists():

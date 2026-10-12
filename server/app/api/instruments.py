@@ -13,7 +13,7 @@ from ..storage import manager
 from .auth import require_user
 
 router = APIRouter(tags=["instruments"])
-MAX_BYTES = 15 * 1024 * 1024
+MAX_BYTES = manager.MAX_ANALYSIS_BYTES
 
 
 @router.post("/music/instruments")

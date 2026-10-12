@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import '../api/api_client.dart';
 class ServerConfig extends ChangeNotifier {
   static const String _configAsset = 'GHITA_API.json';
   static const String _exampleAsset = 'GHITA_API.example.json';
+  static const String _placeholderUrl = 'http://192.0.2.10:8000';
 
   String _baseUrl = '';
   ApiClient _api = ApiClient();
@@ -50,21 +52,59 @@ class ServerConfig extends ChangeNotifier {
   }
 
   Future<String?> _readConfigUrl() async {
+    if (!kIsWeb) {
+      final localUrl = await _readLocalFileUrl();
+      if (localUrl != null) {
+        return localUrl;
+      }
+    }
     for (final asset in [_configAsset, _exampleAsset]) {
       try {
         final raw = await _readAsset(asset);
         if (raw == null) continue;
-        final data = jsonDecode(raw);
-        if (data is Map) {
-          final url = data['server_url']?.toString();
-          if (url != null && url.trim().isNotEmpty && url != 'http://192.0.2.10:8000') {
-            return url;
-          }
+        final url = _extractUrl(raw);
+        if (url != null) {
+          return url;
         }
       } catch (_) {
         continue;
       }
     }
+    return null;
+  }
+
+  Future<String?> _readLocalFileUrl() async {
+    final dirs = <String>[
+      File(Platform.resolvedExecutable).parent.path,
+      Directory.current.path,
+    ];
+    for (final dir in dirs) {
+      try {
+        final file = File('$dir/$_configAsset');
+        if (!file.existsSync()) {
+          continue;
+        }
+        final url = _extractUrl(await file.readAsString());
+        if (url != null) {
+          return url;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  String? _extractUrl(String raw) {
+    try {
+      final data = jsonDecode(raw);
+      if (data is Map) {
+        final url = data['server_url']?.toString();
+        if (url != null && url.trim().isNotEmpty && url != _placeholderUrl) {
+          return url;
+        }
+      }
+    } catch (_) {}
     return null;
   }
 

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../core/constants/app_constants.dart';
+import '../services/auth_service.dart';
 
 class ApiError {
   final String message;
@@ -16,6 +17,7 @@ class ApiClient {
           connectTimeout: AppConstants.apiTimeout,
           receiveTimeout: AppConstants.dspTimeout,
         )) {
+    dio.interceptors.add(_AuthInterceptor());
     dio.interceptors.add(_RetryInterceptor(dio));
   }
 
@@ -79,6 +81,29 @@ class _RetryInterceptor extends Interceptor {
         }
         return handler.next(DioException(requestOptions: err.requestOptions, error: e));
       }
+    }
+    handler.next(err);
+  }
+}
+
+class _AuthInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final token = AuthService.currentToken;
+    if (token != null && token.isNotEmpty && !options.headers.containsKey('Authorization')) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final path = err.requestOptions.uri.path;
+    final isAuthAttempt = path.endsWith('/auth/login') ||
+        path.endsWith('/auth/register') ||
+        path.endsWith('/auth/me');
+    if (err.response?.statusCode == 401 && !isAuthAttempt) {
+      AuthService.instance?.clearToken();
     }
     handler.next(err);
   }

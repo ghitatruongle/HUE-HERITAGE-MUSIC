@@ -27,7 +27,7 @@ def make_sine_wav(freq=440.0, duration=1.0, sr=16000):
 
 def test_auth_register_login_and_guard():
     client = TestClient(app)
-    r = client.post("/api/auth/register", json={"username": "ghita", "password": "hue12345"})
+    r = client.post("/api/auth/register", json={"username": "ghita", "email": "ghita@gmail.com", "password": "hue12345", "invite_code": "QHH2026"})
     assert r.status_code == 200
     token = r.json()["token"]
     assert token.count(".") == 2
@@ -35,9 +35,9 @@ def test_auth_register_login_and_guard():
     assert r.status_code == 200
     r = client.post("/api/auth/login", json={"username": "ghita", "password": "wrong-pass"})
     assert r.status_code == 401
-    r = client.post("/api/auth/register", json={"username": "ghita", "password": "hue12345"})
+    r = client.post("/api/auth/register", json={"username": "ghita", "email": "ghita2@gmail.com", "password": "hue12345", "invite_code": "QHH2026"})
     assert r.status_code == 409
-    r = client.post("/api/auth/register", json={"username": "x", "password": "123"})
+    r = client.post("/api/auth/register", json={"username": "x", "email": "x@gmail.com", "password": "123", "invite_code": "QHH2026"})
     assert r.status_code == 400
 
 
@@ -47,7 +47,7 @@ def test_auth_guard_blocks_writes_when_required(monkeypatch):
     data = make_sine_wav()
     r = client.post("/api/heritage/upload", files={"file": ("a.wav", data, "audio/wav")})
     assert r.status_code == 401
-    r = client.post("/api/auth/register", json={"username": "guarduser", "password": "pass1234"})
+    r = client.post("/api/auth/register", json={"username": "guarduser", "email": "guard@gmail.com", "password": "pass1234", "invite_code": "QHH2026"})
     assert r.status_code == 200
     token = r.json()["token"]
     r = client.post(
@@ -233,4 +233,26 @@ def test_gzip_compression_enabled():
     r = client.get("/api/heritage", headers={"Accept-Encoding": "gzip"})
     assert r.status_code == 200
     assert len(r.content) > 0
+
+
+def test_generated_download_rejects_windows_drive_relative_path():
+    client = TestClient(app)
+    r = client.get("/api/music/generated/C:evil.mp3")
+    assert r.status_code == 400
+    assert r.json() == {"detail": "bad filename"}
+
+
+def test_generated_download_rejects_traversal_and_junk():
+    client = TestClient(app)
+    assert client.get("/api/music/generated/..%2F..%2Fx.mp3").status_code in (400, 404)
+    assert client.get("/api/music/generated/x%5C..%2Fy.mp3").status_code in (400, 404)
+    assert client.get("/api/music/generated/normal.mp3.txt").status_code == 400
+    assert client.get("/api/music/generated/-bad name!.mp3").status_code == 400
+
+
+def test_generated_download_accepts_valid_shape():
+    client = TestClient(app)
+    r = client.get("/api/music/generated/Abc123_-xyz.mp3")
+    assert r.status_code == 404
+
 

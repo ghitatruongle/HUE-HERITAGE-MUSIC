@@ -45,12 +45,35 @@ Các giá trị mặc định đã hợp lệ cho chạy local:
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
 | `APP_NAME` | Hue Heritage Music API | Tên app |
-| `SECRET_KEY` | change-me | Khóa mã hóa — **phải đổi** |
-| `AUTH_REQUIRED` | false | bật auth khi triển khai thật |
+| `SECRET_KEY` | change-me | Khóa mã hóa — **phải đổi**; server từ chối khởi động nếu `AUTH_REQUIRED=true` mà còn dùng khóa mặc định |
+| `AUTH_REQUIRED` | true | đặt `false` nếu chỉ muốn test nhanh local không cần đăng nhập |
+| `TOKEN_TTL_HOURS` | 72 | thời hạn sống của token đăng nhập |
+| `INVITE_CODES` | QHH2026 | mã mời đăng ký (dự phòng khi không có `INVITATION_CODES.json`) |
 | `ALLOWED_ORIGINS` | `*` | CORS |
 | `REDIS_URL` | redis://127.0.0.1:6379/0 | Dùng khi `USE_RQ=true` |
 | `USE_RQ` | false | queue bất đồng bộ (cần Redis) |
 | `ACESTEP_API_URL` | http://127.0.0.1:8001 | model AI sinh nhạc (tùy chọn) |
+
+## Đăng nhập & Mã mời (Auth)
+
+Server có 3 endpoint auth, toàn bộ bị vô hiệu hóa khi `AUTH_REQUIRED=false`:
+
+- `POST /api/auth/register` — tạo tài khoản, bắt buộc `invite_code` hợp lệ
+- `POST /api/auth/login` — nhận `identifier` (tên tài khoản hoặc email) + mật khẩu, trả về Bearer token
+- `GET /api/auth/me` — xem thông tin user từ token
+
+Mã mời được nạp theo thứ tự ưu tiên:
+
+1. `server/INVITATION_CODES.json` (gitignored) dạng `{"valid_codes": ["MÃ_1", "MÃ_2"]}`
+2. biến `INVITE_CODES` trong `.env` (phân tách bằng dấu phẩy)
+3. mặc định cứng `QHH2026` (chỉ dùng để chạy thử)
+
+Lưu ý bảo mật:
+
+- `AUTH_REQUIRED=false` tắt toàn bộ kiểm tra token trên các tác vụ ghi (upload, sinh nhạc, chuyển văn...) — chỉ dùng khi test local.
+- Khi `AUTH_REQUIRED=true`, server từ chối khởi động nếu `SECRET_KEY` vẫn là giá trị mặc định.
+- Các endpoint GET/download (nghe audio gốc, tải midi/musicxml/generated...) vẫn công khai kể cả khi bật auth.
+- Token hết hạn sau `TOKEN_TTL_HOURS` giờ (mặc định 72); đăng xuất chỉ xóa token phía client.
 
 ## Bước 4 — Nạp dữ liệu di sản mẫu (Khuyến nghị)
 
@@ -105,8 +128,9 @@ Adapter LoRA cho màn "Tạo nhạc" được nhận từ thư mục `models/lor
 
 ```bash
 cd server
+pip install -r requirements-dev.txt
 pytest -q
-# 44 tests pass
+# 48 tests pass
 ```
 
 ## Khắc phục sự cố

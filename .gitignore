@@ -23,6 +23,12 @@ node_modules/
 GHITA_API.json
 GHITA_API.*.json
 !GHITA_API.example.json
+INVITATION_CODES.json
+server/INVITATION_CODES.json
+!INVITATION_CODES.example.json
+!server/INVITATION_CODES.example.json
+.hue_auth.json
+**/.hue_auth.json
 
 # ------------------------------------------------------------
 # 1. TÀI LIỆU NỘI BỘ, GHI CHÚ VÀ BẢN THẢO RIÊNG TƯ

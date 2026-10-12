@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,12 +15,19 @@ from .auth import require_user
 
 router = APIRouter(tags=["music_gen"])
 
-EXTRA_FIELDS = ("lyrics", "genre", "instruments", "tempo", "mood", "vocal")
+GENERATED_NAME = re.compile(r"^[A-Za-z0-9_-]{1,80}\.mp3$")
+
+
+def _validate_generation(duration: int, strength: float) -> None:
+    if duration < 10 or duration > 300:
+        raise HTTPException(status_code=400, detail="bad duration")
+    if strength < 0 or strength > 1:
+        raise HTTPException(status_code=400, detail="bad strength")
 
 
 @router.get("/music/generated/{filename}")
 def download_generated(filename: str):
-    if "/" in filename or "\\" in filename or ".." in filename or not filename.endswith(".mp3"):
+    if not GENERATED_NAME.fullmatch(filename):
         raise HTTPException(status_code=400, detail="bad filename")
     path = manager.generated_dir() / filename
     if not path.exists():
@@ -53,10 +61,7 @@ def generate(
 ):
     if not prompt.strip():
         raise HTTPException(status_code=400, detail="empty prompt")
-    if duration < 10 or duration > 300:
-        raise HTTPException(status_code=400, detail="bad duration")
-    if strength < 0 or strength > 1:
-        raise HTTPException(status_code=400, detail="bad strength")
+    _validate_generation(duration, strength)
     return generator_service.create_task(
         "generate", prompt.strip(), duration, lora.strip(), strength, seed,
         extra=_extra(lyrics=lyrics, genre=genre, instruments=instruments, tempo=tempo, mood=mood, vocal=vocal),
@@ -78,10 +83,7 @@ def cover(
 ):
     if not heritage_id.strip() or not style.strip():
         raise HTTPException(status_code=400, detail="missing params")
-    if duration < 10 or duration > 300:
-        raise HTTPException(status_code=400, detail="bad duration")
-    if strength < 0 or strength > 1:
-        raise HTTPException(status_code=400, detail="bad strength")
+    _validate_generation(duration, strength)
     item = crud.get_item(db, heritage_id.strip())
     if not item:
         raise HTTPException(status_code=404, detail="heritage item not found")
@@ -114,10 +116,7 @@ def sing_original(
 ):
     if not heritage_id.strip():
         raise HTTPException(status_code=400, detail="missing heritage_id")
-    if duration < 10 or duration > 300:
-        raise HTTPException(status_code=400, detail="bad duration")
-    if strength < 0 or strength > 1:
-        raise HTTPException(status_code=400, detail="bad strength")
+    _validate_generation(duration, strength)
     item = crud.get_item(db, heritage_id.strip())
     if not item:
         raise HTTPException(status_code=404, detail="heritage item not found")
@@ -153,10 +152,7 @@ def sing_new_lyrics(
 ):
     if not heritage_id.strip() or not new_lyrics.strip():
         raise HTTPException(status_code=400, detail="missing heritage_id or new_lyrics")
-    if duration < 10 or duration > 300:
-        raise HTTPException(status_code=400, detail="bad duration")
-    if strength < 0 or strength > 1:
-        raise HTTPException(status_code=400, detail="bad strength")
+    _validate_generation(duration, strength)
     item = crud.get_item(db, heritage_id.strip())
     if not item:
         raise HTTPException(status_code=404, detail="heritage item not found")

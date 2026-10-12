@@ -5,6 +5,8 @@ import '../core/theme/app_theme.dart';
 import '../services/locale_provider.dart';
 import '../services/server_config.dart';
 import '../services/theme_provider.dart';
+import 'app_logo.dart';
+import 'content_max_width.dart';
 
 class NavigationDestinationItem {
   final IconData icon;
@@ -110,14 +112,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Image.asset(
-                                'assets/images/app_logo.png',
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white, size: 20),
-                              ),
-                            ),
+                            child: const AppLogo(size: 36, borderRadius: 10, iconSize: 20, iconColor: Colors.white),
                           ),
                         ],
                       )
@@ -141,14 +136,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                 ),
                               ],
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.asset(
-                                'assets/images/app_logo.png',
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white, size: 22),
-                              ),
-                            ),
+                            child: const AppLogo(size: 40, iconSize: 22, iconColor: Colors.white),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -403,7 +391,10 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
           ),
         ),
         Expanded(
-          child: widget.destinations[widget.selectedIndex].screen,
+          child: ContentMaxWidth(
+            maxWidth: 1360,
+            child: widget.destinations[widget.selectedIndex].screen,
+          ),
         ),
       ],
     );
@@ -563,6 +554,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       'instruments' => s.navInstruments,
       'history' => s.taskHistoryTitle,
       'settings' => s.settingsTitle,
+      'auth' => s.authTitle,
       'info' => s.projectInfoTitle,
       _ => key,
     };

@@ -1,13 +1,10 @@
 from ..database.session import SessionLocal
 from ..database import crud
-from ..services import pitch_service, amt_service, midi_service, musicxml_service
-from ..services import restoration_service, instrument_service
-from ..ai import basic_pitch_amt as bp_amt
-from ..audio_dsp import post_quantizer
+from ..services import instrument_service, media_pipeline
 from ..storage import manager
 from pathlib import Path
 
-MAX_BYTES = 15 * 1024 * 1024
+MAX_BYTES = manager.MAX_ANALYSIS_BYTES
 
 
 def _safe_audio_path(params: dict) -> Path:
@@ -42,37 +39,14 @@ def _transcribe(params):
     if len(data) > MAX_BYTES:
         raise ValueError("file too large")
     bpm = float(params.get("bpm", 60.0))
-    samples, sr = pitch_service.read_mono_wav(data, max_seconds=300.0)
-    used = "dsp"
-    notes = None
-    if params.get("engine", "basic_pitch") == "basic_pitch" and bp_amt.available():
-        try:
-            notes = bp_amt.transcribe(samples, sr)
-            used = "basic_pitch"
-        except Exception:
-            notes = None
-    if notes is None:
-        times, f0s = pitch_service.estimate_f0(samples, sr)
-        notes = amt_service.segment_notes(times, f0s)
-    notes = post_quantizer.quantize(notes, bpm)
-    digest = manager.sha256_bytes(data)
-    stem = f"{digest}_{int(bpm)}"
-    mid = manager.midi_dir() / (stem + ".mid")
-    mid.write_bytes(midi_service.write_midi(notes, bpm))
-    xm = manager.xml_dir() / (stem + ".musicxml")
-    xm.write_text(musicxml_service.build_musicxml(notes, bpm, path.stem), encoding="utf-8")
+    notes, used, _ = media_pipeline.extract_notes(data, bpm, params.get("engine", "basic_pitch"))
+    digest, stem, _, _ = media_pipeline.write_artifacts(data, notes, bpm, path.stem)
     return {"kind": "transcribe", "engine": used, "sha": digest, "artifact": stem, "count": len(notes), "bpm": bpm}
 
 
 def _restore(params):
     path = _safe_audio_path(params)
-    data = path.read_bytes()
-    out, report = restoration_service.restore(data)
-    digest = manager.sha256_bytes(data)
-    dest = manager.restored_dir() / (digest + "_restored.wav")
-    if not dest.exists():
-        dest.write_bytes(out)
-    report["sha"] = digest
+    report, _ = media_pipeline.restore_audio(path.read_bytes())
     return report
 
 

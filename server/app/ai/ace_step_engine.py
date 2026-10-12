@@ -43,7 +43,6 @@ def status():
         "engine": ENGINE,
         "loaded": api_available(),
         "weights_found": api_available(),
-        "api_url": _api_url(),
         "mode": "remote-api",
     }
 

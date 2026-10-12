@@ -83,13 +83,24 @@ def get_user(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
 
 
+def get_user_by_email(db: Session, email: str):
+    return db.query(User).filter(User.email == email).first()
+
+
+def get_user_by_identifier(db: Session, identifier: str):
+    val = identifier.strip()
+    if "@" in val:
+        return get_user_by_email(db, val.lower())
+    return get_user(db, val)
+
+
 def get_user_by_id(db: Session, user_id: str):
     return db.get(User, user_id)
 
 
-def create_user(db: Session, username: str, password_hash: str):
+def create_user(db: Session, username: str, password_hash: str, email: str = ""):
     from sqlalchemy.exc import IntegrityError
-    user = User(username=username, password_hash=password_hash)
+    user = User(username=username, email=email, password_hash=password_hash)
     db.add(user)
     try:
         db.commit()
