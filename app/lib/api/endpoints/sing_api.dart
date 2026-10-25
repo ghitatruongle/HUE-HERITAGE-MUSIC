@@ -38,12 +38,6 @@ class SingApi {
     return PitchData(meanF0: 0, frames: 0, times: [], f0: []);
   }
 
-  Future<CompareResult> compare(String samplePath, String userPath) async {
-    final s = await XFile(samplePath).readAsBytes();
-    final u = await XFile(userPath).readAsBytes();
-    return compareBytes(s, u);
-  }
-
   Future<CompareResult> compareBytes(Uint8List sampleBytes, Uint8List userBytes) async {
     final form = FormData.fromMap({
       'sample': MultipartFile.fromBytes(sampleBytes, filename: 'sample.wav'),

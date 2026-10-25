@@ -140,11 +140,25 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
         }
         return;
       }
-      final savePath = '${Directory.systemTemp.path}/$name';
+      var savePath = '${Directory.systemTemp.path}/$name';
+      var savedNote = 'Đã lưu $name vào thư mục tạm';
+      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        try {
+          final picked = await FilePicker.platform.saveFile(
+            dialogTitle: 'Lưu $name',
+            fileName: name,
+          );
+          if (picked == null) {
+            return;
+          }
+          savePath = picked;
+          savedNote = 'Đã lưu $savePath';
+        } catch (_) {}
+      }
       await api.download(midi ? api.midiUrl(r.sha, bpm: r.bpm) : api.xmlUrl(r.sha, bpm: r.bpm), savePath);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã lưu $name vào thư mục tạm')),
+          SnackBar(content: Text(savedNote)),
         );
       }
     } catch (e) {

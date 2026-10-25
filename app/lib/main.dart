@@ -1,7 +1,9 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home/home_screen.dart';
 import 'services/auth_service.dart';
@@ -23,6 +25,12 @@ Future<void> main() async {
   await history.load();
   await locale.load();
   await auth.load();
+  try {
+    final info = await PackageInfo.fromPlatform();
+    if (info.version.isNotEmpty) {
+      AppConstants.appVersion = info.version;
+    }
+  } catch (_) {}
   runApp(HueHeritageApp(
     config: config,
     theme: theme,

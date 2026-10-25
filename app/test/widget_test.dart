@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hue_heritage_music/api/api_client.dart';
 import 'package:hue_heritage_music/models/compare_result.dart';
+import 'package:hue_heritage_music/models/lesson.dart';
 import 'package:hue_heritage_music/models/pitch_data.dart';
 import 'package:hue_heritage_music/screens/creation/creation_screen.dart';
 import 'package:hue_heritage_music/screens/heritage/heritage_list_screen.dart';
@@ -21,6 +22,7 @@ import 'package:hue_heritage_music/widgets/app_logo.dart';
 import 'package:hue_heritage_music/widgets/common_button.dart';
 import 'package:hue_heritage_music/widgets/compare_chart.dart';
 import 'package:hue_heritage_music/widgets/content_max_width.dart';
+import 'package:hue_heritage_music/widgets/overlay_pitch_chart.dart';
 import 'package:hue_heritage_music/widgets/pitch_contour_chart.dart';
 import 'package:hue_heritage_music/widgets/sheet_music_view.dart';
 import 'package:provider/provider.dart';
@@ -352,7 +354,7 @@ void main() {
 
     expect(find.text('Đăng nhập'), findsWidgets);
     expect(find.text('Trải nghiệm ngay (Chế độ Khách)'), findsOneWidget);
-    expect(find.textContaining('Bản 0.0.0 chưa hỗ trợ đặt lại mật khẩu'), findsOneWidget);
+    expect(find.textContaining('chưa hỗ trợ đặt lại mật khẩu'), findsOneWidget);
   });
 
   test('401 from a guarded endpoint clears the stored token', () async {
@@ -400,6 +402,75 @@ void main() {
 
     expect(find.byType(AppLogo), findsOneWidget);
   });
+
+  test('retry interceptor retries GET but never POST', () async {
+    final adapter = _FlakyAdapter({'GET /api/x': 2});
+    final client = ApiClient(baseUrl: 'http://127.0.0.1:9');
+    client.dio.httpClientAdapter = adapter;
+    final ok = await client.dio.get('/api/x');
+    expect(ok.statusCode, 200);
+    expect(adapter.calls, 3);
+
+    final postAdapter = _FlakyAdapter({'POST /api/y': 1});
+    client.dio.httpClientAdapter = postAdapter;
+    try {
+      await client.dio.post('/api/y');
+      fail('should have thrown');
+    } on DioException {
+      expect(postAdapter.calls, 1);
+    }
+  });
+
+  test('AuthService stores and clears role', () async {
+    final auth = AuthService();
+    await auth.save(token: 'tok', username: 'ghitatruongle', email: 'x@gmail.com', role: 'admin');
+    expect(auth.role, 'admin');
+    expect(auth.isAdmin, isTrue);
+
+    await auth.save(token: 'tok2', username: 'someone', email: 'y@gmail.com', role: 'user');
+    expect(auth.isAdmin, isFalse);
+
+    await auth.clearToken();
+    expect(auth.role, 'user');
+    expect(auth.isAdmin, isFalse);
+  });
+
+  test('HistoryEntry score roundtrip', () {
+    final entry = HistoryEntry(
+      id: 'h1',
+      kind: 'practice',
+      title: 'Bài A — Câu 1',
+      status: 'done',
+      at: DateTime(2026, 10, 25),
+      score: 87.5,
+      detail: 'lesson-1',
+    );
+    final restored = HistoryEntry.fromJson(entry.toJson());
+    expect(restored.score, 87.5);
+    expect(restored.detail, 'lesson-1');
+    expect(restored.kind, 'practice');
+
+    final legacy = HistoryEntry.fromJson({'id': 'h2', 'kind': 'transcribe', 'title': 'x', 'status': 'done', 'at': '2026-10-25T00:00:00.000'});
+    expect(legacy.score, isNull);
+    expect(legacy.detail, '');
+  });
+
+  testWidgets('OverlayPitchChart renders two contours', (tester) async {
+    final result = PracticeResult.fromJson(const {
+      'metrics': {'score': 90, 'pitch_score': 92, 'time_score': 85, 'mean_abs_cents': 20},
+      'sample': {'times': [0.0, 0.5, 1.0], 'f0': [220.0, 240.0, 260.0]},
+      'user_warped': {'times': [0.0, 0.5, 1.0], 'f0': [225.0, 0.0, 262.0]},
+      'notes': [],
+      'section': {'index': 0},
+      'lesson_title': 'Bai A',
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OverlayPitchChart(result: result)),
+      ),
+    );
+    expect(find.byType(OverlayPitchChart), findsOneWidget);
+  });
 }
 
 class _UnauthorizedAdapter implements HttpClientAdapter {
@@ -431,6 +502,31 @@ class _MockHttpAdapter implements HttpClientAdapter {
         '[]',
         200,
         headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      );
+    }
+    return ResponseBody.fromString('{}', 200, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _FlakyAdapter implements HttpClientAdapter {
+  int calls = 0;
+  final Map<String, int> failTimes;
+
+  _FlakyAdapter(this.failTimes);
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    calls++;
+    final key = '${options.method.toUpperCase()} ${options.uri.path}';
+    final remaining = failTimes[key] ?? 0;
+    if (remaining > 0) {
+      failTimes[key] = remaining - 1;
+      throw DioException.connectionError(
+        requestOptions: options,
+        reason: 'simulated connection error',
       );
     }
     return ResponseBody.fromString('{}', 200, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});

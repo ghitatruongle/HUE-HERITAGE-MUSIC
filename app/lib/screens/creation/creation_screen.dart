@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -151,8 +152,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
       if (mounted) {
         setState(() => _taskTab1 = task);
-        if (task.status == 'running' || task.status == 'pending') {
-          unawaited(_pollTask(task.id, isTab1: true));
+        if (task.status == 'running' || task.status == 'pending' || task.status == 'queued') {
+          unawaited(_watchTask(task.id, isTab1: true, durationSeconds: _durationTab1));
         }
       }
     } catch (e) {
@@ -207,8 +208,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
       if (mounted) {
         setState(() => _taskTab2 = task);
-        if (task.status == 'running' || task.status == 'pending') {
-          unawaited(_pollTask(task.id, isTab1: false));
+        if (task.status == 'running' || task.status == 'pending' || task.status == 'queued') {
+          unawaited(_watchTask(task.id, isTab1: false, durationSeconds: _durationTab2));
         }
       }
     } catch (e) {
@@ -222,16 +223,72 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     }
   }
 
-  Future<void> _pollTask(String id, {required bool isTab1}) async {
+  Future<void> _watchTask(String id, {required bool isTab1, required int durationSeconds}) async {
+    void apply(MusicTask t) {
+      if (!mounted) return;
+      setState(() {
+        if (isTab1) {
+          _taskTab1 = t;
+        } else {
+          _taskTab2 = t;
+        }
+      });
+    }
+
+    if (!kIsWeb) {
+      var reachedTerminal = false;
+      try {
+        final dio = context.read<ServerConfig>().api.dio;
+        final history = context.read<HistoryService>();
+        if (mounted) {
+          setState(() => _polling = true);
+        }
+        final done = Completer<void>();
+        final sub = MusicApi(dio).taskEvents(id).listen(
+          (t) {
+            apply(t);
+            if (t.status != 'running' && t.status != 'pending' && t.status != 'queued') {
+              history.updateStatus(id, t.status);
+              reachedTerminal = true;
+              if (!done.isCompleted) done.complete();
+            }
+          },
+          onError: (_) {
+            if (!done.isCompleted) done.complete();
+          },
+          onDone: () {
+            if (!done.isCompleted) done.complete();
+          },
+        );
+        await done.future.timeout(
+          Duration(seconds: 150 + durationSeconds * 3),
+          onTimeout: () {},
+        );
+        await sub.cancel();
+        if (reachedTerminal) {
+          if (mounted) {
+            setState(() => _polling = false);
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+    await _pollTask(id, isTab1: isTab1, durationSeconds: durationSeconds);
+  }
+
+  Future<void> _pollTask(String id, {required bool isTab1, required int durationSeconds}) async {
     setState(() => _polling = true);
     final dio = context.read<ServerConfig>().api.dio;
     final history = context.read<HistoryService>();
+    final deadline = DateTime.now().add(Duration(seconds: 150 + durationSeconds * 3));
+    var consecutiveFailures = 0;
 
-    for (int i = 0; i < 60; i++) {
+    while (mounted && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(seconds: 2));
       if (!mounted) return;
       try {
         final t = await MusicApi(dio).task(id);
+        consecutiveFailures = 0;
         if (mounted) {
           setState(() {
             if (isTab1) {
@@ -241,18 +298,46 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             }
           });
         }
-        if (t.status != 'running' && t.status != 'pending') {
+        if (t.status != 'running' && t.status != 'pending' && t.status != 'queued') {
           await history.updateStatus(id, t.status);
           break;
         }
       } catch (_) {
-        continue;
+        consecutiveFailures++;
+        if (consecutiveFailures >= 5) {
+          if (mounted) {
+            setState(() {
+              final msg = 'Mất kết nối máy chủ khi chờ kết quả (đã thử $consecutiveFailures lần). Tác vụ vẫn chạy phía máy chủ.';
+              if (isTab1) {
+                _errorTab1 = msg;
+              } else {
+                _errorTab2 = msg;
+              }
+            });
+          }
+          break;
+        }
       }
     }
 
     if (mounted) {
       setState(() => _polling = false);
     }
+  }
+
+  Future<void> _cancelTask(String id) async {
+    final dio = context.read<ServerConfig>().api.dio;
+    final history = context.read<HistoryService>();
+    try {
+      final t = await MusicApi(dio).cancelTask(id);
+      await history.updateStatus(id, t.status);
+      if (mounted) {
+        setState(() {
+          if (_taskTab1?.id == id) _taskTab1 = t;
+          if (_taskTab2?.id == id) _taskTab2 = t;
+        });
+      }
+    } catch (_) {}
   }
 
   void _applySampleVerse(String text) {
@@ -1060,7 +1145,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 decoration: BoxDecoration(
                   color: task.status == 'done'
                       ? Colors.green.withAlpha(40)
-                      : task.status == 'blocked'
+                      : task.status == 'blocked' || task.status == 'cancelled'
                           ? Colors.amber.withAlpha(40)
                           : Colors.blue.withAlpha(40),
                   borderRadius: BorderRadius.circular(6),
@@ -1070,7 +1155,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                   style: TextStyle(
                     color: task.status == 'done'
                         ? Colors.greenAccent
-                        : task.status == 'blocked'
+                        : task.status == 'blocked' || task.status == 'cancelled'
                             ? Colors.amberAccent
                             : Colors.lightBlueAccent,
                     fontSize: 12,
@@ -1081,6 +1166,20 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               if (_polling) ...[
                 const SizedBox(width: 10),
                 const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+              ],
+              if (_polling &&
+                  (task.status == 'running' || task.status == 'pending' || task.status == 'queued')) ...[
+                const SizedBox(width: 10),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.close_rounded, size: 14, color: Colors.white70),
+                  label: const Text('Hủy', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                  onPressed: () => _cancelTask(task.id),
+                ),
               ],
             ],
           ),
@@ -1109,7 +1208,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               ],
             ),
             const SizedBox(height: 8),
-            AudioPlayerBar(key: Key(fullUrl), url: fullUrl),
+            AudioPlayerBar(key: Key(fullUrl), url: fullUrl, dio: server.api.dio),
           ],
         ],
       ),

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart';
 
 import '../api/api_client.dart';
 
@@ -78,6 +79,10 @@ class ServerConfig extends ChangeNotifier {
       File(Platform.resolvedExecutable).parent.path,
       Directory.current.path,
     ];
+    try {
+      final support = await getApplicationSupportDirectory();
+      dirs.add(support.path);
+    } catch (_) {}
     for (final dir in dirs) {
       try {
         final file = File('$dir/$_configAsset');

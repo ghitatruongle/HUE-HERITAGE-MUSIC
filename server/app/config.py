@@ -6,6 +6,14 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 SERVER_DIR = Path(__file__).resolve().parents[1]
 
 INSECURE_DEFAULT_SECRET_KEY = "dev-insecure-secret-key"
+INSECURE_SECRET_KEYS = {
+    INSECURE_DEFAULT_SECRET_KEY,
+    "change-me",
+    "changeme",
+    "secret",
+    "change-me-to-a-long-random-string",
+}
+MIN_SECRET_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -24,6 +32,9 @@ class Settings(BaseSettings):
     use_rq: bool = False
     acestep_api_url: str = ""
     invite_codes: str = "QHH2026"
+    admin_truong_username: str = "ghitatruongle"
+    generation_concurrency: int = 1
+    heavy_rate_limit: int = 30
     web_dir: Path = BASE_DIR / "app" / "build" / "web"
 
 

@@ -43,12 +43,12 @@ def _enqueue_rq(task_id: str, kind: str, params: dict) -> bool:
         return False
 
 
-def dispatch(kind: str, params: dict) -> str:
+def dispatch(kind: str, params: dict, user_id=None) -> str:
     if kind not in KINDS:
         raise ValueError("unsupported kind")
     db = SessionLocal()
     try:
-        task = crud.create_task(db, kind, params)
+        task = crud.create_task(db, kind, params, user_id=user_id)
         task_id = task.id
     finally:
         db.close()

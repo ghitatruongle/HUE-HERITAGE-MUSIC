@@ -1,4 +1,4 @@
-package com.example.hue_heritage_music
+package com.ghita.hueheritagemusic
 
 import io.flutter.embedding.android.FlutterActivity
 

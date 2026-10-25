@@ -98,6 +98,20 @@ def get_user_by_id(db: Session, user_id: str):
     return db.get(User, user_id)
 
 
+def list_users(db: Session):
+    rows = db.query(User).order_by(User.created_at).all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "role": u.role or "user",
+            "created_at": str(u.created_at),
+        }
+        for u in rows
+    ]
+
+
 def create_user(db: Session, username: str, password_hash: str, email: str = ""):
     from sqlalchemy.exc import IntegrityError
     user = User(username=username, email=email, password_hash=password_hash)
@@ -111,8 +125,50 @@ def create_user(db: Session, username: str, password_hash: str, email: str = "")
     return user
 
 
-def create_task(db: Session, kind: str, params: Optional[dict] = None):
-    task = Task(kind=kind, params_json=json.dumps(params or {}))
+def update_user_password(db: Session, user_id: str, password_hash: str):
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    user.password_hash = password_hash
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def create_invite_code(db: Session, code: str, note: str = ""):
+    from ..database.models import InviteCode
+    row = InviteCode(code=code, note=note)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_invite_code(db: Session, code: str):
+    from ..database.models import InviteCode
+    return db.query(InviteCode).filter(InviteCode.code == code).first()
+
+
+def mark_invite_used(db: Session, code: str, user_id: str) -> bool:
+    from ..database.models import InviteCode
+    from sqlalchemy import update
+    from datetime import datetime
+    result = db.execute(
+        update(InviteCode)
+        .where(InviteCode.code == code, InviteCode.used_by.is_(None))
+        .values(used_by=user_id, used_at=datetime.now())
+    )
+    db.commit()
+    return result.rowcount > 0
+
+
+def unused_invite_codes(db: Session):
+    from ..database.models import InviteCode
+    return [row.code for row in db.query(InviteCode).filter(InviteCode.used_by.is_(None)).all()]
+
+
+def create_task(db: Session, kind: str, params: Optional[dict] = None, user_id: Optional[str] = None):
+    task = Task(kind=kind, params_json=json.dumps(params or {}), user_id=user_id)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -140,12 +196,14 @@ def get_task(db: Session, task_id: str):
     return db.get(Task, task_id)
 
 
-def list_tasks(db: Session, kind: str = "", status: str = "", limit: int = 100):
+def list_tasks(db: Session, kind: str = "", status: str = "", limit: int = 100, user_id: Optional[str] = None):
     query = db.query(Task)
     if kind:
         query = query.filter(Task.kind == kind)
     if status:
         query = query.filter(Task.status == status)
+    if user_id is not None:
+        query = query.filter(Task.user_id == user_id)
     return query.order_by(Task.created_at.desc()).limit(limit).all()
 
 
@@ -177,6 +235,7 @@ def task_to_dict(task: Task):
         "params": _safe_json_loads(task.params_json),
         "result": _safe_json_loads(task.result_json),
         "error": task.error or "",
+        "user_id": task.user_id,
         "created_at": str(task.created_at),
         "finished_at": str(task.finished_at) if task.finished_at else None,
     }

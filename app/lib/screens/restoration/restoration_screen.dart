@@ -183,7 +183,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               Text('${strings.restorationPeakChange}: ${res.peakBefore.toStringAsFixed(2)} -> ${res.peakAfter.toStringAsFixed(2)}'),
               Text('${strings.restorationNoiseFloor}: ${res.noiseFloorDb.toStringAsFixed(1)} dB'),
               const SizedBox(height: 12),
-              AudioPlayerBar(url: RestorationApi(dio).restoredUrl(res.sha), label: strings.restoredAudio),
+              AudioPlayerBar(url: RestorationApi(dio).restoredUrl(res.sha), label: strings.restoredAudio, dio: dio),
             ],
           ),
           actions: [
@@ -562,7 +562,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   ],
                 ),
                 const SizedBox(height: 10),
-                AudioPlayerBar(url: originalUrl, label: strings.originalAudio),
+                AudioPlayerBar(url: originalUrl, label: strings.originalAudio, dio: dio),
               ],
             ),
           ),
@@ -611,6 +611,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   AudioPlayerBar(
                     url: RestorationApi(dio).restoredUrl(_restoreResult!.sha),
                     label: strings.restoredAudio,
+                    dio: dio,
                   ),
                 ] else ...[
                   Padding(

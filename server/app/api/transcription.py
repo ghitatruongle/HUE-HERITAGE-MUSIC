@@ -10,6 +10,7 @@ from ..database.session import get_db
 from ..database import crud
 from ..services import amt_eval, media_pipeline
 from ..storage import manager
+from ..audio_access import require_audio_access
 from .auth import require_user
 
 router = APIRouter(tags=["transcription"])
@@ -89,7 +90,7 @@ def _find_artifact(directory, sha: str, ext: str, bpm: float = 0.0):
 
 
 @router.get("/music/midi/{sha}")
-def download_midi(sha: str, bpm: float = 0.0):
+def download_midi(sha: str, bpm: float = 0.0, access=Depends(require_audio_access)):
     path = _find_artifact(midi_dir(), sha, "mid", bpm)
     if not path:
         raise HTTPException(status_code=404, detail="not found")
@@ -97,7 +98,7 @@ def download_midi(sha: str, bpm: float = 0.0):
 
 
 @router.get("/music/musicxml/{sha}")
-def download_xml(sha: str, bpm: float = 0.0):
+def download_xml(sha: str, bpm: float = 0.0, access=Depends(require_audio_access)):
     path = _find_artifact(xml_dir(), sha, "musicxml", bpm)
     if not path:
         raise HTTPException(status_code=404, detail="not found")

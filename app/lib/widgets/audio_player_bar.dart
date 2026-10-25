@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -10,6 +11,7 @@ class AudioPlayerBar extends StatefulWidget {
   final Uint8List? bytes;
   final String label;
   final bool autoPlay;
+  final Dio? dio;
 
   const AudioPlayerBar({
     super.key,
@@ -18,6 +20,7 @@ class AudioPlayerBar extends StatefulWidget {
     this.bytes,
     this.label = '',
     this.autoPlay = false,
+    this.dio,
   });
 
   @override
@@ -61,6 +64,30 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
     return rawUrl;
   }
 
+  Future<String?> _signedUrl(String rawUrl) async {
+    final dio = widget.dio;
+    if (dio == null) {
+      return null;
+    }
+    if (rawUrl.contains('e=') && rawUrl.contains('s=')) {
+      return null;
+    }
+    final idx = rawUrl.indexOf('/api/');
+    if (idx < 0) {
+      return null;
+    }
+    final path = rawUrl.substring(idx).split('?').first;
+    try {
+      final res = await dio.get('/api/music/play-url', queryParameters: {'path': path});
+      final data = res.data;
+      if (data is Map && data['url'] is String && (data['url'] as String).isNotEmpty) {
+        final signed = data['url'] as String;
+        return signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _load() async {
     try {
       if (mounted) {
@@ -71,7 +98,11 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
       }
       await _player.stop();
       if (widget.url != null && widget.url!.isNotEmpty) {
-        final finalUrl = _normalizeUrl(widget.url!);
+        var finalUrl = _normalizeUrl(widget.url!);
+        final signed = await _signedUrl(finalUrl);
+        if (signed != null) {
+          finalUrl = _normalizeUrl(signed);
+        }
         await _player.setUrl(finalUrl);
       } else if (widget.filePath != null && widget.filePath!.isNotEmpty) {
         await _player.setFilePath(widget.filePath!);

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "hue_heritage_music" "\0"
+            VALUE "CompanyName", "ghitatruongle" "\0"
+            VALUE "FileDescription", "HUE HERITAGE MUSIC - AI Di sản âm nhạc Huế" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "hue_heritage_music" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 ghitatruongle. All rights reserved." "\0"
             VALUE "OriginalFilename", "hue_heritage_music.exe" "\0"
-            VALUE "ProductName", "hue_heritage_music" "\0"
+            VALUE "ProductName", "Hue Heritage Music" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

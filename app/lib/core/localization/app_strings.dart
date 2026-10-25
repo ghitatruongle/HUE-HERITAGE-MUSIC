@@ -180,17 +180,37 @@ class AppStrings {
       ? '* Chế độ khách cho phép trải nghiệm trực tiếp nhưng không lưu lại dữ liệu sau khi thoát ứng dụng.'
       : '* Guest mode lets you explore instantly, but nothing is saved after you exit the app.';
   String get authNoResetNote => isVi
-      ? 'Bản 0.0.0 chưa hỗ trợ đặt lại mật khẩu. Vui lòng ghi nhớ thông tin đăng nhập.'
-      : 'Version 0.0.0 does not support password reset yet. Please remember your credentials.';
+      ? 'Phiên bản hiện tại chưa hỗ trợ đặt lại mật khẩu. Vui lòng ghi nhớ thông tin đăng nhập.'
+      : 'The current version does not support password reset yet. Please remember your credentials.';
+  String get authStorageWarning => isVi
+      ? 'Máy này chưa có kho bảo mật (keyring/libsecret trên Linux) nên không lưu được phiên đăng nhập. Hãy cài libsecret hoặc dùng Chế độ Khách.'
+      : 'This machine has no secure keyring (libsecret on Linux), so sign-in cannot be saved. Install libsecret or use Guest Mode.';
   String get authRegisterFootnote => isVi
-      ? '* Mỗi Gmail chỉ được tạo 1 tài khoản. Bản 0.0.0 yêu cầu mã mời hợp lệ.'
-      : '* Each Gmail can create only one account. Version 0.0.0 requires a valid invite code.';
+      ? '* Mỗi Gmail chỉ được tạo 1 tài khoản. Cần mã mời hợp lệ.'
+      : '* Each Gmail can create only one account. A valid invite code is required.';
   String get authOrDivider => isVi ? 'HOẶC' : 'OR';
   String get authLogoutBtn => isVi ? 'Đăng xuất' : 'Sign Out';
   String get authGuestModeBtn => isVi ? 'Chế độ Khách' : 'Guest Mode';
   String get authLoggedInChip => isVi
       ? 'Chế độ Tài khoản — Lưu phiên đăng nhập trên máy này'
       : 'Account Mode — sign-in saved on this device';
+  String get authRoleAdmin => isVi ? 'Quản trị trưởng (Admin)' : 'Head Administrator';
+  String get authRoleUser => isVi ? 'Người dùng' : 'User';
+  String get authInviteTitle => isVi ? 'Quản lý mã mời (Admin)' : 'Invite Code Management (Admin)';
+  String get authInviteManageHint => isVi
+      ? 'Mã dùng một lần — người được tặng đăng ký xong mã tự vô hiệu. Tạo, sao chép, hoặc xóa tại đây.'
+      : 'One-time codes — they disable themselves after one registration. Create, copy or delete here.';
+  String get authInviteEmpty => isVi ? 'Chưa có mã mời nào trong cơ sở dữ liệu.' : 'No invite codes in the database yet.';
+  String get authInviteCreate => isVi ? 'Tạo mã mời mới' : 'Create new invite code';
+  String get authInviteUsed => isVi ? 'Đã dùng' : 'Used';
+  String get authInviteAvailable => isVi ? 'Còn hiệu lực' : 'Available';
+  String get authInviteCopy => isVi ? 'Sao chép' : 'Copy';
+  String get authInviteCopied => isVi ? 'Đã sao chép' : 'Copied';
+  String get authInviteCopyFail => isVi ? 'Không sao chép được tự động — hãy ghi tay mã' : 'Auto-copy failed — please note the code manually';
+  String get authInviteDelete => isVi ? 'Xóa mã' : 'Delete code';
+  String get authInviteDeleteConfirm => isVi ? 'Xóa mã mời' : 'Delete invite code';
+  String get authInviteCreated => isVi ? 'Đã tạo mã mời' : 'Invite code created';
+  String get authInviteLoadFail => isVi ? 'Không tải được danh sách mã mời' : 'Failed to load invite codes';
   String get authDefaultUser => isVi ? 'Người dùng' : 'User';
   String get authGuestUsername => isVi ? 'Khách' : 'Guest';
   String get authTooltipLoggedIn => isVi ? 'Tài khoản' : 'Account';

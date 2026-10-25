@@ -15,6 +15,7 @@ os.close(_fd)
 os.environ["DATABASE_URL"] = "sqlite:///" + Path(_db_path).as_posix()
 os.environ["STORAGE_DIR"] = str(_tmp / "storage")
 os.environ["MODELS_DIR"] = str(_tmp / "models")
+os.environ["HUE_SECURITY_LOG"] = str(_tmp / "security.log")
 
 
 @atexit.register

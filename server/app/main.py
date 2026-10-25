@@ -1,28 +1,149 @@
 from pathlib import Path
+import threading
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from .config import settings, INSECURE_DEFAULT_SECRET_KEY
+from starlette.datastructures import MutableHeaders
+from .config import settings, INSECURE_SECRET_KEYS, MIN_SECRET_KEY_LENGTH
 from .api.router import api_router
 from .database.session import init_db, SessionLocal
 from .database import crud
+from . import rate_limit
+
+AUDIO_SUFFIXES = (
+    ".mp3",
+    ".wav",
+    ".flac",
+    ".ogg",
+    ".m4a",
+    ".aac",
+    ".opus",
+    ".aiff",
+    ".mid",
+    ".midi",
+    ".musicxml",
+)
+
+HEAVY_POST_PREFIXES = ("/api/music/",)
+HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload")
+
+
+class SecurityHeadersMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.setdefault("X-Content-Type-Options", "nosniff")
+                headers.setdefault("X-Frame-Options", "DENY")
+                headers.setdefault("Referrer-Policy", "no-referrer")
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+class NoGzipAudioMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path.lower().endswith(AUDIO_SUFFIXES):
+                headers = MutableHeaders(scope=scope)
+                if "accept-encoding" in headers:
+                    headers["accept-encoding"] = "identity"
+        await self.app(scope, receive, send)
+
+
+class HeavyRateLimitMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("method") == "POST":
+            path = scope.get("path", "")
+            heavy = path in HEAVY_POST_PATHS or any(path.startswith(p) for p in HEAVY_POST_PREFIXES)
+            if heavy:
+                client = scope.get("client") or ("unknown", 0)
+                limit = max(1, settings.heavy_rate_limit)
+                if not rate_limit.hit_and_allow(f"heavy:{client[0]}", limit):
+                    response = JSONResponse(
+                        {"detail": "too many requests, slow down"},
+                        status_code=429,
+                        headers={"Retry-After": "60"},
+                    )
+                    await response(scope, receive, send)
+                    return
+        await self.app(scope, receive, send)
+
+
+def _validate_secret_key() -> None:
+    if not settings.auth_required:
+        return
+    key = settings.secret_key
+    if key in INSECURE_SECRET_KEYS:
+        raise RuntimeError(
+            "AUTH_REQUIRED=true refuses a well-known placeholder SECRET_KEY; "
+            "generate a long random value (e.g. python -c \"import secrets;print(secrets.token_hex(32))\") "
+            "and set it in server/.env"
+        )
+    if len(key) < MIN_SECRET_KEY_LENGTH:
+        raise RuntimeError(
+            f"AUTH_REQUIRED=true requires SECRET_KEY of at least {MIN_SECRET_KEY_LENGTH} characters"
+        )
+
+
+def _warmup_lessons():
+    import time as _time
+
+    from .services import lesson_service
+
+    _time.sleep(3.0)
+    db = SessionLocal()
+    try:
+        items = crud.get_creation_tunes(db)
+        if not items:
+            items = crud.list_items(db, limit=100)
+        ids = [item.id for item in items]
+    except Exception:
+        db.close()
+        return
+    db.close()
+    for item_id in ids:
+        db = SessionLocal()
+        try:
+            item = crud.get_item(db, item_id)
+            if item is None:
+                continue
+            if lesson_service._lesson_cache_path(item).exists():
+                continue
+            try:
+                lesson_service.build_lesson(item)
+            except Exception:
+                continue
+        finally:
+            db.close()
 
 
 def create_app() -> FastAPI:
-    if settings.auth_required and settings.secret_key == INSECURE_DEFAULT_SECRET_KEY:
-        raise RuntimeError(
-            "AUTH_REQUIRED=true requires a real SECRET_KEY in server/.env; "
-            "the default key is public in the repository and cannot protect tokens"
-        )
+    _validate_secret_key()
     init_db()
     db = SessionLocal()
     try:
         crud.fail_stale_running_tasks(db)
     finally:
         db.close()
-    application = FastAPI(title=settings.app_name, version="0.0.0")
+    application = FastAPI(title=settings.app_name, version="0.0.1")
     application.add_middleware(GZipMiddleware, minimum_size=1000)
     application.add_middleware(
         CORSMiddleware,
@@ -31,11 +152,28 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.add_middleware(SecurityHeadersMiddleware)
+    application.add_middleware(NoGzipAudioMiddleware)
+    application.add_middleware(HeavyRateLimitMiddleware)
+    if settings.auth_required and settings.allowed_origins.strip() == "*":
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "ALLOWED_ORIGINS=* while AUTH_REQUIRED=true; set an explicit origin list for production"
+        )
     application.include_router(api_router, prefix="/api")
+
+    @application.on_event("startup")
+    async def _post_startup():
+        import anyio.to_thread
+
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        limiter.total_tokens = 64
+        threading.Thread(target=_warmup_lessons, daemon=True).start()
 
     @application.get("/health")
     def health():
-        return {"status": "ok", "app": settings.app_name, "version": "0.0.0", "stage": "GD0"}
+        return {"status": "ok", "app": settings.app_name, "version": "0.0.1", "stage": "0.0.1-alpha"}
 
     web_dir = Path(settings.web_dir)
     if web_dir.exists() and (web_dir / "index.html").exists():

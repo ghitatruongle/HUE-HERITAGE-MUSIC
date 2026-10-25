@@ -3,6 +3,7 @@ class AuthUser {
   final String username;
   final String email;
   final String token;
+  final String role;
   final bool isGuest;
 
   const AuthUser({
@@ -10,6 +11,7 @@ class AuthUser {
     required this.username,
     this.email = '',
     required this.token,
+    this.role = 'user',
     this.isGuest = false,
   });
 
@@ -19,6 +21,7 @@ class AuthUser {
       username: (json['username'] ?? '').toString(),
       email: (json['email'] ?? '').toString(),
       token: (json['token'] ?? '').toString(),
+      role: (json['role'] ?? 'user').toString(),
       isGuest: json['isGuest'] == true,
     );
   }
@@ -29,6 +32,7 @@ class AuthUser {
       'username': username,
       'email': email,
       'token': token,
+      'role': role,
       'isGuest': isGuest,
     };
   }

@@ -385,7 +385,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                AudioPlayerBar(url: audioUrl, label: item.title, autoPlay: true),
+                AudioPlayerBar(url: audioUrl, label: item.title, autoPlay: true, dio: dio),
               ],
             ),
           ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../../models/heritage_item.dart';
@@ -99,5 +101,46 @@ class MusicApi {
       return MusicTask.fromJson(Map<String, dynamic>.from(data));
     }
     return MusicTask(id: id, kind: '', status: 'unknown', reason: '');
+  }
+
+  Future<MusicTask> cancelTask(String id) async {
+    final res = await dio.post('/api/music/task/$id/cancel');
+    final data = res.data;
+    if (data is Map) {
+      return MusicTask.fromJson(Map<String, dynamic>.from(data));
+    }
+    return MusicTask(id: id, kind: '', status: 'unknown', reason: '');
+  }
+
+  Stream<MusicTask> taskEvents(String id) async* {
+    final res = await dio.get<ResponseBody>(
+      '/api/music/task/$id/events',
+      options: Options(
+        responseType: ResponseType.stream,
+        headers: {'Accept': 'text/event-stream'},
+        receiveTimeout: const Duration(minutes: 20),
+      ),
+    );
+    final stream = res.data?.stream;
+    if (stream == null) return;
+    var buffer = '';
+    await for (final chunk in stream) {
+      buffer += utf8.decode(chunk);
+      while (true) {
+        final idx = buffer.indexOf('\n\n');
+        if (idx < 0) break;
+        final block = buffer.substring(0, idx);
+        buffer = buffer.substring(idx + 2);
+        for (final line in const LineSplitter().convert(block)) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            final decoded = jsonDecode(line.substring(6));
+            if (decoded is Map) {
+              yield MusicTask.fromJson(Map<String, dynamic>.from(decoded));
+            }
+          } catch (_) {}
+        }
+      }
+    }
   }
 }

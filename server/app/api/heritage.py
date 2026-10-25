@@ -9,6 +9,7 @@ from ..database.session import get_db
 from ..database import crud
 from ..services import heritage_service
 from ..storage import manager
+from ..audio_access import require_audio_access, sign_path
 from .auth import require_user
 
 router = APIRouter(prefix="/heritage", tags=["heritage"])
@@ -44,6 +45,9 @@ async def upload_heritage(
     recorded_time: str = Form(""),
     location: str = Form(""),
     lyrics: str = Form(""),
+    lyrics_with_ornaments: str = Form(""),
+    mode_system: str = Form(""),
+    verse_structure: str = Form(""),
     instruments: str = Form(""),
     tonal: str = Form(""),
     description: str = Form(""),
@@ -79,7 +83,9 @@ async def upload_heritage(
     metadata = _collect_metadata(
         genre=genre, composer=composer, performers=performers, artisans=artisans,
         collector=collector, recorded_time=recorded_time, location=location,
-        lyrics=lyrics, instruments=instruments, tonal=tonal,
+        lyrics=lyrics, lyrics_with_ornaments=lyrics_with_ornaments,
+        mode_system=mode_system, verse_structure=verse_structure,
+        instruments=instruments, tonal=tonal,
         description=description, notes=notes, bpm=bpm_val, source=source, license=license,
     )
     item, created = heritage_service.ingest_upload(db, data, file.filename or "audio.wav", title, type, artist, **metadata)
@@ -97,7 +103,7 @@ def get_heritage(item_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{item_id}/audio")
-def download_audio(item_id: str, db: Session = Depends(get_db)):
+def download_audio(item_id: str, db: Session = Depends(get_db), access: Optional[str] = Depends(require_audio_access)):
     item = crud.get_item(db, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="not found")
@@ -107,3 +113,12 @@ def download_audio(item_id: str, db: Session = Depends(get_db)):
     if not path.exists():
         raise HTTPException(status_code=404, detail="file missing")
     return FileResponse(path)
+
+
+@router.get("/{item_id}/audio-url")
+def issue_audio_url(item_id: str, db: Session = Depends(get_db), user_id: Optional[str] = Depends(require_user)):
+    item = crud.get_item(db, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="not found")
+    token = sign_path(f"/api/heritage/{item_id}/audio")
+    return {"url": token["url"], "expires": token["expires"]}

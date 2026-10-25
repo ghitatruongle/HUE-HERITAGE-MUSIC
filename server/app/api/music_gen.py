@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import re
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..database.session import get_db
 from ..database import crud
 from ..services import generator_service, heritage_service
 from ..storage import manager
+from ..audio_access import require_audio_access, sign_path
 from .auth import require_user
 
 router = APIRouter(tags=["music_gen"])
@@ -25,14 +30,50 @@ def _validate_generation(duration: int, strength: float) -> None:
         raise HTTPException(status_code=400, detail="bad strength")
 
 
+PLAYABLE_PREFIXES = (
+    "/api/heritage/",
+    "/api/lessons/",
+    "/api/music/generated/",
+    "/api/music/restored/",
+    "/api/music/midi/",
+    "/api/music/musicxml/",
+)
+PLAYABLE_SUFFIXES = (
+    "/audio",
+    ".mp3",
+    ".wav",
+    ".mid",
+    ".musicxml",
+)
+
+
+@router.get("/music/play-url")
+def issue_play_url(path: str = "", user_id: Optional[str] = Depends(require_user)):
+    cleaned = (path or "").split("?")[0].strip()
+    if (
+        not cleaned.startswith(PLAYABLE_PREFIXES)
+        or not cleaned.endswith(PLAYABLE_SUFFIXES)
+        or ".." in cleaned
+        or "%" in cleaned
+        or " " in cleaned
+    ):
+        raise HTTPException(status_code=400, detail="bad path")
+    token = sign_path(cleaned)
+    return {"url": token["url"], "expires": token["expires"]}
+
+
 @router.get("/music/generated/{filename}")
-def download_generated(filename: str):
+def download_generated(filename: str, access: Optional[str] = Depends(require_audio_access)):
     if not GENERATED_NAME.fullmatch(filename):
         raise HTTPException(status_code=400, detail="bad filename")
     path = manager.generated_dir() / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")
-    return FileResponse(path, media_type="audio/mpeg")
+    return FileResponse(
+        path,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 def _extra(**kwargs):
@@ -65,6 +106,7 @@ def generate(
     return generator_service.create_task(
         "generate", prompt.strip(), duration, lora.strip(), strength, seed,
         extra=_extra(lyrics=lyrics, genre=genre, instruments=instruments, tempo=tempo, mood=mood, vocal=vocal),
+        user_id=user_id,
     )
 
 
@@ -91,6 +133,7 @@ def cover(
     return generator_service.create_task(
         "cover", prompt, duration, lora.strip(), strength, 0,
         extra=_extra(heritage_id=heritage_id.strip(), style=style.strip(), tempo=tempo, mood=mood, vocal=vocal),
+        user_id=user_id,
     )
 
 
@@ -133,6 +176,7 @@ def sing_original(
             mood="Truyen thong",
             vocal=vocal,
         ),
+        user_id=user_id,
     )
 
 
@@ -168,12 +212,53 @@ def sing_new_lyrics(
             mood=mood,
             vocal=vocal,
         ),
+        user_id=user_id,
     )
 
 
 @router.get("/music/task/{task_id}")
-def gen_task(task_id: str):
+def gen_task(task_id: str, user_id: Optional[str] = Depends(require_user)):
     task = generator_service.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="not found")
+    if settings.auth_required and task.get("user_id") and task["user_id"] != user_id:
+        raise HTTPException(status_code=404, detail="not found")
     return task
+
+
+@router.post("/music/task/{task_id}/cancel")
+def cancel_gen_task(task_id: str):
+    task = generator_service.cancel_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="not found")
+    return task
+
+
+NON_TERMINAL_STATUSES = ("running", "pending", "queued")
+
+
+@router.get("/music/task/{task_id}/events")
+async def gen_task_events(task_id: str, user_id: Optional[str] = Depends(require_user)):
+    task = generator_service.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="not found")
+    if settings.auth_required and task.get("user_id") and task["user_id"] != user_id:
+        raise HTTPException(status_code=404, detail="not found")
+
+    async def stream():
+        deadline = time.time() + 960.0
+        while time.time() < deadline:
+            payload = generator_service.get_task(task_id)
+            if payload is None:
+                yield "event: gone\ndata: {}\n\n"
+                return
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+            if payload.get("status") not in NON_TERMINAL_STATUSES:
+                return
+            await asyncio.sleep(2.0)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

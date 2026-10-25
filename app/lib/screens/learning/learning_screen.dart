@@ -14,6 +14,7 @@ import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
 import '../../widgets/pitch_contour_chart.dart';
+import 'lesson_practice_view.dart';
 
 class LearningScreen extends StatefulWidget {
   const LearningScreen({super.key});
@@ -22,7 +23,8 @@ class LearningScreen extends StatefulWidget {
   State<LearningScreen> createState() => _LearningScreenState();
 }
 
-class _LearningScreenState extends State<LearningScreen> {
+class _LearningScreenState extends State<LearningScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   final AudioRecorder _recorder = AudioRecorder();
   bool _recording = false;
   bool _busy = false;
@@ -30,6 +32,23 @@ class _LearningScreenState extends State<LearningScreen> {
   PitchData? _result;
   String? _error;
   double _progress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    if (_recording) {
+      _recorder.stop().then<void>((_) => _recorder.dispose());
+    } else {
+      _recorder.dispose();
+    }
+    super.dispose();
+  }
 
   String _tmpPath() {
     return '${Directory.systemTemp.path}/hue_learn.wav';
@@ -144,16 +163,6 @@ class _LearningScreenState extends State<LearningScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    if (_recording) {
-      _recorder.stop().then<void>((_) => _recorder.dispose());
-    } else {
-      _recorder.dispose();
-    }
-    super.dispose();
-  }
-
   Future<void> _retry() async {
     await _analyze();
   }
@@ -161,6 +170,29 @@ class _LearningScreenState extends State<LearningScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.graphic_eq), text: 'Thu & phân tích'),
+            Tab(icon: Icon(Icons.school), text: 'Luyện tập theo bài'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildPitchTab(scheme),
+              const LessonPracticeView(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPitchTab(ColorScheme scheme) {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [

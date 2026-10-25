@@ -11,6 +11,7 @@ from ..database.session import SessionLocal, get_db
 from ..database import crud
 from ..services import media_pipeline
 from ..storage import manager
+from ..audio_access import require_audio_access, sign_path
 from .auth import require_user
 
 router = APIRouter(tags=["restoration"])
@@ -62,8 +63,16 @@ def restore_item(item_id: str, db: Session = Depends(get_db), user_id: Optional[
 
 
 @router.get("/music/restored/{sha}")
-def download_restored(sha: str):
+def download_restored(sha: str, access=Depends(require_audio_access)):
     path = restored_dir() / (sha + "_restored.wav")
     if not manager.is_sha256(sha) or not path.exists():
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(path, media_type="audio/wav")
+
+
+@router.get("/music/restored-url/{sha}")
+def issue_restored_url(sha: str, user_id=Depends(require_user)):
+    if not manager.is_sha256(sha):
+        raise HTTPException(status_code=404, detail="not found")
+    token = sign_path(f"/api/music/restored/{sha}")
+    return {"url": token["url"], "expires": token["expires"]}

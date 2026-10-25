@@ -549,13 +549,10 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       'analysis' => s.navAnalysis,
       'transcription' => s.navTranscription,
       'creation' => s.navCreation,
-      'cover' => s.navCover,
       'restoration' => s.navRestoration,
-      'instruments' => s.navInstruments,
       'history' => s.taskHistoryTitle,
       'settings' => s.settingsTitle,
       'auth' => s.authTitle,
-      'info' => s.projectInfoTitle,
       _ => key,
     };
   }

@@ -52,8 +52,6 @@ class ApiClient {
         .replaceAll(RegExp(r'https?://\S+'), '…')
         .replaceAll(RegExp(r'\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b'), '…');
   }
-
-  Future<Response> health() => dio.get('/health');
 }
 
 class _RetryInterceptor extends Interceptor {
@@ -64,10 +62,13 @@ class _RetryInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    final retryable = err.type == DioExceptionType.connectionTimeout ||
-        err.type == DioExceptionType.connectionError ||
-        err.type == DioExceptionType.receiveTimeout ||
-        (err.response?.statusCode != null && err.response!.statusCode! >= 500);
+    final method = err.requestOptions.method.toUpperCase();
+    final idempotent = method == 'GET' || method == 'HEAD';
+    final retryable = idempotent &&
+        (err.type == DioExceptionType.connectionTimeout ||
+            err.type == DioExceptionType.connectionError ||
+            err.type == DioExceptionType.receiveTimeout ||
+            (err.response?.statusCode != null && err.response!.statusCode! >= 500));
     final attempt = (err.requestOptions.extra['__retry'] ?? 0) as int;
     if (retryable && attempt < _maxAttempts - 1) {
       err.requestOptions.extra['__retry'] = attempt + 1;

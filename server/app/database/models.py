@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column
 from .session import Base
@@ -11,6 +12,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(128), unique=True)
     email: Mapped[str] = mapped_column(String(256), unique=True, default="")
     password_hash: Mapped[str] = mapped_column(String(256), default="")
+    role: Mapped[str] = mapped_column(String(16), default="user")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -66,5 +68,16 @@ class Task(Base):
     params_json: Mapped[str] = mapped_column(Text, default="")
     result_json: Mapped[str] = mapped_column(Text, default="")
     error: Mapped[str] = mapped_column(Text, default="")
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     finished_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+
+class InviteCode(Base):
+    __tablename__ = "invite_codes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    code: Mapped[str] = mapped_column(String(128), unique=True)
+    note: Mapped[str] = mapped_column(String(256), default="")
+    used_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

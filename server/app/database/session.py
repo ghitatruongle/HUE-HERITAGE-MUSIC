@@ -10,6 +10,9 @@ class Base(DeclarativeBase):
 engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False, "timeout": 30},
+    pool_size=25,
+    max_overflow=35,
+    pool_timeout=60,
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
@@ -17,6 +20,7 @@ MIGRATION_COLUMNS = {
     "users": {
         "password_hash": "VARCHAR(256) DEFAULT '' NOT NULL",
         "email": "VARCHAR(256) DEFAULT '' NOT NULL",
+        "role": "VARCHAR(16) DEFAULT 'user' NOT NULL",
     },
     "heritage_items": {
         "genre": "VARCHAR(128) DEFAULT '' NOT NULL",
@@ -40,6 +44,9 @@ MIGRATION_COLUMNS = {
         "audio_backing_path": "VARCHAR(512) DEFAULT '' NOT NULL",
         "featured_in_creation": "BOOLEAN DEFAULT 1 NOT NULL",
     },
+    "tasks": {
+        "user_id": "VARCHAR(64)",
+    },
 }
 
 
@@ -55,6 +62,20 @@ def init_db():
             if col not in existing:
                 with engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+    _enforce_admin_truong()
+
+
+def _enforce_admin_truong():
+    from ..config import settings
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE users SET role = 'admin' WHERE username = :name"),
+            {"name": settings.admin_truong_username},
+        )
+        conn.execute(
+            text("UPDATE users SET role = 'user' WHERE username <> :name AND (role IS NULL OR role <> 'user')"),
+            {"name": settings.admin_truong_username},
+        )
 
 
 def get_db():

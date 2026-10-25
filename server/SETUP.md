@@ -4,9 +4,18 @@ Hướng dẫn này dành cho người tải dự án từ GitHub về máy mớ
 
 ## Yêu cầu hệ thống
 
-- Python 3.12 (đã test trên macOS; Windows tương tự)
+- Python 3.12 (đã test trên macOS và Windows; Linux tương tự). **Không dùng Python 3.13+** — `basic-pitch` yêu cầu `numpy<2`
 - Redis (chỉ bắt buộc khi `USE_RQ=true` — mặc định `false`)
 - Git
+- ffmpeg (tùy chọn, chỉ cần khi xử lý định dạng ngoài WAV)
+
+### Ghi chú theo hệ điều hành
+
+| Hệ điều hành | Venv | Ghi chú |
+|---|---|---|
+| macOS (Apple Silicon) | `python3.12 -m venv .venv-mac312` | chạy tốt toàn bộ tính năng, kể cả basic-pitch |
+| Windows | `py -3.12 -m venv .venv` | kích hoạt: `.venv\Scripts\activate`; theo lộ trình phần cứng, Windows dùng cho dev/demo và suy luận turbo INT8 |
+| Linux | `python3.12 -m venv .venv` | cần thêm `libsndfile1` (cho soundfile) và `ffmpeg`; app desktop cần `libsecret` + keyring để lưu token đăng nhập |
 
 ## Bước 1 — Clone dự án
 
@@ -56,24 +65,31 @@ Các giá trị mặc định đã hợp lệ cho chạy local:
 
 ## Đăng nhập & Mã mời (Auth)
 
-Server có 3 endpoint auth, toàn bộ bị vô hiệu hóa khi `AUTH_REQUIRED=false`:
+Server có các endpoint auth:
 
-- `POST /api/auth/register` — tạo tài khoản, bắt buộc `invite_code` hợp lệ
-- `POST /api/auth/login` — nhận `identifier` (tên tài khoản hoặc email) + mật khẩu, trả về Bearer token
-- `GET /api/auth/me` — xem thông tin user từ token
+- `POST /api/auth/register` — tạo tài khoản, bắt buộc `invite_code` hợp lệ; tài khoản mới luôn mang vai trò `user`
+- `POST /api/auth/login` — nhận `identifier` (tên tài khoản hoặc email) + mật khẩu, trả về Bearer token kèm `role`
+- `GET /api/auth/me` — xem thông tin user từ token (gồm `role`)
+- `GET /api/auth/users` — liệt kê toàn bộ tài khoản + vai trò; **chỉ admin trưởng dùng được**
+
+Vai trò (role): chỉ có `admin` và `user`. **Admin trưởng duy nhất là tài khoản `ghitatruongle`** — server tự động gán khi khởi động (biến `ADMIN_TRUONG_USERNAME` trong `.env` nếu cần đổi) và tự hạ mọi tài khoản khác về `user`, nên không thể có admin thứ hai xuất hiện. Mọi tài khoản đăng ký qua mã mời/web đều là `user`.
 
 Mã mời được nạp theo thứ tự ưu tiên:
 
-1. `server/INVITATION_CODES.json` (gitignored) dạng `{"valid_codes": ["MÃ_1", "MÃ_2"]}`
-2. biến `INVITE_CODES` trong `.env` (phân tách bằng dấu phẩy)
-3. mặc định cứng `QHH2026` (chỉ dùng để chạy thử)
+1. Mã dùng một lần trong CSDL (bảng `invite_codes`) — tạo bằng `python tools/create_invite_code.py <MÃ> --note "ghi chú"`; mỗi mã chỉ đăng ký được 1 tài khoản
+2. `server/INVITATION_CODES.json` (gitignored) dạng `{"valid_codes": ["MÃ_1", "MÃ_2"]}` (dùng nhiều lần)
+3. biến `INVITE_CODES` trong `.env` (phân tách bằng dấu phẩy, dùng nhiều lần)
+
+Nếu cả 3 nguồn đều rỗng thì đăng ký bị đóng (không còn mã mặc định cứng).
 
 Lưu ý bảo mật:
 
 - `AUTH_REQUIRED=false` tắt toàn bộ kiểm tra token trên các tác vụ ghi (upload, sinh nhạc, chuyển văn...) — chỉ dùng khi test local.
-- Khi `AUTH_REQUIRED=true`, server từ chối khởi động nếu `SECRET_KEY` vẫn là giá trị mặc định.
-- Các endpoint GET/download (nghe audio gốc, tải midi/musicxml/generated...) vẫn công khai kể cả khi bật auth.
+- Khi `AUTH_REQUIRED=true`, server từ chối khởi động nếu `SECRET_KEY` là một trong các giá trị cứng đã biết hoặc ngắn hơn 32 ký tự.
+- Khi bật auth, các route tải audio yêu cầu token Bearer hoặc liên kết có chữ ký (signed URL) do server phát.
+- Mọi sự kiện đăng nhập/đăng ký (thành công, thất bại, bị chặn 429) được ghi vào `logs/security.log`.
 - Token hết hạn sau `TOKEN_TTL_HOURS` giờ (mặc định 72); đăng xuất chỉ xóa token phía client.
+- Triển khai qua LAN thật sự nên đặt HTTPS ở tầng reverse proxy (caddy/nginx) và thu hẹp `ALLOWED_ORIGINS`.
 
 ## Bước 4 — Nạp dữ liệu di sản mẫu (Khuyến nghị)
 
@@ -130,8 +146,9 @@ Adapter LoRA cho màn "Tạo nhạc" được nhận từ thư mục `models/lor
 cd server
 pip install -r requirements-dev.txt
 pytest -q
-# 48 tests pass
 ```
+
+Từ gốc repo (macOS venv chuẩn): `./.venv-mac312/bin/python -m pytest server/tests -q`.
 
 ## Khắc phục sự cố
 

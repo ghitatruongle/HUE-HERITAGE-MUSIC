@@ -9,6 +9,8 @@ class HistoryEntry {
   final String title;
   final String status;
   final DateTime at;
+  final double? score;
+  final String detail;
 
   HistoryEntry({
     required this.id,
@@ -16,6 +18,8 @@ class HistoryEntry {
     required this.title,
     required this.status,
     required this.at,
+    this.score,
+    this.detail = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -24,6 +28,8 @@ class HistoryEntry {
         'title': title,
         'status': status,
         'at': at.toIso8601String(),
+        if (score != null) 'score': score,
+        'detail': detail,
       };
 
   static HistoryEntry fromJson(Map<String, dynamic> j) => HistoryEntry(
@@ -32,6 +38,8 @@ class HistoryEntry {
         title: j['title']?.toString() ?? '',
         status: j['status']?.toString() ?? '',
         at: DateTime.tryParse(j['at']?.toString() ?? '') ?? DateTime.now(),
+        score: double.tryParse(j['score']?.toString() ?? ''),
+        detail: j['detail']?.toString() ?? '',
       );
 }
 
@@ -74,6 +82,8 @@ class HistoryService extends ChangeNotifier {
         title: _entries[idx].title,
         status: status,
         at: _entries[idx].at,
+        score: _entries[idx].score,
+        detail: _entries[idx].detail,
       );
       await _persist();
     }

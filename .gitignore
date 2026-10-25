@@ -514,3 +514,4 @@ tmp/
 *.zst
 *.dmg
 *.iso
+.gitggignore

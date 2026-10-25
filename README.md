@@ -44,8 +44,17 @@ Hệ thống không được xây dựng chỉ với mục đích "AI tạo nh�
 
 ### 4. Kiến trúc hệ thống
 Hệ thống hoạt động theo mô hình **Client - Server tập trung**:
-- **Ứng dụng đa nền tảng (Flutter):** Chạy trên Android, iOS, Windows, macOS, Web. Giao diện mượt mà, tối ưu thu âm, trực quan hóa biểu đồ cao độ và nốt nhạc. Không nhúng các mô hình AI lớn vào máy người dùng.
+- **Ứng dụng đa nền tảng (Flutter):** Chạy trên Android, iOS, Windows, macOS, Linux, Web. Giao diện mượt mà, tối ưu thu âm, trực quan hóa biểu đồ cao độ và nốt nhạc. Không nhúng các mô hình AI lớn vào máy người dùng.
 - **Máy chủ AI tập trung (FastAPI / Mac mini M4 24GB):** Xử lý toàn bộ logic tính toán nặng: phân tích âm thanh, phiên âm ký âm, suy luận mô hình sinh nhạc và lưu trữ cơ sở dữ liệu.
+
+---
+
+### 5. Triển khai an toàn (bản 0.0.1-alpha)
+
+- Đặt `AUTH_REQUIRED=true` trong `server/.env` khi có người dùng thật; sinh `SECRET_KEY` bằng `python -c "import secrets; print(secrets.token_hex(32))"` (tối thiểu 32 ký tự — server từ chối khởi động với khóa yếu).
+- Khi bật auth: mọi API ghi cần Bearer token; các route tải audio cần token hoặc liên kết có chữ ký do server phát; nhật ký sự kiện đăng nhập ghi tại `server/logs/security.log`.
+- Triển khai qua mạng LAN/WAN nên đặt HTTPS ở tầng reverse proxy (caddy/nginx) và khai báo `ALLOWED_ORIGINS` tường minh.
+- Chi tiết cài đặt từng hệ điều hành (macOS/Windows/Linux): xem `server/SETUP.md`.
 
 ---
 
@@ -82,7 +91,7 @@ The platform is not merely designed for "AI music generation", but fundamentally
 
 ### 4. System Architecture
 The platform is designed around a **Centralized Client - Server** architecture:
-- **Cross-Platform Client (Flutter):** Runs across Android, iOS, Windows, macOS, and Web. Handles audio input/output, user interaction, pitch contour rendering, and sheet music visualization without hosting heavy AI models on device.
+- **Cross-Platform Client (Flutter):** Runs across Android, iOS, Windows, macOS, Linux, and Web. Handles audio input/output, user interaction, pitch contour rendering, and sheet music visualization without hosting heavy AI models on device.
 - **AI Processing Server (FastAPI / Mac mini M4 24GB):** Handles compute-intensive operations, including audio DSP, music transcription, generative AI inference, LoRA training, and repository management.
 
 ---

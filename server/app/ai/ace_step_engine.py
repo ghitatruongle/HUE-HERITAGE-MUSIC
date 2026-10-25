@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 
 import httpx
@@ -8,17 +9,26 @@ from ..config import settings
 ENGINE = "ACE-Step 1.5"
 POLL_INTERVAL = 3.0
 POLL_TIMEOUT = 900.0
+AVAILABILITY_TTL = 15.0
 
 
 class EngineUnavailable(Exception):
     pass
 
 
+class GenerationCancelled(Exception):
+    pass
+
+
+_avail_lock = threading.Lock()
+_avail_cache = {"ts": 0.0, "ok": False}
+
+
 def _api_url() -> str:
     return settings.acestep_api_url.rstrip("/")
 
 
-def api_available() -> bool:
+def _check_available() -> bool:
     url = _api_url()
     if not url:
         return False
@@ -27,6 +37,23 @@ def api_available() -> bool:
         return r.status_code == 200
     except Exception:
         return False
+
+
+def api_available(force: bool = False) -> bool:
+    with _avail_lock:
+        if not force and time.time() - _avail_cache["ts"] < AVAILABILITY_TTL:
+            return _avail_cache["ok"]
+    ok = _check_available()
+    with _avail_lock:
+        _avail_cache["ts"] = time.time()
+        _avail_cache["ok"] = ok
+    return ok
+
+
+def invalidate_availability() -> None:
+    with _avail_lock:
+        _avail_cache["ts"] = 0.0
+        _avail_cache["ok"] = False
 
 
 def base_dir():
@@ -39,10 +66,11 @@ def weights_found() -> bool:
 
 
 def status():
+    ok = api_available()
     return {
         "engine": ENGINE,
-        "loaded": api_available(),
-        "weights_found": api_available(),
+        "loaded": ok,
+        "weights_found": ok,
         "mode": "remote-api",
     }
 
@@ -95,13 +123,15 @@ def _download(url_path: str) -> bytes:
     return r.content
 
 
-def generate(prompt, duration=60, seed=0, lora="", strength=0.8):
+def generate(prompt, duration=60, seed=0, lora="", strength=0.8, should_cancel=None):
     if not api_available():
         raise EngineUnavailable("engine offline (acestep-api not reachable)")
     duration = max(10, min(int(duration), 300))
     task_id = _release(prompt, duration, seed, lora=lora, strength=strength)
     deadline = time.time() + POLL_TIMEOUT
     while time.time() < deadline:
+        if should_cancel is not None and should_cancel():
+            raise GenerationCancelled("cancelled by user")
         time.sleep(POLL_INTERVAL)
         entry = _query(task_id)
         if not entry:

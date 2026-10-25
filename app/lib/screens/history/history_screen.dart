@@ -18,6 +18,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   static const Map<String, List<String>> _chipKinds = {
     'all': [],
     'analyze-pitch': ['analyze-pitch'],
+    'practice': ['practice'],
     'compare-tune': ['compare-tune'],
     'transcribe': ['transcribe'],
     'restore': ['restore', 'restore-upload'],
@@ -104,6 +105,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         _filterChip('all', locale.isVietnamese ? 'Tất cả' : 'All', allEntries.length),
                         const SizedBox(width: 8),
                         _filterChip('analyze-pitch', strings.featAnalysisTitle, allEntries.where((e) => _chipKinds['analyze-pitch']!.contains(e.kind)).length),
+                        const SizedBox(width: 8),
+                        _filterChip('practice', locale.isVietnamese ? 'Luyện tập' : 'Practice', allEntries.where((e) => _chipKinds['practice']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
                         _filterChip('compare-tune', strings.restorationTabCompare, allEntries.where((e) => _chipKinds['compare-tune']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
@@ -204,6 +207,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Text(_kindLabel(e.kind, locale), style: const TextStyle(fontSize: 11, color: AppTheme.amberGold, fontWeight: FontWeight.w600)),
               const Text(' • ', style: TextStyle(fontSize: 11)),
               Text(_formatDate(e.at), style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              if (e.score != null) ...[
+                const Text(' • ', style: TextStyle(fontSize: 11)),
+                Text(
+                  '${e.score!.toStringAsFixed(1)} đ',
+                  style: const TextStyle(fontSize: 11, color: Colors.greenAccent, fontWeight: FontWeight.w600),
+                ),
+              ],
             ],
           ),
         ),
@@ -270,6 +280,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         'compare' => Icons.mic,
         'compare-tune' => Icons.compare_arrows,
         'analyze-pitch' => Icons.query_stats,
+        'practice' => Icons.school,
         'sing_original' || 'sing_new_lyrics' => Icons.auto_awesome,
         _ => Icons.task_outlined,
       };
@@ -285,6 +296,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       'compare' => s.navLearning,
       'compare-tune' => s.restorationTabCompare,
       'analyze-pitch' => s.featAnalysisTitle,
+      'practice' => locale.isVietnamese ? 'Luyện tập' : 'Practice',
       'sing_original' || 'sing_new_lyrics' => s.navCreation,
       _ => kind.isEmpty ? s.taskHistoryTitle : kind,
     };
