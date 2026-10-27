@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
+
+import '../services/locale_provider.dart';
 
 class AudioPlayerBar extends StatefulWidget {
   final String? url;
@@ -165,7 +168,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
             IconButton(
               icon: const Icon(Icons.refresh, size: 18),
               onPressed: _load,
-              tooltip: 'Thử lại',
+              tooltip: context.read<LocaleProvider>().strings.learnRetry,
             ),
           ],
         ),

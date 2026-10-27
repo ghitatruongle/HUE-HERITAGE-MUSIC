@@ -92,23 +92,6 @@
     <div class="spinner"></div>
   </div>
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register = function () {
-        return Promise.reject(new Error('Service worker disabled'));
-      };
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        for (var reg of regs) {
-          reg.unregister();
-        }
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(function (names) {
-        for (var name of names) {
-          caches.delete(name);
-        }
-      });
-    }
     window.addEventListener('flutter-first-frame', function () {
       var loader = document.getElementById('loading-container');
       if (loader) {
@@ -118,10 +101,13 @@
         }, 400);
       }
     });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('flutter_service_worker.js');
+    }
   </script>
   <script>
     var s = document.createElement('script');
-    s.src = 'flutter_bootstrap.js?v=' + Date.now();
+    s.src = 'flutter_bootstrap.js';
     s.async = true;
     document.body.appendChild(s);
   </script>

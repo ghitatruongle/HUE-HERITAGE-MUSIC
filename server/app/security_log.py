@@ -1,11 +1,14 @@
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .config import BASE_DIR
 
 LOG_DIR = BASE_DIR / "logs"
 LOG_FILE = Path(os.environ.get("HUE_SECURITY_LOG") or (LOG_DIR / "security.log"))
+MAX_BYTES = 5 * 1024 * 1024
+BACKUP_COUNT = 3
 
 _logger: logging.Logger | None = None
 
@@ -20,7 +23,7 @@ def _get_logger() -> logging.Logger:
             target = LOG_DIR / "security.log"
         logger = logging.getLogger("hue_security")
         logger.setLevel(logging.INFO)
-        handler = logging.FileHandler(target, encoding="utf-8")
+        handler = RotatingFileHandler(target, encoding="utf-8", maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
         handler.setFormatter(logging.Formatter("%(asctime)s\t%(levelname)s\t%(message)s"))
         logger.addHandler(handler)
         logger.propagate = False

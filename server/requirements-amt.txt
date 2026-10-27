@@ -1,0 +1,4 @@
+-r requirements.txt
+# AMT (Audio-to-MIDI) bang basic-pitch - hien chi cai duoc tren macOS
+# (Linux py3.12: tensorflow/tflite-runtime chua co wheel - CI khong cai, server tu fallback DSP)
+basic-pitch==0.3.*

@@ -18,6 +18,24 @@ class InviteEntry {
       );
 }
 
+class AccountEntry {
+  final String id;
+  final String username;
+  final String email;
+  final String role;
+  final bool active;
+
+  AccountEntry({required this.id, required this.username, required this.email, required this.role, required this.active});
+
+  static AccountEntry fromJson(Map<String, dynamic> j) => AccountEntry(
+        id: j['id']?.toString() ?? '',
+        username: j['username']?.toString() ?? '',
+        email: j['email']?.toString() ?? '',
+        role: j['role']?.toString() ?? 'user',
+        active: j['active'] != false,
+      );
+}
+
 class AuthEndpoints {
   final Dio dio;
 
@@ -76,5 +94,44 @@ class AuthEndpoints {
 
   Future<void> deleteInvite(String id) async {
     await dio.delete('/api/auth/invites/$id');
+  }
+
+  Future<String> changePassword({required String oldPassword, required String newPassword}) async {
+    final res = await dio.post(
+      '/api/auth/change-password',
+      data: {'old_password': oldPassword, 'new_password': newPassword},
+    );
+    return (res.data as Map)['token']?.toString() ?? '';
+  }
+
+  Future<void> revokeAllTokens() async {
+    await dio.post('/api/auth/revoke-all');
+  }
+
+  Future<List<AccountEntry>> listAccounts() async {
+    final res = await dio.get('/api/auth/users');
+    final raw = res.data;
+    final list = <AccountEntry>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map) {
+          list.add(AccountEntry.fromJson(Map<String, dynamic>.from(e)));
+        }
+      }
+    }
+    return list;
+  }
+
+  Future<void> setAccountActive(String id, bool active) async {
+    await dio.patch('/api/auth/users/$id/active', data: {'active': active});
+  }
+
+  Future<void> deleteAccount(String id) async {
+    await dio.delete('/api/auth/users/$id');
+  }
+
+  Future<String> resetAccountPassword(String id) async {
+    final res = await dio.post('/api/auth/users/$id/reset-password');
+    return (res.data as Map)['temp_password']?.toString() ?? '';
   }
 }

@@ -5,10 +5,10 @@ import numpy as np
 import soundfile as sf
 from fastapi.testclient import TestClient
 
-from server.app.main import app, create_app
-from server.app.database.session import SessionLocal
-from server.app.database import crud
-from server.app.services import pitch_service
+from app.main import app, create_app
+from app.database.session import SessionLocal
+from app.database import crud
+from app.services import pitch_service
 
 
 def make_sine_mp3(freq=220.0, duration=1.0, sr=22050):

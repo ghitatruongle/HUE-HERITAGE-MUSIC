@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
-from server.app.main import app
-from server.app.database.session import SessionLocal
-from server.app.database.models import User
+from app.main import app
+from app.database.session import SessionLocal
+from app.database.models import User
 
 
 def test_auth_registration_with_invite_and_login():
@@ -26,7 +26,7 @@ def test_auth_registration_with_invite_and_login():
         "username": "test_user_1",
         "email": "test1@yahoo.com",
         "password": "password123",
-        "invite_code": "QHH2026"
+        "invite_code": "TESTINVITE"
     })
     assert r_bad_mail.status_code == 400
     assert "only @gmail.com" in r_bad_mail.json()["detail"]
@@ -35,7 +35,7 @@ def test_auth_registration_with_invite_and_login():
         "username": "test_user_1",
         "email": "test1@gmail.com",
         "password": "password123",
-        "invite_code": "QHH2026"
+        "invite_code": "TESTINVITE"
     })
     assert r_ok.status_code == 200
     data = r_ok.json()
@@ -47,7 +47,7 @@ def test_auth_registration_with_invite_and_login():
         "username": "test_user_1",
         "email": "test2@gmail.com",
         "password": "password123",
-        "invite_code": "QHH2026"
+        "invite_code": "TESTINVITE"
     })
     assert r_dup_user.status_code == 409
 
@@ -55,7 +55,7 @@ def test_auth_registration_with_invite_and_login():
         "username": "test_user_2",
         "email": "test1@gmail.com",
         "password": "password123",
-        "invite_code": "QHH2026"
+        "invite_code": "TESTINVITE"
     })
     assert r_dup_mail.status_code == 409
 

@@ -1,4 +1,6 @@
 from pathlib import Path
+import os
+import shutil
 import threading
 
 from fastapi import FastAPI, HTTPException
@@ -66,6 +68,9 @@ class NoGzipAudioMiddleware:
 
 
 class HeavyRateLimitMiddleware:
+    """Giới hạn POST nặng: ẩn danh theo IP (heavy_rate_limit/phút),
+    người dùng đã đăng nhập (token HMAC hợp lệ) được hạn mức riêng rộng hơn."""
+
     def __init__(self, app):
         self.app = app
 
@@ -74,13 +79,30 @@ class HeavyRateLimitMiddleware:
             path = scope.get("path", "")
             heavy = path in HEAVY_POST_PATHS or any(path.startswith(p) for p in HEAVY_POST_PREFIXES)
             if heavy:
-                client = scope.get("client") or ("unknown", 0)
-                limit = max(1, settings.heavy_rate_limit)
-                if not rate_limit.hit_and_allow(f"heavy:{client[0]}", limit):
+                headers = MutableHeaders(scope=scope)
+                auth = headers.get("Authorization", "")
+                if auth.startswith("Bearer "):
+                    try:
+                        from .api.auth import parse_token
+
+                        user_id, _epoch = parse_token(auth[7:].strip())
+                        bucket = f"heavy:user:{user_id}"
+                        limit = max(1, settings.heavy_rate_limit) * 3
+                    except HTTPException:
+                        bucket = None
+                        limit = 0
+                else:
+                    bucket = None
+                    limit = 0
+                if bucket is None:
+                    client = scope.get("client") or ("unknown", 0)
+                    bucket = f"heavy:{client[0]}"
+                    limit = max(1, settings.heavy_rate_limit)
+                if not rate_limit.hit_and_allow(bucket, limit):
                     response = JSONResponse(
                         {"detail": "too many requests, slow down"},
                         status_code=429,
-                        headers={"Retry-After": "60"},
+                        headers={"Retry-After": "30"},
                     )
                     await response(scope, receive, send)
                     return
@@ -143,7 +165,14 @@ def create_app() -> FastAPI:
         crud.fail_stale_running_tasks(db)
     finally:
         db.close()
-    application = FastAPI(title=settings.app_name, version="0.0.1")
+    docs_open = settings.enable_docs
+    application = FastAPI(
+        title=settings.app_name,
+        version="0.0.1-beta",
+        docs_url="/docs" if docs_open else None,
+        redoc_url="/redoc" if docs_open else None,
+        openapi_url="/openapi.json" if docs_open else None,
+    )
     application.add_middleware(GZipMiddleware, minimum_size=1000)
     application.add_middleware(
         CORSMiddleware,
@@ -173,7 +202,31 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     def health():
-        return {"status": "ok", "app": settings.app_name, "version": "0.0.1", "stage": "0.0.1-alpha"}
+        payload = {
+            "status": "ok",
+            "app": settings.app_name,
+            "version": "0.0.1-beta",
+            "stage": "0.0.1-beta",
+        }
+        if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
+            from .ai import ace_step_engine
+
+            with SessionLocal() as db:
+                running = crud.list_tasks(db, status="running", limit=500)
+                queued = crud.list_tasks(db, status="queued", limit=500)
+            try:
+                disk_free_gb = shutil.disk_usage(settings.storage_dir).free / 1024**3
+            except Exception:
+                disk_free_gb = None
+            payload.update(
+                {
+                    "engine_online": ace_step_engine.api_available(),
+                    "tasks_running": len(running),
+                    "tasks_queued": len(queued),
+                    "disk_free_gb": round(disk_free_gb, 1) if disk_free_gb is not None else None,
+                }
+            )
+        return payload
 
     web_dir = Path(settings.web_dir)
     if web_dir.exists() and (web_dir / "index.html").exists():

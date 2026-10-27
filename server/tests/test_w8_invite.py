@@ -46,8 +46,8 @@ def test_static_file_code_still_multi_use(monkeypatch):
     monkeypatch.setattr(settings, "auth_required", False, raising=False)
     monkeypatch.setattr(settings, "secret_key", "dev-insecure-secret-key", raising=False)
     client = TestClient(create_app())
-    a = _register(client, "filecode1", "QHH2026")
-    b = _register(client, "filecode2", "QHH2026")
+    a = _register(client, "filecode1", "TESTINVITE")
+    b = _register(client, "filecode2", "TESTINVITE")
     assert a.status_code == 200
     assert b.status_code == 200
 

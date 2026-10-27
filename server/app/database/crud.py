@@ -106,10 +106,58 @@ def list_users(db: Session):
             "username": u.username,
             "email": u.email,
             "role": u.role or "user",
+            "active": (u.active if u.active is not None else 1) == 1,
             "created_at": str(u.created_at),
         }
         for u in rows
     ]
+
+
+def bump_token_epoch(db: Session, user_id: str) -> int:
+    """Tăng epoch NGUYÊN TỬ (UPDATE trong SQL) — race giữa các luồng không mất increments."""
+    from sqlalchemy import update
+
+    result = db.execute(
+        update(User).where(User.id == user_id).values(token_epoch=User.token_epoch + 1)
+    )
+    db.commit()
+    if result.rowcount == 0:
+        return 0
+    db.expire_all()
+    user = db.get(User, user_id)
+    return user.token_epoch if user else 0
+
+
+def delete_user_everything(db: Session, user_id: str):
+    """Xóa tài khoản + gỡ user_id khỏi task (dữ liệu di sản dùng chung giữ nguyên)."""
+    from ..database.models import Task
+    user = db.get(User, user_id)
+    if not user:
+        return False
+    db.query(Task).filter(Task.user_id == user_id).update({Task.user_id: None})
+    db.delete(user)
+    db.commit()
+    return True
+
+
+def set_user_active(db: Session, user_id: str, active: bool):
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    user.active = 1 if active else 0
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def reset_user_password(db: Session, user_id: str, password_hash: str):
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    user.password_hash = password_hash
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def create_user(db: Session, username: str, password_hash: str, email: str = ""):

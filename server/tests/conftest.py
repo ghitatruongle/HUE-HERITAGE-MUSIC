@@ -5,6 +5,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -16,6 +18,14 @@ os.environ["DATABASE_URL"] = "sqlite:///" + Path(_db_path).as_posix()
 os.environ["STORAGE_DIR"] = str(_tmp / "storage")
 os.environ["MODELS_DIR"] = str(_tmp / "models")
 os.environ["HUE_SECURITY_LOG"] = str(_tmp / "security.log")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_settings(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "invite_codes", "TESTINVITE", raising=False)
+    yield
 
 
 @atexit.register

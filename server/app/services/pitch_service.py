@@ -15,7 +15,7 @@ HOP = 1024
 FMIN = 50.0
 FMAX = 1000.0
 MAX_SECONDS = 15.0
-MAX_FRAMES = 4000
+MAX_FRAMES = 24000
 
 
 def read_mono_wav(data: bytes, max_seconds: Optional[float] = MAX_SECONDS):
@@ -89,7 +89,7 @@ def _decode_via_librosa(data: bytes, max_seconds: Optional[float] = MAX_SECONDS)
     return [float(v) for v in arr], int(sr)
 
 
-def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
+def estimate_f0_reference(samples, sr, frame=FRAME, hop=HOP):
     if sr <= 0 or frame <= 0 or hop <= 0:
         return [], []
     times = []
@@ -165,4 +165,81 @@ def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
         pos += hop
         if len(times) >= MAX_FRAMES:
             break
+    return times, f0s
+
+
+def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
+    if np is None or sr <= 0 or frame <= 0 or hop <= 0:
+        return estimate_f0_reference(samples, sr, frame=frame, hop=hop)
+    arr = np.asarray(samples, dtype=np.float64)
+    n = len(arr)
+    lmin = max(1, int(sr / FMAX))
+    lmax = int(sr / FMIN)
+    need = 2 * lmax + 1
+    if frame < need:
+        frame = 1
+        while frame < need:
+            frame <<= 1
+    if n < frame:
+        return [], []
+
+    starts = range(0, n - frame + 1, hop)
+    times = [round(p / sr, 3) for p in starts]
+    if len(times) >= MAX_FRAMES:
+        starts = list(starts)[:MAX_FRAMES]
+        times = times[:MAX_FRAMES]
+
+    windows = np.lib.stride_tricks.sliding_window_view(arr, frame)[::hop][: len(times)]
+    energy = np.mean(windows * windows, axis=1)
+
+    fft_size = 1
+    while fft_size < 2 * frame:
+        fft_size <<= 1
+    spec = np.fft.rfft(windows, fft_size, axis=1)
+    ac = np.fft.irfft(spec * np.conj(spec), fft_size, axis=1)[:, :frame].real
+
+    lags = np.arange(lmin, min(lmax + 1, frame))
+    denom = (frame - lags)[None, :] * (energy[:, None] + 1e-9)
+    norms = ac[:, lags] / denom
+
+    best = np.zeros(len(times))
+    pick = np.zeros(len(times), dtype=np.int64)
+    voiced = (energy >= 0.000001) & (norms.max(axis=1) >= 0.3)
+    if voiced.any():
+        nrm_v = norms[voiced]
+        best_v = nrm_v.max(axis=1)
+        threshold = 0.9 * best_v
+
+        if nrm_v.shape[1] >= 3:
+            local_max = np.zeros_like(nrm_v, dtype=bool)
+            local_max[:, 1:-1] = (nrm_v[:, 1:-1] >= nrm_v[:, :-2]) & (nrm_v[:, 1:-1] >= nrm_v[:, 2:])
+            local_max[:, 0] = nrm_v[:, 0] > nrm_v[:, 1] if nrm_v.shape[1] > 1 else True
+            local_max[:, -1] = nrm_v[:, -1] > nrm_v[:, -2] if nrm_v.shape[1] > 1 else True
+        else:
+            local_max = np.ones_like(nrm_v, dtype=bool)
+
+        hit = (nrm_v >= threshold[:, None]) & local_max
+        has_hit = np.any(hit, axis=1)
+        pick_hit = np.where(has_hit, hit.argmax(axis=1), 0)
+        fallback = nrm_v.argmax(axis=1)
+        pick_v = np.where(has_hit, pick_hit, fallback)
+        best[voiced] = best_v
+        pick[voiced] = pick_v
+
+    idx = pick
+    y1 = norms[np.arange(len(times)), idx]
+    lag_lo = np.maximum(idx - 1, 0)
+    lag_hi = np.minimum(idx + 1, norms.shape[1] - 1)
+    y0 = norms[np.arange(len(times)), lag_lo]
+    y2 = norms[np.arange(len(times)), lag_hi]
+    den = y0 - 2 * y1 + y2
+    delta = np.zeros(len(times))
+    valid = den < -1e-12
+    d = 0.5 * (y0 - y2) / np.where(valid, den, 1.0)
+    delta = np.where(valid & (np.abs(d) <= 1.0), d, 0.0)
+
+    lag = lmin + idx + delta
+    lag = np.maximum(lag, 1.0)
+    f0 = np.where(voiced & (lag >= 1.0), sr / lag, 0.0)
+    f0s = [round(float(v), 1) for v in f0]
     return times, f0s

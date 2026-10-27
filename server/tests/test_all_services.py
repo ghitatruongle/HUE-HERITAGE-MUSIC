@@ -7,10 +7,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from server.app.main import app
-from server.app.audio_dsp import fft as dsp_fft
-from server.app.audio_dsp import dtw_aligner, post_quantizer
-from server.app.services import (
+from app.main import app
+from app.audio_dsp import fft as dsp_fft
+from app.audio_dsp import dtw_aligner, post_quantizer
+from app.services import (
     pitch_service,
     compare_service,
     midi_service,
@@ -18,9 +18,9 @@ from server.app.services import (
     restoration_service,
     instrument_service,
 )
-from server.app.database.session import get_db, SessionLocal
-from server.app.database import crud
-from server.app.storage import manager
+from app.database.session import get_db, SessionLocal
+from app.database import crud
+from app.storage import manager
 
 
 def make_sine_wav(freq=440.0, duration=1.0, sr=16000):
@@ -205,9 +205,9 @@ def test_fastapi_endpoints():
 
 
 def test_math_edge_cases():
-    from server.app.audio_dsp.dtw_aligner import to_semi
-    from server.app.services.compare_service import to_cents
-    from server.app.services.amt_service import freq_to_midi, cents_diff, median
+    from app.audio_dsp.dtw_aligner import to_semi
+    from app.services.compare_service import to_cents
+    from app.services.amt_service import freq_to_midi, cents_diff, median
 
     assert to_semi(0) == 0.0
     assert to_semi(-10) == 0.0

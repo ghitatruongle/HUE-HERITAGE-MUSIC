@@ -24,11 +24,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 PBKDF2_ITERATIONS = 600_000
 LEGACY_PBKDF2_ITERATIONS = 100_000
+RESERVED_USERNAMES = {"admin", "administrator", "moderator", "root", "system", "support", "official"}
 
 AUTH_FAILURE_LIMIT = 5
 AUTH_FAILURE_WINDOW = 900.0
 _auth_failures: dict = {}
 _auth_failures_lock = threading.Lock()
+_identifier_failures: dict = {}
+_IDENTIFIER_FAILURE_LIMIT = 20
 _invite_lock = threading.Lock()
 
 
@@ -47,9 +50,29 @@ def _attempts_exceeded(key: str) -> bool:
 def _record_failure(key: str) -> None:
     now = time.time()
     with _auth_failures_lock:
+        if len(_auth_failures) > 20000:
+            for k in [k for k, v in _auth_failures.items() if not v or now - v[-1] > AUTH_FAILURE_WINDOW]:
+                _auth_failures.pop(k, None)
         stamps = [t for t in _auth_failures.get(key, []) if now - t < AUTH_FAILURE_WINDOW]
         stamps.append(now)
         _auth_failures[key] = stamps
+
+
+def _identifier_exceeded(identifier: str) -> bool:
+    """Chống brute force cùng 1 tài khoản từ NHIỀU IP khác nhau."""
+    now = time.time()
+    with _auth_failures_lock:
+        stamps = [t for t in _identifier_failures.get(identifier, []) if now - t < AUTH_FAILURE_WINDOW]
+        _identifier_failures[identifier] = stamps
+        return len(stamps) >= _IDENTIFIER_FAILURE_LIMIT
+
+
+def _record_identifier_failure(identifier: str) -> None:
+    with _auth_failures_lock:
+        if len(_identifier_failures) > 20000:
+            for k in [k for k, v in _identifier_failures.items() if not v or time.time() - v[-1] > AUTH_FAILURE_WINDOW]:
+                _identifier_failures.pop(k, None)
+        _identifier_failures.setdefault(identifier, []).append(time.time())
 
 
 def _clear_failures(key: str) -> None:
@@ -117,25 +140,34 @@ def _password_iterations(stored: str) -> int:
     return 0
 
 
-def make_token(user_id: str) -> str:
+def make_token(user_id: str, epoch: int = 0) -> str:
     expires = int(time.time()) + settings.token_ttl_hours * 3600
-    payload = f"{user_id}.{expires}"
+    payload = f"{user_id}.{expires}.{epoch}"
     sig = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"
 
 
-def parse_token(token: str) -> str:
+def _token_payload(token: str):
+    parts = token.split(".")
+    if len(parts) == 4:
+        return parts[0], int(parts[1]), int(parts[2]), ".".join(parts[:3])
+    if len(parts) == 3:
+        return parts[0], int(parts[1]), 0, ".".join(parts[:2])
+    raise ValueError("bad token shape")
+
+
+def parse_token(token: str) -> tuple:
     try:
-        user_id, expires, sig = token.split(".", 2)
-    except ValueError:
+        user_id, expires, epoch, payload = _token_payload(token)
+    except (ValueError, IndexError):
         raise HTTPException(status_code=401, detail="invalid token")
-    payload = f"{user_id}.{expires}"
+    sig = token.rsplit(".", 1)[1]
     expected = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(sig, expected):
         raise HTTPException(status_code=401, detail="invalid token")
-    if int(expires) < time.time():
+    if expires < time.time():
         raise HTTPException(status_code=401, detail="token expired")
-    return user_id
+    return user_id, epoch
 
 
 class RegisterRequest(BaseModel):
@@ -157,9 +189,14 @@ def require_user(request: Request, db: Session = Depends(get_db)) -> Optional[st
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="authentication required")
-    user_id = parse_token(header[7:].strip())
-    if not crud.get_user_by_id(db, user_id):
+    user_id, epoch = parse_token(header[7:].strip())
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
         raise HTTPException(status_code=401, detail="unknown user")
+    if epoch < (user.token_epoch or 0):
+        raise HTTPException(status_code=401, detail="token revoked")
+    if getattr(user, "active", 1) == 0:
+        raise HTTPException(status_code=403, detail="account disabled")
     return user_id
 
 
@@ -167,13 +204,32 @@ def require_admin(request: Request, db: Session = Depends(get_db)) -> str:
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="authentication required")
-    user_id = parse_token(header[7:].strip())
+    user_id, epoch = parse_token(header[7:].strip())
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=401, detail="unknown user")
+    if epoch < (user.token_epoch or 0):
+        raise HTTPException(status_code=401, detail="token revoked")
+    if getattr(user, "active", 1) == 0:
+        raise HTTPException(status_code=403, detail="account disabled")
     if (user.role or "user") != "admin" or user.username != settings.admin_truong_username:
         raise HTTPException(status_code=403, detail="admin truong only")
     return user.id
+
+
+def _bearer_user(request: Request, db: Session):
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authentication required")
+    user_id, epoch = parse_token(header[7:].strip())
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="unknown user")
+    if epoch < (user.token_epoch or 0):
+        raise HTTPException(status_code=401, detail="token revoked")
+    if getattr(user, "active", 1) == 0:
+        raise HTTPException(status_code=403, detail="account disabled")
+    return user
 
 
 def _role_of(user) -> str:
@@ -183,6 +239,8 @@ def _role_of(user) -> str:
 def _validate_registration(db: Session, u: str, e: str, p: str, c: str) -> None:
     if not u or len(u) < 3:
         raise HTTPException(status_code=400, detail="username must be at least 3 characters")
+    if u.lower() in RESERVED_USERNAMES:
+        raise HTTPException(status_code=400, detail="username is reserved")
     if not e.endswith("@gmail.com") or len(e) <= 10:
         raise HTTPException(status_code=400, detail="only @gmail.com addresses are supported")
     if len(p) < 6:
@@ -233,7 +291,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
         "username": user.username,
         "email": user.email,
         "role": _role_of(user),
-        "token": make_token(user.id),
+        "token": make_token(user.id, user.token_epoch or 0),
     }
 
 
@@ -244,15 +302,19 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="identifier and password required")
 
     key = f"login:{_client_ip(request)}:{login_id.lower()}"
-    if _attempts_exceeded(key):
+    if _attempts_exceeded(key) or _identifier_exceeded(login_id.lower()):
         security_log.security_event("login_rate_limited", ip=_client_ip(request), identifier=login_id)
         raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
 
     user = crud.get_user_by_identifier(db, login_id)
     if not user or not verify_password(req.password, user.password_hash):
         _record_failure(key)
+        _record_identifier_failure(login_id.lower())
         security_log.security_event("login_failed", ip=_client_ip(request), identifier=login_id)
         raise HTTPException(status_code=401, detail="wrong credentials")
+    if getattr(user, "active", 1) == 0:
+        security_log.security_event("login_blocked_disabled", ip=_client_ip(request), identifier=login_id)
+        raise HTTPException(status_code=403, detail="account disabled")
 
     if _password_iterations(user.password_hash) < PBKDF2_ITERATIONS:
         crud.update_user_password(db, user.id, hash_password(req.password))
@@ -265,19 +327,13 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         "username": user.username,
         "email": user.email,
         "role": _role_of(user),
-        "token": make_token(user.id),
+        "token": make_token(user.id, user.token_epoch or 0),
     }
 
 
 @router.get("/me")
 def get_me(request: Request, db: Session = Depends(get_db)):
-    header = request.headers.get("Authorization", "")
-    if not header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="authentication required")
-    user_id = parse_token(header[7:].strip())
-    user = crud.get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="user not found")
+    user = _bearer_user(request, db)
     return {
         "id": user.id,
         "username": user.username,
@@ -344,6 +400,78 @@ def delete_invite(invite_id: str, admin_id: str = Depends(require_admin), db: Se
     db.commit()
     security_log.security_event("invite_deleted", admin=admin_id, invite_id=invite_id)
     return {"deleted": invite_id}
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+def change_password(req: ChangePasswordRequest, request: Request, db: Session = Depends(get_db)):
+    user = _bearer_user(request, db)
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+    if not verify_password(req.old_password, user.password_hash):
+        security_log.security_event("change_password_failed", user_id=user.id, username=user.username)
+        raise HTTPException(status_code=401, detail="wrong password")
+    crud.update_user_password(db, user.id, hash_password(req.new_password))
+    new_epoch = crud.bump_token_epoch(db, user.id)
+    security_log.security_event("password_changed", user_id=user.id, username=user.username)
+    return {"changed": True, "token": make_token(user.id, new_epoch)}
+
+
+class ActiveRequest(BaseModel):
+    active: bool
+
+
+@router.patch("/users/{user_id}/active")
+def set_user_active(user_id: str, req: ActiveRequest, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    if user.username == settings.admin_truong_username and not req.active:
+        raise HTTPException(status_code=400, detail="cannot disable admin truong")
+    crud.set_user_active(db, user_id, req.active)
+    if not req.active:
+        crud.bump_token_epoch(db, user_id)
+    security_log.security_event(
+        "user_active_changed", admin=admin_id, user_id=user_id, username=user.username, active=req.active
+    )
+    return {"id": user_id, "username": user.username, "active": req.active}
+
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: str, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    if user.username == settings.admin_truong_username:
+        raise HTTPException(status_code=400, detail="cannot delete admin truong")
+    username = user.username
+    crud.delete_user_everything(db, user_id)
+    security_log.security_event("user_deleted", admin=admin_id, user_id=user_id, username=username)
+    return {"deleted": user_id, "username": username}
+
+
+@router.post("/users/{user_id}/reset-password")
+def admin_reset_password(user_id: str, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    temp = "hue-" + secrets.token_hex(4)
+    crud.reset_user_password(db, user_id, hash_password(temp))
+    crud.bump_token_epoch(db, user_id)
+    security_log.security_event("password_reset_by_admin", admin=admin_id, user_id=user_id, username=user.username)
+    return {"id": user_id, "temp_password": temp}
+
+
+@router.post("/revoke-all")
+def revoke_all_tokens(request: Request, db: Session = Depends(get_db)):
+    user = _bearer_user(request, db)
+    crud.bump_token_epoch(db, user.id)
+    security_log.security_event("tokens_revoked", user_id=user.id, username=user.username)
+    return {"revoked": True}
 
 
 @router.get("/users")

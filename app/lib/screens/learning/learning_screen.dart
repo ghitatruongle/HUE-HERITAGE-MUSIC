@@ -9,7 +9,9 @@ import 'package:record/record.dart';
 import '../../api/api_client.dart';
 import '../../api/endpoints/sing_api.dart';
 import '../../models/pitch_data.dart';
+import '../../core/localization/app_strings.dart';
 import '../../services/history_service.dart';
+import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
@@ -32,6 +34,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   PitchData? _result;
   String? _error;
   double _progress = 0;
+  late AppStrings strings;
 
   @override
   void initState() {
@@ -88,7 +91,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
       return;
     }
     if (!ok) {
-      setState(() => _error = 'Mic bị từ chối');
+      setState(() => _error = strings.practiceMicDenied);
       return;
     }
     try {
@@ -104,7 +107,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
       if (!mounted) {
         return;
       }
-      setState(() => _error = 'Không bắt đầu được ghi âm. Kiểm tra quyền microphone của trình duyệt/thiết bị.');
+      setState(() => _error = strings.practiceMicStartFail);
       return;
     }
     if (!mounted) {
@@ -149,10 +152,10 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
               },
             );
       if (!mounted) return;
-      _log('analyze-pitch', 'Phân tích bản thu', 'done');
+      _log('analyze-pitch', strings.learnAnalyzeBtn, 'done');
       setState(() => _result = data);
     } catch (e) {
-      _log('analyze-pitch', 'Phân tích bản thu', 'error');
+      _log('analyze-pitch', strings.learnAnalyzeBtn, 'error');
       if (mounted) {
         setState(() => _error = ApiClient.describe(e));
       }
@@ -170,6 +173,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    strings = context.watch<LocaleProvider>().strings;
     return Column(
       children: [
         TabBar(
@@ -197,22 +201,22 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
       padding: const EdgeInsets.all(12),
       children: [
         CommonButton(
-          label: _recording ? 'Dừng thu âm' : 'Thu âm giọng hát',
+          label: _recording ? strings.learnStopBtn : strings.learnRecordBtn,
           onPressed: _toggle,
         ),
         const SizedBox(height: 8),
         if (_recording)
-          const Row(
+          Row(
             children: [
-              Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
-              SizedBox(width: 6),
-              Text('Đang thu âm...'),
+              const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+              const SizedBox(width: 6),
+              Text(strings.learnRecording),
             ],
           ),
         if (_filePath != null && !kIsWeb) Text(_filePath!, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         CommonButton(
-          label: 'Phân tích cao độ',
+          label: strings.learnAnalyzeBtn,
           loading: _busy,
           onPressed: _filePath == null ? null : _analyze,
         ),
@@ -226,7 +230,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
               child: Row(
                 children: [
                   Expanded(child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer))),
-                  TextButton(onPressed: _retry, child: const Text('Thử lại')),
+                  TextButton(onPressed: _retry, child: Text(strings.learnRetry)),
                 ],
               ),
             ),

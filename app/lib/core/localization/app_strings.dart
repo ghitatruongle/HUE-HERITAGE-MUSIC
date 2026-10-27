@@ -74,6 +74,57 @@ class AppStrings {
   String get restoredAudio => isVi ? 'Bản phục chế' : 'Restored';
   String get restoreActionBtn => isVi ? 'Phục dựng' : 'Restore';
   String get closeBtn => isVi ? 'Đóng' : 'Close';
+  String get practiceNoLessons => isVi ? 'Chưa có bài học nào. Hãy nạp dữ liệu di sản trên máy chủ (bài có file âm thanh sẽ thành bài học).' : 'No lessons yet. Load heritage data on the server (any item with audio becomes a lesson).';
+  String get practicePickLesson => isVi ? 'Chọn bài học' : 'Choose lesson';
+  String get practiceListenLoop => isVi ? 'Nghe mẫu (lặp)' : 'Listen (loop)';
+  String get practiceStopSample => isVi ? 'Dừng mẫu' : 'Stop sample';
+  String get practiceRecord => isVi ? 'Thu câu này' : 'Record this phrase';
+  String get practiceStopRecord => isVi ? 'Dừng thu' : 'Stop recording';
+  String get practiceGrade => isVi ? 'Chấm điểm' : 'Grade';
+  String get practiceRecorded => isVi ? 'Đã thu xong — bấm "Chấm điểm".' : 'Recorded — tap "Grade".';
+  String get practiceScaleTitle => isVi ? 'Luyện thang ngũ cung' : 'Pentatonic scale practice';
+  String get practiceScaleHint => isVi ? 'Nghe mẫu thang âm rồi hát theo — chấm độ bám thang (chroma).' : 'Listen to the scale sample then sing along — scored by chroma adherence.';
+  String get practiceScale => isVi ? 'Điệu thang' : 'Scale';
+  String get practiceScaleNotes => isVi ? 'Nốt' : 'Notes';
+  String get practiceScaleSample => isVi ? 'Mẫu thang' : 'Scale sample';
+  String get practiceScaleRecord => isVi ? 'Thu tiếng hát' : 'Record singing';
+  String get practiceScaleGrade => isVi ? 'Chấm thang' : 'Grade scale';
+  String get practiceOnScale => isVi ? 'Độ bám thang' : 'Scale adherence';
+  String get practiceMicDenied => isVi ? 'Mic bị từ chối' : 'Microphone denied';
+  String get practiceMicStartFail => isVi ? 'Không bắt đầu được ghi âm. Kiểm tra quyền microphone.' : 'Could not start recording. Check microphone permission.';
+  String get practiceBusySection => isVi ? 'Đang thu câu hát — hãy dừng bản thu đó trước.' : 'A phrase recording is in progress — stop it first.';
+  String get practiceBusyScale => isVi ? 'Đang thu luyện thang — hãy dừng bản thu đó trước.' : 'A scale recording is in progress — stop it first.';
+  String get practiceCountIn => isVi ? 'Đếm nhập' : 'Count-in';
+  String get practiceReplayTake => isVi ? 'Nghe lại bản thu của bạn:' : 'Replay your take:';
+  String get practiceMidiBtn => isVi ? 'MIDI bản luyện' : 'Practice MIDI';
+  String get practiceSaved => isVi ? 'Đã lưu' : 'Saved';
+  String get practiceProgressTitle => isVi ? 'Tiến độ gần đây' : 'Recent progress';
+  String get practiceAvg5 => isVi ? 'TB 5 lượt' : 'Avg of 5';
+  String get practiceLastScore => isVi ? 'Điểm lần gần nhất' : 'Latest score';
+  String get practiceSentence => isVi ? 'Câu' : 'Phrase';
+  String get listenTabTitle => isVi ? 'Thu & phân tích' : 'Record & analyze';
+  String get practiceTabTitle => isVi ? 'Luyện tập theo bài' : 'Practice by lesson';
+  String get learnRecordBtn => isVi ? 'Thu âm giọng hát' : 'Record your voice';
+  String get learnStopBtn => isVi ? 'Dừng thu âm' : 'Stop recording';
+  String get learnRecording => isVi ? 'Đang thu âm...' : 'Recording...';
+  String get learnAnalyzeBtn => isVi ? 'Phân tích cao độ' : 'Analyze pitch';
+  String get learnRetry => isVi ? 'Thử lại' : 'Retry';
+  String get audioLoadFail => isVi ? 'Không tải được bản ghi âm. Kiểm tra kết nối với máy chủ AI.' : 'Could not load the recording. Check the AI server connection.';
+  String get transcribeNoTake => isVi ? 'Chưa có bản thu. Hãy thu âm ở màn Học hát hoặc chọn tệp.' : 'No recording yet. Record in Learning or pick a file.';
+  String get transcribeBpmRange => isVi ? 'BPM trong khoảng 1-300' : 'BPM must be 1-300';
+  String get transcribePickFile => isVi ? 'Chưa chọn tệp âm thanh.' : 'No audio file chosen.';
+  String get transcribeResultTitle => isVi ? 'Ký âm' : 'Transcription';
+  String get transcribeNoSha => isVi ? 'Thiếu mã băm để tải file' : 'Missing hash for download';
+  String get transcribeDownloaded => isVi ? 'Đã tải xuống' : 'Downloaded';
+  String get transcribeSavedTemp => isVi ? 'Đã lưu vào thư mục tạm' : 'Saved to temp folder';
+  String get transcribePickBtn => isVi ? 'Chọn tệp' : 'Pick file';
+  String get transcribeUseLast => isVi ? 'Dùng bản thu vừa ghi' : 'Use last recording';
+  String get transcribeSource => isVi ? 'Nguồn' : 'Source';
+  String get transcribeEngine => isVi ? 'Bộ máy' : 'Engine';
+  String get transcribeRunBtn => isVi ? 'Phân tích ký âm' : 'Transcribe';
+  String get transcribeMidiBtn => isVi ? 'Tải MIDI' : 'Download MIDI';
+  String get transcribeXmlBtn => isVi ? 'Tải MusicXML' : 'Download MusicXML';
+
   String get cancelBtn => isVi ? 'Hủy' : 'Cancel';
   String get processing => isVi ? 'Đang xử lý...' : 'Processing...';
 
@@ -211,6 +262,39 @@ class AppStrings {
   String get authInviteDeleteConfirm => isVi ? 'Xóa mã mời' : 'Delete invite code';
   String get authInviteCreated => isVi ? 'Đã tạo mã mời' : 'Invite code created';
   String get authInviteLoadFail => isVi ? 'Không tải được danh sách mã mời' : 'Failed to load invite codes';
+  String get changePasswordBtn => isVi ? 'Đổi mật khẩu' : 'Change password';
+  String get changePasswordOld => isVi ? 'Mật khẩu hiện tại' : 'Current password';
+  String get changePasswordNew => isVi ? 'Mật khẩu mới (tối thiểu 6 ký tự)' : 'New password (min 6 characters)';
+  String get changePasswordConfirm => isVi ? 'Nhập lại mật khẩu mới' : 'Confirm new password';
+  String get changePasswordMismatch => isVi
+      ? 'Mật khẩu mới chưa khớp hoặc ngắn hơn 6 ký tự.'
+      : 'New passwords do not match or are shorter than 6 characters.';
+  String get changePasswordDone => isVi ? 'Đã đổi mật khẩu — các thiết bị khác bị đăng xuất.' : 'Password changed — other devices were signed out.';
+  String get logoutEverywhereBtn => isVi ? 'Đăng xuất mọi thiết bị' : 'Sign out on all devices';
+  String get logoutEverywhereConfirm => isVi
+      ? 'Thu hồi toàn bộ phiên đăng nhập của tài khoản này trên mọi thiết bị (kể cả máy hiện tại)?'
+      : 'Revoke all sessions of this account on every device (including this one)?';
+  String get logoutEverywhereDone => isVi ? 'Đã thu hồi toàn bộ phiên.' : 'All sessions revoked.';
+  String get accountManagerTitle => isVi ? 'Danh sách tài khoản (Admin)' : 'Accounts (Admin)';
+  String get accountManagerHint => isVi
+      ? 'Vô hiệu hóa/kích hoạt tài khoản, đặt lại mật khẩu hộ (mật khẩu tạm tự sinh).'
+      : 'Disable/enable accounts, reset a password (a temporary one is generated).';
+  String get accountResetPassword => isVi ? 'Đặt lại mật khẩu' : 'Reset password';
+  String get accountResetConfirm => isVi ? 'Đặt lại mật khẩu cho' : 'Reset password for';
+  String get accountTempPassword => isVi ? 'Mật khẩu tạm' : 'Temporary password';
+  String get accountDeleteTitle => isVi ? 'Xóa tài khoản' : 'Delete account';
+  String get accountDeleteConfirm => isVi ? 'XÓA VĨNH VIỄN tài khoản' : 'PERMANENTLY delete account';
+  String get accountDeleteIrreversible => isVi ? 'Hành động này không thể hoàn tác.' : 'This cannot be undone.';
+  String get accountDeleted => isVi ? 'Đã xóa tài khoản' : 'Account deleted';
+  String get onboardingTitle => isVi ? 'Kết nối máy chủ AI' : 'Connect to AI Server';
+  String get onboardingHint => isVi
+      ? 'Nhập địa chỉ máy chủ HUE HERITAGE MUSIC trong mạng nội bộ (bạn có thể thay đổi sau trong Cài đặt).'
+      : 'Enter the HUE HERITAGE MUSIC server address on your local network (changeable later in Settings).';
+  String get onboardingUrlLabel => isVi ? 'Địa chỉ máy chủ' : 'Server address';
+  String get onboardingConnect => isVi ? 'Kết nối' : 'Connect';
+  String get onboardingLater => isVi ? 'Để sau' : 'Later';
+  String get onboardingEnterUrl => isVi ? 'Vui lòng nhập địa chỉ máy chủ.' : 'Please enter the server address.';
+  String get onboardingSaveFail => isVi ? 'Không lưu được địa chỉ.' : 'Could not save the address.';
   String get authDefaultUser => isVi ? 'Người dùng' : 'User';
   String get authGuestUsername => isVi ? 'Khách' : 'Guest';
   String get authTooltipLoggedIn => isVi ? 'Tài khoản' : 'Account';

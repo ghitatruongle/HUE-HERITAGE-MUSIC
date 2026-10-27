@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from server.app.config import settings
-from server.app.main import app
+from app.config import settings
+from app.main import app
 
 
 def _register(client: TestClient, username: str) -> dict:
@@ -9,7 +9,7 @@ def _register(client: TestClient, username: str) -> dict:
         "username": username,
         "email": f"{username}@gmail.com",
         "password": "password123",
-        "invite_code": "QHH2026",
+        "invite_code": "TESTINVITE",
     })
     assert r.status_code == 200
     return r.json()

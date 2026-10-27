@@ -4,12 +4,12 @@ import struct
 import wave
 from pathlib import Path
 
-from server.app.ai import lora_adapter
-from server.app.services import pitch_service, midi_service
-from server.app.audio_dsp import dtw_aligner, post_quantizer
-from server.app.database import crud
-from server.app.database.models import Task
-from server.app.storage import manager
+from app.ai import lora_adapter
+from app.services import pitch_service, midi_service
+from app.audio_dsp import dtw_aligner, post_quantizer
+from app.database import crud
+from app.database.models import Task
+from app.storage import manager
 
 
 def make_test_wav(duration=20.0, sr=16000, freq=440.0):
@@ -130,7 +130,7 @@ def test_storage_manager_null_byte_rejection():
 
 
 def test_musicxml_service_robustness():
-    from server.app.services import musicxml_service
+    from app.services import musicxml_service
     notes = [
         {"midi": -10, "start": -2.0, "end": -1.0},
         {"midi": 150, "start": 1.0, "end": 2.5},
@@ -142,7 +142,7 @@ def test_musicxml_service_robustness():
 
 
 def test_amt_service_close_bounds():
-    from server.app.services import amt_service
+    from app.services import amt_service
     times = [0.0, 0.05, 0.1, 0.15, 0.2]
     f0 = [0.0, 220.0, 0.0, 220.0, 0.0]
     notes = amt_service.segment_notes(times, f0)
@@ -151,7 +151,7 @@ def test_amt_service_close_bounds():
 
 def test_generator_service_thread_safety():
     import threading
-    from server.app.services import generator_service
+    from app.services import generator_service
 
     errors = []
 
@@ -182,7 +182,7 @@ def test_generator_service_thread_safety():
 
 
 def test_instrument_service_duration_handling():
-    from server.app.services import instrument_service
+    from app.services import instrument_service
     wav = make_test_wav(duration=2.0, freq=440.0)
     res = instrument_service.detect(wav)
     assert res["duration"] > 0.0

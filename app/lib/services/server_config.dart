@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
@@ -37,7 +38,30 @@ class ServerConfig extends ChangeNotifier {
     return cleaned;
   }
 
+  Future<void> saveServerUrl(String rawUrl) async {
+    final normalized = normalize(rawUrl);
+    if (normalized.isEmpty) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('hue_server_url', normalized);
+    _baseUrl = normalized;
+    _api = ApiClient(baseUrl: _baseUrl);
+    notifyListeners();
+  }
+
   Future<void> load() async {
+    var manual = '';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      manual = prefs.getString('hue_server_url') ?? '';
+    } catch (_) {}
+    if (manual.isNotEmpty) {
+      _baseUrl = normalize(manual);
+      _api = ApiClient(baseUrl: _baseUrl);
+      notifyListeners();
+      return;
+    }
     final url = await _readConfigUrl();
     var normalized = normalize(url ?? '');
     if (kIsWeb) {

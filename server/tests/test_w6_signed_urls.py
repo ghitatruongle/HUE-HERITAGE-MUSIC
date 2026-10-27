@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.database import crud
 from app.main import create_app
 from app.services import generator_service
 from app.storage import manager
@@ -72,7 +73,6 @@ def test_play_url_endpoint(monkeypatch):
     assert noauth.status_code == 401
 
     db_user = None
-    from app.database import crud
     from app.database.session import SessionLocal
     from app.api.auth import hash_password, make_token
 
@@ -99,6 +99,61 @@ def test_play_url_endpoint(monkeypatch):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert bad.status_code == 400
+
+
+def test_audio_bearer_token_with_epoch_revoke(monkeypatch):
+    _auth_on(monkeypatch)
+    name, payload = _make_generated_file("signed4.mp3")
+    client = TestClient(create_app())
+
+    from app.api.auth import hash_password, make_token
+    from app.database.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        user = crud.create_user(db, username="beareruser", email="beareruser@gmail.com", password_hash=hash_password("secret123"))
+        token = make_token(user.id, user.token_epoch or 0)
+    finally:
+        db.close()
+
+    ok = client.get(f"/api/music/generated/{name}", headers={"Authorization": f"Bearer {token}"})
+    assert ok.status_code == 200
+    assert ok.content == payload
+
+    db = SessionLocal()
+    try:
+        crud.bump_token_epoch(db, user.id)
+    finally:
+        db.close()
+
+    stale = client.get(f"/api/music/generated/{name}", headers={"Authorization": f"Bearer {token}"})
+    assert stale.status_code == 401
+
+    fresh_login = client.post("/api/auth/login", json={"identifier": "beareruser", "password": "secret123"})
+    fresh_token = fresh_login.json()["token"]
+    again = client.get(f"/api/music/generated/{name}", headers={"Authorization": f"Bearer {fresh_token}"})
+    assert again.status_code == 200
+    assert again.content == payload
+
+
+def test_audio_bearer_disabled_account_403(monkeypatch):
+    _auth_on(monkeypatch)
+    name, _ = _make_generated_file("signed5.mp3")
+    client = TestClient(create_app())
+
+    from app.api.auth import hash_password, make_token
+    from app.database.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        user = crud.create_user(db, username="disabled1", email="disabled1@gmail.com", password_hash=hash_password("secret123"))
+        token = make_token(user.id, 0)
+        crud.set_user_active(db, user.id, False)
+    finally:
+        db.close()
+
+    r = client.get(f"/api/music/generated/{name}", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
 
 
 def test_get_task_signs_audio_url_when_auth_on(monkeypatch):

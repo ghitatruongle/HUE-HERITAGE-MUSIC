@@ -3,6 +3,7 @@ name: ci
 on:
   push:
     branches: [main]
+    tags: ['*']
   pull_request:
     branches: [main]
 
@@ -37,3 +38,91 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libsndfile1
       - run: pip install -r requirements-dev.txt
       - run: pytest -q
+
+  flutter-windows:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: windows-2022
+    needs: [flutter, server]
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter config --enable-windows-desktop
+      - run: flutter build windows --release
+      - name: Zip Windows portable
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath hue-heritage-music-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: app/hue-heritage-music-windows.zip
+
+  flutter-linux:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    needs: [flutter, server]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev ninja-build libblkid-dev liblzma-dev libstdc++-12-dev pkg-config
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter config --enable-linux-desktop
+      - working-directory: app
+        run: flutter pub get
+      - working-directory: app
+        run: flutter build linux --release
+      - name: Zip Linux bundle
+        run: |
+          cd app/build/linux/x64/release/bundle
+          zip -qr "$GITHUB_WORKSPACE/hue-heritage-music-linux.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-zip
+          path: hue-heritage-music-linux.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: macos-latest
+    needs: [flutter, server, flutter-windows, flutter-linux]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - working-directory: app
+        run: flutter pub get
+      - working-directory: app
+        run: flutter build web --release
+      - working-directory: app
+        run: flutter build macos --release
+      - name: Zip web + macOS
+        run: |
+          cd app/build
+          zip -qr hue-heritage-music-web.zip web
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          cd macos/Build/Products/Release
+          zip -qr "$GITHUB_WORKSPACE/artifacts/hue-heritage-music-macos.zip" hue_heritage_music.app
+          cd "$GITHUB_WORKSPACE/app/build"
+          mv hue-heritage-music-web.zip "$GITHUB_WORKSPACE/artifacts/"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts-dl
+      - name: Collect all installers
+        run: |
+          mkdir -p release-files
+          cp artifacts/hue-heritage-music-web.zip release-files/ 2>/dev/null || true
+          cp artifacts/hue-heritage-music-macos.zip release-files/ 2>/dev/null || true
+          cp artifacts-dl/windows-zip/hue-heritage-music-windows.zip release-files/ 2>/dev/null || true
+          cp artifacts-dl/linux-zip/hue-heritage-music-linux.zip release-files/ 2>/dev/null || true
+          ls -la release-files
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release-files/*

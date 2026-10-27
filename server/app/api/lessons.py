@@ -1,5 +1,7 @@
 from typing import Optional
 import asyncio
+import re
+import time
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
@@ -65,6 +67,19 @@ async def practice_scale(
         raise HTTPException(status_code=400, detail="wav decode failed")
 
 
+PRACTICE_MIDI_NAME = re.compile(r"^practice_[A-Za-z0-9]{8}_\d+_\d{10}\.mid$")
+
+
+@router.get("/practice-midi/{name}")
+def download_practice_midi(name: str, access=Depends(require_audio_access)):
+    if not PRACTICE_MIDI_NAME.fullmatch(name):
+        raise HTTPException(status_code=400, detail="bad filename")
+    path = manager.midi_dir() / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(path, media_type="audio/midi")
+
+
 @router.get("/{lesson_id}")
 def lesson_detail(lesson_id: str, db: Session = Depends(get_db)):
     item = crud.get_item(db, lesson_id)
@@ -123,6 +138,19 @@ async def practice_section(
         result["section"] = section_info
         result["lesson_id"] = lesson_id
         result["lesson_title"] = item.title
+        if result.get("notes"):
+            try:
+                from ..services import midi_service
+
+                bpm_val = int(item.bpm) if item.bpm and item.bpm > 0 else 60
+                user_midi = midi_service.write_midi(result["notes"], bpm_val)
+                mid_name = f"practice_{lesson_id[:8]}_{section}_{int(time.time())}.mid"
+                mid_dir = manager.midi_dir()
+                mid_dir.mkdir(parents=True, exist_ok=True)
+                (mid_dir / mid_name).write_bytes(user_midi)
+                result["user_midi"] = mid_name
+            except Exception:
+                pass
         return result
 
     try:

@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/server_onboarding_dialog.dart';
 import '../../widgets/responsive_layout.dart';
 import '../analysis/analysis_screen.dart';
 import '../auth/login_screen.dart';
@@ -27,9 +28,26 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _navIndex = 0;
+  bool _onboardingShown = false;
+
+  void _maybeShowOnboarding(BuildContext context) {
+    final server = context.read<ServerConfig>();
+    if (!server.hasServer && !_onboardingShown) {
+      _onboardingShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const ServerOnboardingDialog(),
+        );
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    _maybeShowOnboarding(context);
     final destinations = [
       NavigationDestinationItem(
         icon: Icons.home_outlined,

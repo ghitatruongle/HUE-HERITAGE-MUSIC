@@ -42,10 +42,18 @@ def require_audio_access(request: Request, db: Session = Depends(get_db)) -> Opt
     if header.startswith("Bearer "):
         user_id = None
         try:
-            user_id = parse_token(header[7:].strip())
+            user_id, epoch = parse_token(header[7:].strip())
         except HTTPException:
             user_id = None
-        if user_id and crud.get_user_by_id(db, user_id):
+        if user_id:
+            user = crud.get_user_by_id(db, user_id)
+            if user is None:
+                user_id = None
+            elif epoch < (user.token_epoch or 0):
+                user_id = None
+            elif getattr(user, "active", 1) == 0:
+                raise HTTPException(status_code=403, detail="account disabled")
+        if user_id:
             return user_id
     if verify_path(request.url.path, request.query_params.get("e"), request.query_params.get("s")):
         return "signed"

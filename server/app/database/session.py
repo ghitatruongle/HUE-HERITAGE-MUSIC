@@ -21,6 +21,8 @@ MIGRATION_COLUMNS = {
         "password_hash": "VARCHAR(256) DEFAULT '' NOT NULL",
         "email": "VARCHAR(256) DEFAULT '' NOT NULL",
         "role": "VARCHAR(16) DEFAULT 'user' NOT NULL",
+        "active": "INTEGER DEFAULT 1 NOT NULL",
+        "token_epoch": "INTEGER DEFAULT 0 NOT NULL",
     },
     "heritage_items": {
         "genre": "VARCHAR(128) DEFAULT '' NOT NULL",

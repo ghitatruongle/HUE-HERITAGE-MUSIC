@@ -6,8 +6,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from server.app.main import app
-from server.app.storage import manager
+from app.main import app
+from app.storage import manager
 
 
 def make_test_wav(freq=440.0, duration=1.0, sr=16000):

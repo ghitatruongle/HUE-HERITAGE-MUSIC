@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
 import '../../api/endpoints/auth_endpoints.dart';
+import 'account_manager_section.dart';
+import 'invite_manager_section.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/auth_service.dart';
-import '../../services/clipboard_helper.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/common_button.dart';
@@ -29,7 +30,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final _regInviteCodeCtrl = TextEditingController();
 
   bool _busy = false;
-  bool _creatingInvite = false;
   String? _error;
 
   @override
@@ -322,10 +322,24 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _openChangePassword,
+              icon: const Icon(Icons.lock_reset, size: 16),
+              label: Text(strings.changePasswordBtn),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _logoutEverywhere,
+              icon: const Icon(Icons.phonelink_erase, size: 16),
+              label: Text(strings.logoutEverywhereBtn),
+            ),
             if (auth.isAdmin) ...[
               const SizedBox(height: 16),
               const Divider(),
-              _buildInviteManager(context, strings),
+              const InviteManagerSection(),
+              const SizedBox(height: 16),
+              const AccountManagerSection(),
             ],
           ],
         ),
@@ -333,152 +347,68 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildInviteManager(BuildContext context, AppStrings strings) {
-    final dio = context.read<ServerConfig>().api.dio;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+  Future<void> _openChangePassword() async {
+    final strings = context.read<LocaleProvider>().strings;
+    final oldCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(strings.changePasswordBtn),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.vpn_key_outlined, size: 18, color: Colors.amber),
-            const SizedBox(width: 8),
-            Text(strings.authInviteTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            TextField(controller: oldCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordOld)),
+            TextField(controller: newCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordNew)),
+            TextField(controller: confirmCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordConfirm)),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          strings.authInviteManageHint,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        const SizedBox(height: 10),
-        FutureBuilder<List<InviteEntry>>(
-          future: AuthEndpoints(dio).listInvites(),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()));
-            }
-            if (snap.hasError) {
-              return Text(
-                '${strings.authInviteLoadFail}: ${ApiClient.describe(snap.error!)}',
-                style: const TextStyle(fontSize: 12, color: Colors.red),
-              );
-            }
-            final invites = snap.data ?? [];
-            return Column(
-              children: [
-                if (invites.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Text(strings.authInviteEmpty, style: const TextStyle(fontSize: 12.5)),
-                  ),
-                for (final inv in invites)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  SelectableText(
-                                    inv.code,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    inv.used ? Icons.check_circle : Icons.schedule,
-                                    size: 14,
-                                    color: inv.used ? Colors.green : Colors.amber,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    inv.used ? strings.authInviteUsed : strings.authInviteAvailable,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: inv.used ? Colors.green : Colors.amber.shade800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (inv.note.isNotEmpty)
-                                Text(inv.note, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.copy, size: 16),
-                          tooltip: strings.authInviteCopy,
-                          onPressed: () => _copyInvite(inv),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 16),
-                          tooltip: strings.authInviteDelete,
-                          onPressed: () => _deleteInvite(strings, inv),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 6),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.add_circle_outline, size: 16),
-          label: Text(strings.authInviteCreate),
-          onPressed: _creatingInvite ? null : _createInvite,
-        ),
-      ],
-    );
-  }
-
-  Future<void> _copyInvite(InviteEntry inv) async {
-    final strings = context.read<LocaleProvider>().strings;
-    final ok = await copyText(inv.code);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? '${strings.authInviteCopied}: ${inv.code}'
-              : '${strings.authInviteCopyFail} — ${inv.code}',
-        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
+        ],
       ),
     );
-  }
-
-  Future<void> _createInvite() async {
-    setState(() => _creatingInvite = true);
-    try {
-      final dio = context.read<ServerConfig>().api.dio;
-      final inv = await AuthEndpoints(dio).createInvite();
+    if (!mounted || confirmed != true) return;
+    if (newCtrl.text != confirmCtrl.text || newCtrl.text.length < 6) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${context.read<LocaleProvider>().strings.authInviteCreated}: ${inv.code}')),
-        );
-        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordMismatch)));
+      }
+      return;
+    }
+    setState(() => _busy = true);
+    final dio = context.read<ServerConfig>().api.dio;
+    final auth = context.read<AuthService>();
+    try {
+      final newToken = await AuthEndpoints(dio).changePassword(
+        oldPassword: oldCtrl.text,
+        newPassword: newCtrl.text,
+      );
+      if (newToken.isNotEmpty) {
+        await auth.save(token: newToken, username: auth.username ?? '', email: auth.email, role: auth.isAdmin ? 'admin' : 'user');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordDone)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ApiClient.describe(e))),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
       }
     } finally {
       if (mounted) {
-        setState(() => _creatingInvite = false);
+        setState(() => _busy = false);
       }
     }
   }
 
-  Future<void> _deleteInvite(AppStrings strings, InviteEntry inv) async {
+  Future<void> _logoutEverywhere() async {
+    final strings = context.read<LocaleProvider>().strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(strings.authInviteDelete),
-        content: Text('${strings.authInviteDeleteConfirm}: ${inv.code}?'),
+        title: Text(strings.logoutEverywhereBtn),
+        content: Text(strings.logoutEverywhereConfirm),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
@@ -488,14 +418,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     if (!mounted || confirmed != true) return;
     try {
       final dio = context.read<ServerConfig>().api.dio;
-      await AuthEndpoints(dio).deleteInvite(inv.id);
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ApiClient.describe(e))),
-        );
-      }
+      await AuthEndpoints(dio).revokeAllTokens();
+    } catch (_) {}
+    if (!mounted) return;
+    await context.read<AuthService>().clearToken();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.logoutEverywhereDone)));
     }
   }
 

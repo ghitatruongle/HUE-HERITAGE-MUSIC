@@ -205,6 +205,7 @@ class PracticeResult {
   final List<PracticeNote> notes;
   final int sectionIndex;
   final String lessonTitle;
+  final String userMidi;
 
   PracticeResult({
     required this.metrics,
@@ -214,6 +215,7 @@ class PracticeResult {
     required this.notes,
     required this.sectionIndex,
     required this.lessonTitle,
+    this.userMidi = '',
   });
 
   static PracticeResult fromJson(Map<String, dynamic> j) {
@@ -267,6 +269,7 @@ class PracticeResult {
       notes: notes,
       sectionIndex: sectionIndex,
       lessonTitle: j['lesson_title']?.toString() ?? '',
+      userMidi: j['user_midi']?.toString() ?? '',
     );
   }
 }

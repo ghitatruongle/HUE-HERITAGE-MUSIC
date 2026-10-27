@@ -28,7 +28,7 @@ def _register_and_token(client, username):
             "username": username,
             "email": f"{username}@gmail.com",
             "password": "secret123",
-            "invite_code": "QHH2026",
+            "invite_code": "TESTINVITE",
         },
     )
     assert r.status_code == 200, r.text
@@ -126,3 +126,25 @@ def test_queue_semaphore_and_cancel(monkeypatch):
         assert final == "cancelled"
     finally:
         generator_service._GENERATION_SEMAPHORE = real_semaphore
+
+
+def test_authed_user_gets_higher_heavy_budget(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    monkeypatch.setattr(settings, "heavy_rate_limit", 10, raising=False)
+    from app.api.auth import hash_password, make_token
+    from app.database.session import SessionLocal
+    client = TestClient(create_app())
+    db = SessionLocal()
+    try:
+        user = crud.create_user(db, username="heavyuser", email="heavyuser@gmail.com", password_hash=hash_password("secret123"))
+        tok = make_token(user.id, user.token_epoch or 0)
+    finally:
+        db.close()
+    codes = []
+    for _ in range(25):
+        rr = client.post("/api/music/sing-original?heritage_id=x", headers={"Authorization": f"Bearer {tok}"})
+        codes.append(rr.status_code)
+    assert 429 not in codes, codes
+    anon = client.post("/api/music/sing-original?heritage_id=x")
+    assert anon.status_code == 401  # auth ON chặn ẩn danh trước khi tới rate limit

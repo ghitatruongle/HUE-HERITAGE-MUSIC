@@ -32,7 +32,7 @@ def _register(client, username):
             "username": username,
             "email": f"{username}@gmail.com",
             "password": "secret123",
-            "invite_code": "QHH2026",
+            "invite_code": "TESTINVITE",
         },
     )
     assert r.status_code == 200, r.text

@@ -45,6 +45,17 @@ def main():
     r = c.get("/health")
     check("health 200", r.status_code == 200, r.json().get("version", ""))
 
+    import sqlite3
+    import sys as _sys
+    from pathlib import Path as _P
+    _sys.path.insert(0, str(_P(__file__).resolve().parents[1]))
+    from app.database.session import SessionLocal
+    from app.database import crud
+    _db = SessionLocal()
+    _code = "SMOKE-" + secrets.token_hex(3)
+    crud.create_invite_code(_db, _code, "smoke debug")
+    _db.close()
+
     stamp = secrets.token_hex(3)
     username = f"debugsmoke{stamp}"
 
@@ -54,7 +65,7 @@ def main():
             "username": username,
             "email": f"{username}@gmail.com",
             "password": "secret123",
-            "invite_code": "QHH2026",
+            "invite_code": _code,
         },
     )
     check("register (file code) 200 + role=user", r.status_code == 200 and r.json().get("role") == "user")

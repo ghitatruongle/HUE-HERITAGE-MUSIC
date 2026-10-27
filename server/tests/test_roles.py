@@ -24,7 +24,7 @@ def _wipe_users():
     yield
 
 
-def _register(client, username, code="QHH2026"):
+def _register(client, username, code="TESTINVITE"):
     r = client.post(
         "/api/auth/register",
         json={
