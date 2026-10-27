@@ -88,7 +88,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     needs: [flutter, server, flutter-windows, flutter-linux]
     permissions:
       contents: write
@@ -101,25 +101,17 @@ jobs:
         run: flutter pub get
       - working-directory: app
         run: flutter build web --release
-      - working-directory: app
-        run: flutter build macos --release
-      - name: Zip web + macOS
+      - name: Zip web
         run: |
           cd app/build
           zip -qr hue-heritage-music-web.zip web
-          mkdir -p "$GITHUB_WORKSPACE/artifacts"
-          cd macos/Build/Products/Release
-          zip -qr "$GITHUB_WORKSPACE/artifacts/hue-heritage-music-macos.zip" hue_heritage_music.app
-          cd "$GITHUB_WORKSPACE/app/build"
-          mv hue-heritage-music-web.zip "$GITHUB_WORKSPACE/artifacts/"
+          mkdir -p "$GITHUB_WORKSPACE/release-files"
+          mv hue-heritage-music-web.zip "$GITHUB_WORKSPACE/release-files/"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts-dl
       - name: Collect all installers
         run: |
-          mkdir -p release-files
-          cp artifacts/hue-heritage-music-web.zip release-files/ 2>/dev/null || true
-          cp artifacts/hue-heritage-music-macos.zip release-files/ 2>/dev/null || true
           cp artifacts-dl/windows-zip/hue-heritage-music-windows.zip release-files/ 2>/dev/null || true
           cp artifacts-dl/linux-zip/hue-heritage-music-linux.zip release-files/ 2>/dev/null || true
           ls -la release-files
