@@ -73,7 +73,7 @@ class ScalePracticeCard extends StatelessWidget {
                 children: [
                   FilledButton.icon(
                     icon: Icon(recording ? Icons.stop : Icons.mic, size: 16),
-                    label: Text(recording ? strings.practiceStopRecord : 'Thu tiếng hát'),
+                    label: Text(recording ? strings.practiceStopRecord : strings.practiceScaleRecord),
                     style: FilledButton.styleFrom(
                       backgroundColor: recording ? Colors.red : null,
                     ),
@@ -89,7 +89,7 @@ class ScalePracticeCard extends StatelessWidget {
               if (result != null) ...[
                 const Divider(height: 20),
                 Text(
-                  'Độ bám thang: ${result!.score.toStringAsFixed(0)}/100 (trong thang: ${(result!.onScaleShare * 100).toStringAsFixed(0)}%)',
+                  strings.practiceScaleResult(result!.score.toStringAsFixed(0), (result!.onScaleShare * 100).toStringAsFixed(0)),
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),

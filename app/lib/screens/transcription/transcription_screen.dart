@@ -9,7 +9,9 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/transcription_api.dart';
 import '../../models/transcribe_result.dart';
 import '../../services/history_service.dart';
+import '../../services/locale_provider.dart';
 import '../../services/download_helper.dart';
+import '../../services/file_saver.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
@@ -51,27 +53,29 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   }
 
   void _useRecording() {
+    final strings = context.read<LocaleProvider>().strings;
     final media = context.read<SessionMedia>();
     if (media.recordingBytes == null) {
-      setState(() => _error = 'Chưa có bản thu. Hãy thu âm ở màn Học hát hoặc chọn tệp.');
+      setState(() => _error = strings.transcribeNoTake);
       return;
     }
     setState(() {
       _pickedBytes = media.recordingBytes;
-      _sourceLabel = 'bản thu vừa ghi';
+      _sourceLabel = strings.transcribeRecordedSource;
       _result = null;
       _error = null;
     });
   }
 
   Future<void> _run() async {
+    final strings = context.read<LocaleProvider>().strings;
     final bpm = double.tryParse(_bpm.text.trim()) ?? 0;
     if (bpm <= 0 || bpm > 300) {
-      setState(() => _error = 'BPM trong khoảng 1-300');
+      setState(() => _error = strings.transcribeBpmRange);
       return;
     }
     if (_pickedBytes == null) {
-      setState(() => _error = 'Chưa chọn tệp âm thanh.');
+      setState(() => _error = strings.transcribePickFile);
       return;
     }
     setState(() {
@@ -97,7 +101,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
             HistoryEntry(
               id: data.sha,
               kind: 'transcribe',
-              title: 'Ký âm $_sourceLabel (${data.notes.length} nốt)',
+              title: strings.transcribeHistoryTitle(_sourceLabel, data.notes.length),
               status: 'done',
               at: DateTime.now(),
             ),
@@ -117,12 +121,13 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   }
 
   Future<void> _save(bool midi) async {
+    final strings = context.read<LocaleProvider>().strings;
     final r = _result;
     if (r == null) {
       return;
     }
     if (r.sha.isEmpty || r.sha.length < 8) {
-      setState(() => _error = 'Thiếu mã băm để tải file');
+      setState(() => _error = strings.transcribeNoSha);
       return;
     }
     try {
@@ -135,27 +140,31 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
         triggerDownload(url, name);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Đã tải xuống $name')),
+            SnackBar(content: Text(strings.transcribeDownloadedFile(name))),
           );
         }
         return;
       }
       var savePath = '${Directory.systemTemp.path}/$name';
-      var savedNote = 'Đã lưu $name vào thư mục tạm';
+      var savedNote = strings.transcribeSavedTempFile(name);
       if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
         try {
           final picked = await FilePicker.platform.saveFile(
-            dialogTitle: 'Lưu $name',
+            dialogTitle: strings.saveFileDialog(name),
             fileName: name,
           );
           if (picked == null) {
             return;
           }
           savePath = picked;
-          savedNote = 'Đã lưu $savePath';
+          savedNote = strings.transcribeSavedTo(savePath);
         } catch (_) {}
       }
       await api.download(midi ? api.midiUrl(r.sha, bpm: r.bpm) : api.xmlUrl(r.sha, bpm: r.bpm), savePath);
+      if (Platform.isAndroid || Platform.isIOS) {
+        await shareDownloadedFile(savePath, name);
+        savedNote = strings.transcribeShareDialog(name);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(savedNote)),
@@ -176,6 +185,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -188,7 +198,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Chọn tệp âm thanh (bản thu đã lưu ở máy chủ sẽ được liên kết khi ký âm).'),
+                Text(strings.transcribePickHint),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -197,18 +207,18 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                     FilledButton.icon(
                       onPressed: _busy ? null : _pickFile,
                       icon: const Icon(Icons.folder_open),
-                      label: const Text('Chọn tệp'),
+                      label: Text(strings.transcribePickBtn),
                     ),
                     OutlinedButton.icon(
                       onPressed: _busy ? null : _useRecording,
                       icon: const Icon(Icons.mic),
-                      label: const Text('Dùng bản thu vừa ghi'),
+                      label: Text(strings.transcribeUseLast),
                     ),
                   ],
                 ),
                 if (_sourceLabel.isNotEmpty) ...[
                   const SizedBox(height: 10),
-                  Text('Nguồn: $_sourceLabel', style: Theme.of(context).textTheme.bodySmall),
+                  Text('${strings.transcribeSource}: $_sourceLabel', style: Theme.of(context).textTheme.bodySmall),
                   if (_pickedBytes != null) ...[
                     const SizedBox(height: 8),
                     WaveformView(data: WaveformData.fromWavBytes(_pickedBytes!)),
@@ -230,7 +240,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text('Bộ máy:'),
+                    Text('${strings.transcribeEngine}:'),
                     const SizedBox(width: 8),
                     SegmentedButton<String>(
                       segments: const [
@@ -244,7 +254,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                 ),
                 const SizedBox(height: 12),
                 CommonButton(
-                  label: 'Phân tích ký âm',
+                  label: strings.transcribeRunBtn,
                   loading: _busy,
                   onPressed: _run,
                 ),
@@ -269,7 +279,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
         ],
         if (_result != null) ...[
           const SizedBox(height: 16),
-          Text('${_result!.label} · ${_result!.notes.length} nốt', style: Theme.of(context).textTheme.titleMedium),
+          Text(strings.transcribeNotesSummary(_result!.label, _result!.notes.length), style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           SheetMusicView(
             notes: _result!.notes
@@ -281,8 +291,8 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              CommonButton(label: 'Tải MIDI', onPressed: () => _save(true)),
-              CommonButton(label: 'Tải MusicXML', onPressed: () => _save(false)),
+              CommonButton(label: strings.transcribeMidiBtn, onPressed: () => _save(true)),
+              CommonButton(label: strings.transcribeXmlBtn, onPressed: () => _save(false)),
             ],
           ),
           const SizedBox(height: 12),
@@ -298,7 +308,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                '... và ${_result!.notes.length - 50} nốt nữa (xem trong tệp MIDI/MusicXML)',
+                strings.transcribeMoreNotes(_result!.notes.length - 50),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

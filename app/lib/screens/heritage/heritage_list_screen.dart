@@ -203,7 +203,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
-          return Center(child: Text('${strings.isVi ? 'Lỗi' : 'Error'}: ${ApiClient.describe(snap.error!)}'));
+          return Center(child: Text('${strings.errorPrefix}: ${ApiClient.describe(snap.error!)}'));
         }
         final items = snap.data ?? [];
         if (items.isEmpty) {
@@ -354,7 +354,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                       if (item.tonal.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
-                          'Cung bậc / Tông: ${item.tonal}',
+                          strings.heritageTonal(item.tonal),
                           style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.75)),
                         ),
                       ],
@@ -378,7 +378,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Đang phát: ${item.title}',
+                        strings.heritageNowPlaying(item.title),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                     ),
@@ -393,7 +393,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         if (item.lyrics.isNotEmpty) ...[
           const SizedBox(height: 18),
           Text(
-            'Lời ca di sản',
+            strings.heritageLyricsTitle,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 0.5),
           ),
           const SizedBox(height: 8),
@@ -409,7 +409,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         ],
         const SizedBox(height: 18),
         Text(
-          'Thông tin tư liệu di sản',
+          strings.heritageInfoTitle,
           style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
@@ -456,7 +456,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
           children: [
             Icon(Icons.verified_outlined, size: 16, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 8),
-            const Expanded(child: Text('Bản thu gốc di sản được bảo toàn nguyên trạng, dành riêng cho nghe và thưởng thức.')),
+            Expanded(child: Text(strings.heritageOriginalNote)),
           ],
         ),
       ],

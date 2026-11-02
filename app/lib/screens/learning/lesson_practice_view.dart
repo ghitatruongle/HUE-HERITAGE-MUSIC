@@ -17,6 +17,7 @@ import '../../api/endpoints/lesson_api.dart';
 import '../../models/lesson.dart';
 import 'scale_practice_card.dart';
 import '../../services/download_helper.dart';
+import '../../services/file_saver.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
@@ -303,7 +304,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             HistoryEntry(
               id: DateTime.now().microsecondsSinceEpoch.toString(),
               kind: 'practice',
-              title: '${detail.title} — Câu ${section.index + 1}',
+              title: strings.practiceHistoryPhrase(detail.title, section.index + 1),
               status: 'done',
               at: DateTime.now(),
               score: result.metrics.score,
@@ -329,12 +330,15 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       var savePath = '${Directory.systemTemp.path}/$name';
       if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
         try {
-          final picked = await FilePicker.platform.saveFile(dialogTitle: 'Lưu $name', fileName: name);
+          final picked = await FilePicker.platform.saveFile(dialogTitle: strings.saveFileDialog(name), fileName: name);
           if (picked == null) return;
           savePath = picked;
         } catch (_) {}
       }
       await dio.download(url, savePath);
+      if (Platform.isAndroid || Platform.isIOS) {
+        await shareDownloadedFile(savePath, name);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${strings.practiceSaved} $savePath')));
       }
@@ -423,7 +427,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             HistoryEntry(
               id: DateTime.now().microsecondsSinceEpoch.toString(),
               kind: 'practice',
-              title: 'Luyện thang ${scale.name}',
+              title: strings.practiceHistoryScale(scale.name),
               status: 'done',
               at: DateTime.now(),
               score: result.score,
@@ -521,9 +525,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         runSpacing: 4,
         children: [
           if (sel.type.isNotEmpty) Chip(label: Text(sel.type, style: const TextStyle(fontSize: 11))),
-          if (sel.modeSystem.isNotEmpty) Chip(label: Text('Điệu ${sel.modeSystem}', style: const TextStyle(fontSize: 11))),
+          if (sel.modeSystem.isNotEmpty) Chip(label: Text(strings.lessonModeChip(sel.modeSystem), style: const TextStyle(fontSize: 11))),
           if (sel.bpm != null) Chip(label: Text('${sel.bpm!.toStringAsFixed(0)} BPM', style: const TextStyle(fontSize: 11))),
-          if (d != null) Chip(label: Text('${d.sections.length} câu', style: const TextStyle(fontSize: 11))),
+          if (d != null) Chip(label: Text(strings.lessonSectionCount(d.sections.length), style: const TextStyle(fontSize: 11))),
         ],
       ),
     );
@@ -567,7 +571,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Đếm nhập ${_detail?.bpm != null ? "(${_detail!.bpm!.toStringAsFixed(0)} BPM)" : ""}',
+                  strings.practiceCountInLabel(_detail?.bpm != null ? "(${_detail!.bpm!.toStringAsFixed(0)} BPM)" : ""),
                   style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
                 ),
               ],
@@ -625,9 +629,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               AudioPlayerBar(filePath: _recordPaths[section.index]),
             ],
             if (recorded && result == null && _practicingSection != section.index)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text('Đã thu xong — bấm "Chấm điểm".', style: TextStyle(fontSize: 12)),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(strings.practiceRecorded, style: const TextStyle(fontSize: 12)),
               ),
             if (result != null) ...[
               const Divider(height: 20),
@@ -666,14 +670,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final m = result.metrics;
     return Row(
       children: [
-        _scoreBadge('Tổng', m.score, Colors.deepPurple),
+        _scoreBadge(strings.practiceScoreTotal, m.score, Colors.deepPurple),
         const SizedBox(width: 8),
-        _scoreBadge('Cao độ', m.pitchScore, const Color(0xFFD4AF37)),
+        _scoreBadge(strings.practiceScorePitch, m.pitchScore, const Color(0xFFD4AF37)),
         const SizedBox(width: 8),
-        _scoreBadge('Nhịp', m.timeScore, Colors.lightBlue),
+        _scoreBadge(strings.practiceScoreTime, m.timeScore, Colors.lightBlue),
         const SizedBox(width: 12),
         Expanded(
-          child: Text('Sai số TB: ${m.meanAbsCents.toStringAsFixed(0)} cents',
+          child: Text(strings.practiceAvgError(m.meanAbsCents.toStringAsFixed(0)),
               style: const TextStyle(fontSize: 12)),
         ),
       ],

@@ -24,12 +24,12 @@ def test_auth_registration_with_invite_and_login():
 
     r_bad_mail = client.post("/api/auth/register", json={
         "username": "test_user_1",
-        "email": "test1@yahoo.com",
+        "email": "khong-phai-email",
         "password": "password123",
         "invite_code": "TESTINVITE"
     })
     assert r_bad_mail.status_code == 400
-    assert "only @gmail.com" in r_bad_mail.json()["detail"]
+    assert "invalid email address" in r_bad_mail.json()["detail"]
 
     r_ok = client.post("/api/auth/register", json={
         "username": "test_user_1",
@@ -42,6 +42,16 @@ def test_auth_registration_with_invite_and_login():
     assert data["username"] == "test_user_1"
     assert data["email"] == "test1@gmail.com"
     assert "token" in data
+    assert data["must_change_password"] is False
+
+    r_non_gmail = client.post("/api/auth/register", json={
+        "username": "test_user_1_yahoo",
+        "email": "test1@yahoo.com",
+        "password": "password123",
+        "invite_code": "TESTINVITE"
+    })
+    assert r_non_gmail.status_code == 200
+    assert r_non_gmail.json()["email"] == "test1@yahoo.com"
 
     r_dup_user = client.post("/api/auth/register", json={
         "username": "test_user_1",

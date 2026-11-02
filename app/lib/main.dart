@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -38,6 +40,9 @@ Future<void> main() async {
     locale: locale,
     auth: auth,
   ));
+  if (auth.isLoggedIn && config.hasServer) {
+    unawaited(auth.validateSession(config.baseUrl));
+  }
 }
 
 class HueHeritageApp extends StatelessWidget {

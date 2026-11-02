@@ -121,7 +121,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
     if (!config.hasServer) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(strings.isVi ? 'Chưa cấu hình máy chủ.' : 'Server not configured.')),
+        SnackBar(content: Text(strings.serverNotConfigured)),
       );
       return;
     }
@@ -223,6 +223,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     final config = context.read<ServerConfig>();
     final dio = config.api.dio;
     final heritageApi = HeritageApi(dio);
+    final strings = context.read<LocaleProvider>().strings;
 
     setState(() {
       _isComparing = true;
@@ -237,7 +238,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       } else if (_compareTargetItem != null) {
         targetBytes = await heritageApi.audioBytes(_compareTargetItem!.id);
       } else {
-        throw StateError('Chưa chọn bản ghi cần đối chiếu');
+        throw StateError(strings.compareNoTarget);
       }
 
       final res = await SingApi(dio).compareBytes(sampleBytes, targetBytes);
@@ -463,7 +464,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
-          return Center(child: Text('${strings.isVi ? 'Lỗi' : 'Error'}: ${ApiClient.describe(snap.error!)}'));
+          return Center(child: Text('${strings.errorPrefix}: ${ApiClient.describe(snap.error!)}'));
         }
         final items = snap.data ?? [];
         if (items.isEmpty) {
@@ -546,7 +547,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           ],
         ),
         const SizedBox(height: 18),
-        Text('So sánh Đối chứng A/B (Trước & Sau phục dựng)', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+        Text(strings.restorationCompareAB, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
         Card(
           child: Padding(
@@ -713,9 +714,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  strings.isVi
-                      ? 'Đối chiếu bản thu âm cổ chưa rõ nguồn gốc với cơ sở dữ liệu làn điệu Ca Huế và Nhã nhạc cung đình để tìm ra tên bài và kiểm định âm luật.'
-                      : 'Cross-compare vintage recordings against Hue heritage database to identify song names and verify musical scales.',
+                  strings.compareTabDescription,
                   style: TextStyle(fontSize: 12, height: 1.4, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ),
@@ -900,17 +899,17 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   Widget _buildComparisonResults(CompareResult r, dynamic strings) {
     final score = r.metrics.score;
     final matchVerdict = score >= 80
-        ? (strings.isVi ? 'Trùng khớp điệu thức cao' : 'High Match')
+        ? strings.compareVerdictHigh
         : score >= 50
-            ? (strings.isVi ? 'Tương đồng một phần điệu thức' : 'Moderate Match')
-            : (strings.isVi ? 'Khác làn điệu hoặc chênh lệch âm giai' : 'Different Tune');
+            ? strings.compareVerdictModerate
+            : strings.compareVerdictDifferent;
 
     final color = score >= 80 ? AppTheme.emeraldGreen : (score >= 50 ? AppTheme.amberGold : Colors.orange);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(strings.isVi ? 'Kết quả Nhận diện & Đối chiếu' : 'Identification & Match Results', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text(strings.compareResultsTitle, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
         Card(
           child: Padding(
@@ -943,12 +942,12 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Nhận định: $matchVerdict',
+                        strings.compareVerdictLine(matchVerdict),
                         style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Sai số cao độ: ${r.metrics.meanAbsCents.toStringAsFixed(1)} cents · Lệch thời gian: ${r.metrics.meanOffsetMs.toStringAsFixed(0)} ms',
+                        strings.compareMetricsLine(r.metrics.meanAbsCents.toStringAsFixed(1), r.metrics.meanOffsetMs.toStringAsFixed(0)),
                         style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ],
@@ -968,8 +967,8 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               times: r.times,
               sampleF0: r.sampleF0,
               warpedF0: r.warpedF0,
-              sampleLabel: strings.isVi ? 'Bản ghi mẫu (Dataset)' : 'Sample track',
-              targetLabel: strings.isVi ? 'Bản ghi đối chiếu' : 'Comparison track',
+              sampleLabel: strings.compareChartSampleDataset,
+              targetLabel: strings.compareChartTarget,
             ),
           ),
         ),

@@ -12,6 +12,7 @@ import 'task_result_card.dart';
 import '../../models/heritage_item.dart';
 import '../../models/music_task.dart';
 import '../../services/history_service.dart';
+import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/common_button.dart';
@@ -130,6 +131,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
     final dio = context.read<ServerConfig>().api.dio;
     final history = context.read<HistoryService>();
+    final strings = context.read<LocaleProvider>().strings;
 
     try {
       final task = await MusicApi(dio).singOriginal(
@@ -145,7 +147,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         HistoryEntry(
           id: task.id,
           kind: 'sing_original',
-          title: 'Hát nguyên bản: ${_selectedTune!.title}',
+          title: strings.historySingOriginal(_selectedTune!.title),
           status: task.status,
           at: DateTime.now(),
         ),
@@ -170,9 +172,10 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
   Future<void> _runSingNewLyrics() async {
     if (_selectedTune == null) return;
+    final strings = context.read<LocaleProvider>().strings;
     final lyrics = _customLyricsCtrl.text.trim();
     if (lyrics.isEmpty) {
-      setState(() => _errorTab2 = 'Vui lòng nhập lời thơ hoặc sáng tác mới.');
+      setState(() => _errorTab2 = strings.creationLyricsRequired);
       return;
     }
 
@@ -201,7 +204,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         HistoryEntry(
           id: task.id,
           kind: 'sing_new_lyrics',
-          title: 'Sáng tạo mới: ${_selectedTune!.title}',
+          title: strings.historySingNew(_selectedTune!.title),
           status: task.status,
           at: DateTime.now(),
         ),
@@ -308,7 +311,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         if (consecutiveFailures >= 5) {
           if (mounted) {
             setState(() {
-              final msg = 'Mất kết nối máy chủ khi chờ kết quả (đã thử $consecutiveFailures lần). Tác vụ vẫn chạy phía máy chủ.';
+              final msg = context.read<LocaleProvider>().strings.creationPollLost(consecutiveFailures);
               if (isTab1) {
                 _errorTab1 = msg;
               } else {
@@ -372,6 +375,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildHeaderBanner(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -408,9 +412,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Sáng tạo cùng Ca Huế',
-                  style: TextStyle(
+                Text(
+                  strings.navCreation,
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.3,
@@ -419,7 +423,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Bảo tồn 100% lòng bản di sản — Thăng hoa sáng tạo lời ca mới',
+                  strings.creationBannerSubtitle,
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white.withAlpha(200),
@@ -434,6 +438,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildTabBar(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       color: AppTheme.darkSurfaceVariant,
       child: TabBar(
@@ -443,14 +448,14 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         labelColor: AppTheme.imperialGold,
         unselectedLabelColor: Colors.white60,
         labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-        tabs: const [
+        tabs: [
           Tab(
-            icon: Icon(Icons.menu_book_rounded, size: 19),
-            text: 'Hát Nguyên Bản',
+            icon: const Icon(Icons.menu_book_rounded, size: 19),
+            text: strings.creationTabOriginal,
           ),
           Tab(
-            icon: Icon(Icons.draw_rounded, size: 19),
-            text: 'Sáng Tạo Lời Mới',
+            icon: const Icon(Icons.draw_rounded, size: 19),
+            text: strings.creationTabNewLyrics,
           ),
         ],
       ),
@@ -491,6 +496,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       return _buildEmptyTunesState();
     }
     final item = _selectedTune;
+    final strings = context.watch<LocaleProvider>().strings;
 
     return ListView(
       padding: const EdgeInsets.all(14),
@@ -507,7 +513,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           _buildVocalAndStyleControlsTab2(),
           const SizedBox(height: 14),
           CommonButton(
-            label: '✨ AI Cất Giọng Hát Lời Mới',
+            label: strings.creationRunNewLyricsBtn,
             loading: _busyTab2,
             onPressed: _runSingNewLyrics,
           ),
@@ -525,6 +531,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildTuneSelector() {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -535,13 +542,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.library_music_rounded, size: 16, color: AppTheme.imperialGold),
-              SizedBox(width: 6),
+              const Icon(Icons.library_music_rounded, size: 16, color: AppTheme.imperialGold),
+              const SizedBox(width: 6),
               Text(
-                'Chọn Bài Bản Di Sản:',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                strings.creationPickTuneLabel,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ],
           ),
@@ -585,6 +592,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildMusicologyCard(HeritageItem item) {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -628,7 +636,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 ),
               const Spacer(),
               Text(
-                item.artist.isNotEmpty ? item.artist : 'Nghệ nhân dân gian Huế',
+                item.artist.isNotEmpty ? item.artist : strings.creationFolkArtist,
                 style: const TextStyle(color: Colors.white60, fontSize: 12),
               ),
             ],
@@ -645,7 +653,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           const SizedBox(height: 8),
           _infoRow(
             Icons.music_note_rounded,
-            'Hơi / Điệu thức:',
+            strings.creationModeLabel,
             item.modeSystem.isNotEmpty ? item.modeSystem : item.tonal,
             accentColor: AppTheme.amberGold,
           ),
@@ -653,7 +661,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             const SizedBox(height: 6),
             _infoRow(
               Icons.format_quote_rounded,
-              'Thể thơ:',
+              strings.creationVerseLabel,
               item.verseStructure,
             ),
           ],
@@ -661,7 +669,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             const SizedBox(height: 6),
             _infoRow(
               Icons.piano_rounded,
-              'Dàn nhạc cụ:',
+              strings.creationInstrumentsLabel,
               item.instruments,
             ),
           ],
@@ -671,6 +679,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildMasterLyricsCard(HeritageItem item) {
+    final strings = context.watch<LocaleProvider>().strings;
     final hasOrnaments = item.lyricsWithOrnaments.isNotEmpty;
     final displayLyrics = _showOrnaments && hasOrnaments
         ? item.lyricsWithOrnaments
@@ -689,9 +698,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Lời Ca Di Sản Chuẩn Mực',
-                style: TextStyle(
+              Text(
+                strings.creationLyricsTitle,
+                style: const TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -714,7 +723,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                       ),
                     ),
                     child: Text(
-                      _showOrnaments ? 'Chế độ: Có luyến láy' : 'Chế độ: Lời thơ',
+                      _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
                       style: const TextStyle(fontSize: 11, color: Colors.white),
                     ),
                   ),
@@ -730,7 +739,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               borderRadius: BorderRadius.circular(8),
             ),
             child: SelectableText(
-              displayLyrics.isNotEmpty ? displayLyrics : '[Không có lời ca]',
+              displayLyrics.isNotEmpty ? displayLyrics : strings.creationNoLyrics,
               style: const TextStyle(
                 fontSize: 13,
                 height: 1.6,
@@ -745,6 +754,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildMasterPlaybackControls(HeritageItem item, ServerConfig server) {
+    final strings = context.watch<LocaleProvider>().strings;
     final audioUrl = '${server.baseUrl}/api/heritage/${item.id}/audio';
 
     return Container(
@@ -766,7 +776,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                     color: AppTheme.imperialGold,
                   ),
                   label: Text(
-                    _showMasterPlayer ? 'Thu gọn nghe bản gốc' : '🎧 Nghe Bản Gốc Nghệ Nhân',
+                    _showMasterPlayer ? strings.creationCollapseMaster : strings.creationListenMaster,
                     style: const TextStyle(color: AppTheme.imperialGold, fontSize: 13),
                   ),
                   style: OutlinedButton.styleFrom(
@@ -783,7 +793,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             AudioPlayerBar(
               key: Key(audioUrl),
               url: audioUrl,
-              label: 'Bản gốc: ${item.title}',
+              label: strings.creationOriginalTrack(item.title),
             ),
           ],
         ],
@@ -792,6 +802,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildAiRecreationControls() {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -802,21 +813,21 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'AI Tái Hiện Bài Bản Nguyên Gốc',
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.white),
+          Text(
+            strings.creationAiRecreateTitle,
+            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
-                child: _dropdownField('Giọng hát', _vocalTab1, ['Nữ', 'Nam', 'Không lời'], (v) {
+                child: _dropdownField(strings.creationVocalLabel, _vocalTab1, ['Nữ', 'Nam', 'Không lời'], (v) {
                   setState(() => _vocalTab1 = v);
                 }),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _dropdownField('Tốc độ', _tempoTab1, ['Chậm', 'Vừa', 'Nhanh'], (v) {
+                child: _dropdownField(strings.creationTempoLabel, _tempoTab1, ['Chậm', 'Vừa', 'Nhanh'], (v) {
                   setState(() => _tempoTab1 = v);
                 }),
               ),
@@ -826,7 +837,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Row(
             children: [
               Expanded(
-                child: _dropdownField('Thời lượng', '$_durationTab1', ['30', '60', '90', '120'], (v) {
+                child: _dropdownField(strings.creationDurationLabel, '$_durationTab1', ['30', '60', '90', '120'], (v) {
                   setState(() => _durationTab1 = int.parse(v));
                 }),
               ),
@@ -845,13 +856,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               initialValue: _selectedLora.isEmpty ? '' : _selectedLora,
               isDense: true,
               decoration: InputDecoration(
-                labelText: 'Mô hình LoRA',
+                labelText: strings.creationLoraModelLabel,
                 labelStyle: const TextStyle(fontSize: 12),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
               items: [
-                const DropdownMenuItem(value: '', child: Text('Mô hình nền mặc định')),
+                DropdownMenuItem(value: '', child: Text(strings.creationLoraBaseDefault)),
                 for (final l in _loras)
                   DropdownMenuItem(value: l.name, child: Text(l.name)),
               ],
@@ -860,7 +871,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           ],
           const SizedBox(height: 12),
           CommonButton(
-            label: '✨ Bắt Đầu AI Tái Hiện Nguyên Bản',
+            label: strings.creationRunOriginalBtn,
             loading: _busyTab1,
             onPressed: _runSingOriginal,
           ),
@@ -874,7 +885,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildLockedMelodyBanner() {
-    final title = _selectedTune?.title ?? 'Bài bản di sản';
+    final strings = context.watch<LocaleProvider>().strings;
+    final title = _selectedTune?.title ?? strings.creationFallbackTuneTitle;
 
     return Container(
       width: double.infinity,
@@ -893,7 +905,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'KHÓA 100% GIAI ĐIỆU LÒNG BẢN: $title',
+                  strings.creationLockedMelody(title),
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
@@ -905,9 +917,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Hệ thống dùng toàn bộ xương sống giai điệu lòng bản di sản cổ truyền làm nhạc nền. AI sẽ giữ nguyên vẹn giai điệu và hát chính xác theo lời thơ mới do bạn sáng tạo.',
-            style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+          Text(
+            strings.creationLockedMelodyDesc,
+            style: const TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
           ),
         ],
       ),
@@ -915,6 +927,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildPoeticRhymeAssistant(HeritageItem item) {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -925,13 +938,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppTheme.amberGold),
-              SizedBox(width: 6),
+              const Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppTheme.amberGold),
+              const SizedBox(width: 6),
               Text(
-                'Hướng Dẫn Thể Thơ & Vần Điệu:',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                strings.creationRhymeGuideTitle,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ],
           ),
@@ -939,13 +952,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Text(
             item.rhymeGuide.isNotEmpty
                 ? item.rhymeGuide
-                : 'Khuyên dùng thơ Lục bát hoặc thể 4 chữ, ngắt nhịp tương ứng với nhịp ${item.bpm?.toStringAsFixed(0) ?? 'khoan thai'}.',
+                : strings.creationRhymeGuideDefault(item.bpm?.toStringAsFixed(0)),
             style: const TextStyle(fontSize: 12.5, color: Color(0xFFD1D5DB), height: 1.4),
           ),
           const SizedBox(height: 10),
-          const Text(
-            'Gợi ý thơ mẫu 1 chạm:',
-            style: TextStyle(fontSize: 11.5, color: Colors.white60),
+          Text(
+            strings.creationSampleVerseTitle,
+            style: const TextStyle(fontSize: 11.5, color: Colors.white60),
           ),
           const SizedBox(height: 6),
           Wrap(
@@ -953,15 +966,15 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             runSpacing: 8,
             children: [
               _sampleButton(
-                'Thơ Lục bát Sông Hương',
+                strings.creationSampleLucBat,
                 'Sông Hương sóng vỗ êm đềm,\nThuyền ai thấp thoáng qua rèm trăng thanh.\nDịu dàng tà áo nghiêng vành,\nNón bài thơ thắm nghĩa tình trăm năm.',
               ),
               _sampleButton(
-                'Thơ 4 chữ rộn ràng',
+                strings.creationSampleFourWord,
                 'Nắng trải cố đô,\nGió lay nhành liễu.\nTiếng đàn ngân vang,\nGợi bao thương nhớ.',
               ),
               _sampleButton(
-                'Tự tình cố đô',
+                strings.creationSampleTuTinh,
                 'Chiều chiều trước bến Văn Lâu,\nAi ngồi ai câu ai sầu ai thảm.\nAi thương ai cảm ai nhớ ai trông,\nThuyền ai thấp thoáng bên sông hữu tình.',
               ),
             ],
@@ -998,6 +1011,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildLyricComposer() {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1011,12 +1025,12 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Soạn Thảo Lời Thơ Mới *',
-                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.white),
+              Text(
+                strings.creationComposeTitle,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.white),
               ),
               Text(
-                '${_customLyricsCtrl.text.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length} từ',
+                strings.creationWordCount(_customLyricsCtrl.text.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length),
                 style: const TextStyle(fontSize: 11, color: Colors.white54),
               ),
             ],
@@ -1028,7 +1042,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             onChanged: (_) => setState(() {}),
             style: const TextStyle(fontSize: 13.5, height: 1.5),
             decoration: InputDecoration(
-              hintText: 'Nhập lời ca hoặc bài thơ do bạn sáng tác vào đây...\n(Ví dụ: thơ lục bát, thơ 4 chữ hoặc khúc hát đối đáp)',
+              hintText: strings.creationLyricsHint,
               hintStyle: const TextStyle(color: Colors.white30, fontSize: 12.5),
               filled: true,
               fillColor: AppTheme.darkBg,
@@ -1044,6 +1058,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildVocalAndStyleControlsTab2() {
+    final strings = context.watch<LocaleProvider>().strings;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1056,13 +1071,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Row(
             children: [
               Expanded(
-                child: _dropdownField('Giọng hát', _vocalTab2, ['Nữ', 'Nam'], (v) {
+                child: _dropdownField(strings.creationVocalLabel, _vocalTab2, ['Nữ', 'Nam'], (v) {
                   setState(() => _vocalTab2 = v);
                 }),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _dropdownField('Cảm xúc', _moodTab2, ['Trữ tình', 'Thiết tha', 'Tươi vui', 'Hào sảng'], (v) {
+                child: _dropdownField(strings.creationMoodLabel, _moodTab2, ['Trữ tình', 'Thiết tha', 'Tươi vui', 'Hào sảng'], (v) {
                   setState(() => _moodTab2 = v);
                 }),
               ),
@@ -1072,13 +1087,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Row(
             children: [
               Expanded(
-                child: _dropdownField('Tốc độ', _tempoTab2, ['Chậm', 'Vừa', 'Nhanh'], (v) {
+                child: _dropdownField(strings.creationTempoLabel, _tempoTab2, ['Chậm', 'Vừa', 'Nhanh'], (v) {
                   setState(() => _tempoTab2 = v);
                 }),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _dropdownField('Thời lượng', '$_durationTab2', ['30', '60', '90', '120'], (v) {
+                child: _dropdownField(strings.creationDurationLabel, '$_durationTab2', ['30', '60', '90', '120'], (v) {
                   setState(() => _durationTab2 = int.parse(v));
                 }),
               ),
@@ -1100,13 +1115,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                     initialValue: _selectedLora.isEmpty ? '' : _selectedLora,
                     isDense: true,
                     decoration: InputDecoration(
-                      labelText: 'Mô hình LoRA',
+                      labelText: strings.creationLoraModelLabel,
                       labelStyle: const TextStyle(fontSize: 12),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     items: [
-                      const DropdownMenuItem(value: '', child: Text('Mặc định')),
+                      DropdownMenuItem(value: '', child: Text(strings.creationDefault)),
                       for (final l in _loras)
                         DropdownMenuItem(value: l.name, child: Text(l.name)),
                     ],
@@ -1171,6 +1186,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _buildEmptyTunesState() {
+    final strings = context.watch<LocaleProvider>().strings;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1179,21 +1195,21 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           children: [
             const Icon(Icons.music_off_rounded, size: 48, color: Colors.white38),
             const SizedBox(height: 12),
-            const Text(
-              'Chưa có bài bản di sản nào trong cơ sở dữ liệu',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+            Text(
+              strings.creationEmptyTunesTitle,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Hãy chạy lệnh "python -m app.database.seed_heritage" trên máy chủ hoặc tải lên bài bản mới từ mục Kho di sản.',
-              style: TextStyle(fontSize: 12.5, color: Colors.white60, height: 1.4),
+            Text(
+              strings.creationEmptyTunesDesc,
+              style: const TextStyle(fontSize: 12.5, color: Colors.white60, height: 1.4),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
               icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text('Tải lại dữ liệu'),
+              label: Text(strings.creationReloadData),
               onPressed: () {
                 setState(() => _loadingTunes = true);
                 _loadInitialData();

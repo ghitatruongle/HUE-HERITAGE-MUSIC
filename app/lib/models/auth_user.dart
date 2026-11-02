@@ -5,6 +5,7 @@ class AuthUser {
   final String token;
   final String role;
   final bool isGuest;
+  final bool mustChangePassword;
 
   const AuthUser({
     required this.id,
@@ -13,6 +14,7 @@ class AuthUser {
     required this.token,
     this.role = 'user',
     this.isGuest = false,
+    this.mustChangePassword = false,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class AuthUser {
       token: (json['token'] ?? '').toString(),
       role: (json['role'] ?? 'user').toString(),
       isGuest: json['isGuest'] == true,
+      mustChangePassword: json['must_change_password'] == true,
     );
   }
 
@@ -34,6 +37,7 @@ class AuthUser {
       'token': token,
       'role': role,
       'isGuest': isGuest,
+      'must_change_password': mustChangePassword,
     };
   }
 }

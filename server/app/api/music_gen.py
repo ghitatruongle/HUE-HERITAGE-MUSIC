@@ -81,7 +81,7 @@ def _extra(**kwargs):
 
 
 @router.get("/music/models")
-def list_models():
+def list_models(user_id: Optional[str] = Depends(require_user)):
     return generator_service.models_info()
 
 
@@ -227,7 +227,18 @@ def gen_task(task_id: str, user_id: Optional[str] = Depends(require_user)):
 
 
 @router.post("/music/task/{task_id}/cancel")
-def cancel_gen_task(task_id: str):
+def cancel_gen_task(
+    task_id: str,
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(require_user),
+):
+    task = generator_service.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="not found")
+    if settings.auth_required and task.get("user_id") and task["user_id"] != user_id:
+        caller = crud.get_user_by_id(db, user_id) if user_id else None
+        if not caller or (caller.role or "user") != "admin":
+            raise HTTPException(status_code=404, detail="not found")
     task = generator_service.cancel_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="not found")

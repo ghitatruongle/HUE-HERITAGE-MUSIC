@@ -1,4 +1,6 @@
-from sqlalchemy import create_engine, inspect, text
+import threading
+
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from ..config import settings
 
@@ -10,11 +12,35 @@ class Base(DeclarativeBase):
 engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False, "timeout": 30},
-    pool_size=25,
-    max_overflow=35,
+    pool_size=40,
+    max_overflow=60,
     pool_timeout=60,
 )
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_connection, connection_record):
+    if not settings.database_url.startswith("sqlite"):
+        return
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+write_slot = threading.BoundedSemaphore(8)
+
+
+def acquire_write_slot():
+    write_slot.acquire()
+    try:
+        yield
+    finally:
+        write_slot.release()
 
 MIGRATION_COLUMNS = {
     "users": {
@@ -23,6 +49,7 @@ MIGRATION_COLUMNS = {
         "role": "VARCHAR(16) DEFAULT 'user' NOT NULL",
         "active": "INTEGER DEFAULT 1 NOT NULL",
         "token_epoch": "INTEGER DEFAULT 0 NOT NULL",
+        "must_change_password": "INTEGER DEFAULT 0 NOT NULL",
     },
     "heritage_items": {
         "genre": "VARCHAR(128) DEFAULT '' NOT NULL",

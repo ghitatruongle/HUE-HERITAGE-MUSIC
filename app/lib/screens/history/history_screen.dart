@@ -102,11 +102,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _filterChip('all', locale.isVietnamese ? 'Tất cả' : 'All', allEntries.length),
+                        _filterChip('all', strings.historyFilterAll, allEntries.length),
                         const SizedBox(width: 8),
                         _filterChip('analyze-pitch', strings.featAnalysisTitle, allEntries.where((e) => _chipKinds['analyze-pitch']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
-                        _filterChip('practice', locale.isVietnamese ? 'Luyện tập' : 'Practice', allEntries.where((e) => _chipKinds['practice']!.contains(e.kind)).length),
+                        _filterChip('practice', strings.historyFilterPractice, allEntries.where((e) => _chipKinds['practice']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
                         _filterChip('compare-tune', strings.restorationTabCompare, allEntries.where((e) => _chipKinds['compare-tune']!.contains(e.kind)).length),
                         const SizedBox(width: 8),
@@ -210,7 +210,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               if (e.score != null) ...[
                 const Text(' • ', style: TextStyle(fontSize: 11)),
                 Text(
-                  '${e.score!.toStringAsFixed(1)} đ',
+                  locale.strings.historyScore(e.score!.toStringAsFixed(1)),
                   style: const TextStyle(fontSize: 11, color: Colors.greenAccent, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -230,9 +230,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
       _ => Colors.grey,
     };
     final label = switch (status) {
-      'done' => locale.isVietnamese ? 'Hoàn thành' : 'Done',
-      'error' => locale.isVietnamese ? 'Lỗi' : 'Error',
-      'running' => locale.isVietnamese ? 'Đang chạy' : 'Running',
+      'done' => locale.strings.historyStatusDone,
+      'error' => locale.strings.historyStatusError,
+      'running' => locale.strings.historyStatusRunning,
       _ => status,
     };
     return Container(
@@ -296,7 +296,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       'compare' => s.navLearning,
       'compare-tune' => s.restorationTabCompare,
       'analyze-pitch' => s.featAnalysisTitle,
-      'practice' => locale.isVietnamese ? 'Luyện tập' : 'Practice',
+      'practice' => s.historyFilterPractice,
       'sing_original' || 'sing_new_lyrics' => s.navCreation,
       _ => kind.isEmpty ? s.taskHistoryTitle : kind,
     };

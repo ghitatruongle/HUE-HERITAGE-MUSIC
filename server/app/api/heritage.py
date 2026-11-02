@@ -5,7 +5,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, R
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ..database.session import get_db
+from ..database.session import acquire_write_slot, get_db
 from ..database import crud
 from ..services import heritage_service
 from ..storage import manager
@@ -57,15 +57,21 @@ async def upload_heritage(
     license: str = Form(""),
     db: Session = Depends(get_db),
     user_id: Optional[str] = Depends(require_user),
+    _write_slot: None = Depends(acquire_write_slot),
 ):
-    content_length = request.headers.get("content-length")
-    if content_length and content_length.isdigit() and int(content_length) > manager.MAX_SIZE + 1024 * 1024:
-        raise HTTPException(status_code=413, detail="file too large")
-    data = await file.read()
+    chunks = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > manager.MAX_SIZE:
+            raise HTTPException(status_code=413, detail="file too large")
+        chunks.append(chunk)
+    data = b"".join(chunks)
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > manager.MAX_SIZE:
-        raise HTTPException(status_code=413, detail="file too large")
     ext = Path(file.filename or "").suffix.lower()
     if ext not in manager.ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="unsupported type")

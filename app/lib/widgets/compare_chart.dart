@@ -1,20 +1,23 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../services/locale_provider.dart';
 
 class CompareChart extends StatelessWidget {
   final List<double> times;
   final List<double> sampleF0;
   final List<double> warpedF0;
-  final String sampleLabel;
-  final String targetLabel;
+  final String? sampleLabel;
+  final String? targetLabel;
 
   const CompareChart({
     super.key,
     required this.times,
     required this.sampleF0,
     required this.warpedF0,
-    this.sampleLabel = 'Bản ghi mẫu',
-    this.targetLabel = 'Bản ghi đối chiếu',
+    this.sampleLabel,
+    this.targetLabel,
   });
 
   List<FlSpot> _spots(List<double> f0) {
@@ -36,8 +39,9 @@ class CompareChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     if (times.isEmpty) {
-      return const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('Chưa có dữ liệu')));
+      return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(strings.noData)));
     }
     var peak = 100.0;
     for (final f in sampleF0) {
@@ -55,8 +59,8 @@ class CompareChart extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Text(sampleLabel, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12)),
-            Text(targetLabel, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(sampleLabel ?? strings.compareChartSample, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(targetLabel ?? strings.compareChartTarget, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12)),
           ],
         ),
         SizedBox(

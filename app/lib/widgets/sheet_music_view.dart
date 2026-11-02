@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../services/locale_provider.dart';
 
 class SheetNote {
   final int midi;
@@ -15,12 +18,13 @@ class SheetNote {
 
 class SheetMusicView extends StatelessWidget {
   final List<SheetNote> notes;
-  final String disclaimer;
+  final String? disclaimer;
 
-  const SheetMusicView({super.key, required this.notes, this.disclaimer = 'Bản nhạc dự đoán tự động – cần nghệ nhân kiểm duyệt.'});
+  const SheetMusicView({super.key, required this.notes, this.disclaimer});
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     final scheme = Theme.of(context).colorScheme;
     if (notes.isEmpty) {
       return Container(
@@ -29,7 +33,7 @@ class SheetMusicView extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
         ),
-        child: const Center(child: Text('Chưa có nốt nhạc để hiển thị')),
+        child: Center(child: Text(strings.sheetEmpty)),
       );
     }
     final minMidi = notes.map((n) => n.midi).reduce((a, b) => a < b ? a : b) - 2;
@@ -64,7 +68,7 @@ class SheetMusicView extends StatelessWidget {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                disclaimer,
+                disclaimer ?? strings.sheetDisclaimer,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),

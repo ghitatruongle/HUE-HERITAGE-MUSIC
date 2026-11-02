@@ -178,9 +178,9 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
       children: [
         TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.graphic_eq), text: 'Thu & phân tích'),
-            Tab(icon: Icon(Icons.school), text: 'Luyện tập theo bài'),
+          tabs: [
+            Tab(icon: const Icon(Icons.graphic_eq), text: strings.listenTabTitle),
+            Tab(icon: const Icon(Icons.school), text: strings.practiceTabTitle),
           ],
         ),
         Expanded(

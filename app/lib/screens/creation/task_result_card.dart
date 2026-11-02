@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/music_task.dart';
+import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
 
@@ -20,6 +21,7 @@ class TaskResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     final server = context.read<ServerConfig>();
     final fullUrl = '${server.baseUrl}${task.audioUrl}';
 
@@ -37,7 +39,7 @@ class TaskResultCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('Trạng thái tác vụ:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(strings.taskStatusLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -76,7 +78,7 @@ class TaskResultCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                   icon: const Icon(Icons.close_rounded, size: 14, color: Colors.white70),
-                  label: const Text('Hủy', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                  label: Text(strings.cancelBtn, style: const TextStyle(fontSize: 12, color: Colors.white70)),
                   onPressed: () => onCancel(task.id),
                 ),
               ],
@@ -84,25 +86,24 @@ class TaskResultCard extends StatelessWidget {
           ),
           if (task.reason.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text('Thông báo: ${task.reason}', style: const TextStyle(fontSize: 12.5, color: Colors.white70)),
+            Text(strings.taskNotice(task.reason), style: const TextStyle(fontSize: 12.5, color: Colors.white70)),
           ],
           if (task.status == 'blocked') ...[
             const SizedBox(height: 8),
-            const Text(
-              'Máy chủ AI đang ở chế độ chờ kiểm thử trọng số. '
-              'Tác phẩm AI cần HuếMusic-LoRA được nạp từ các checkpoint đã huấn luyện.',
-              style: TextStyle(fontSize: 12, color: Colors.white60),
+            Text(
+              strings.taskBlockedNote,
+              style: const TextStyle(fontSize: 12, color: Colors.white60),
             ),
           ],
           if (task.status == 'done' && task.audioUrl.isNotEmpty) ...[
             const SizedBox(height: 10),
-            const Row(
+            Row(
               children: [
-                Icon(Icons.verified_rounded, size: 16, color: AppTheme.imperialGold),
-                SizedBox(width: 6),
+                const Icon(Icons.verified_rounded, size: 16, color: AppTheme.imperialGold),
+                const SizedBox(width: 6),
                 Text(
-                  'TÁC PHẨM ĐƯỢC AI TẠO MỚI (AI_GENERATED)',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.imperialGold),
+                  strings.taskAiGenerated,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.imperialGold),
                 ),
               ],
             ),

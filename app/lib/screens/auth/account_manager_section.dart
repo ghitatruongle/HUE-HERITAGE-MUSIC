@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
 import '../../api/endpoints/auth_endpoints.dart';
+import '../../services/admin_reauth.dart';
 import '../../services/clipboard_helper.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
@@ -120,12 +121,16 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
     if (!mounted || confirmed != true) return;
     try {
       final dio = context.read<ServerConfig>().api.dio;
-      await AuthEndpoints(dio).deleteAccount(acc.id);
+      await runWithAdminReauth(context, () => AuthEndpoints(dio).deleteAccount(acc.id));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${strings.accountDeleted}: ${acc.username}')),
         );
         setState(() {});
+      }
+    } on AdminReauthCancelled {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));
       }
     } catch (e) {
       if (mounted) {
@@ -135,10 +140,15 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
   }
 
   Future<void> _toggleAccountActive(AccountEntry acc, bool active) async {
+    final strings = context.read<LocaleProvider>().strings;
     try {
       final dio = context.read<ServerConfig>().api.dio;
-      await AuthEndpoints(dio).setAccountActive(acc.id, active);
+      await runWithAdminReauth(context, () => AuthEndpoints(dio).setAccountActive(acc.id, active));
       if (mounted) setState(() {});
+    } on AdminReauthCancelled {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
@@ -162,7 +172,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
     if (!mounted || confirmed != true) return;
     try {
       final dio = context.read<ServerConfig>().api.dio;
-      final temp = await AuthEndpoints(dio).resetAccountPassword(acc.id);
+      final temp = await runWithAdminReauth(context, () => AuthEndpoints(dio).resetAccountPassword(acc.id));
       final copied = await copyText(temp);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -173,6 +183,10 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
           ),
         ),
       );
+    } on AdminReauthCancelled {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
