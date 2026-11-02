@@ -33,6 +33,7 @@ def item_to_dict(item):
         "is_instrumental": bool(getattr(item, "is_instrumental", False)),
         "audio_backing_path": getattr(item, "audio_backing_path", ""),
         "featured_in_creation": bool(getattr(item, "featured_in_creation", True)),
+        "visibility": getattr(item, "visibility", None) or "public",
         "sha256": item.sha256,
         "filename": item.filename,
         "size": item.size,
@@ -40,14 +41,17 @@ def item_to_dict(item):
     }
 
 
-def ingest_upload(db: Session, data: bytes, filename: str, title: str, type: str, artist: str = "", **metadata):
+def ingest_upload(db: Session, data: bytes, filename: str, title: str, type: str, artist: str = "", owner_user_id: str | None = None, visibility: str = "public", **metadata):
     path, digest, _ = manager.save_original(data, filename)
     existing = crud.get_by_sha(db, digest)
     if existing:
         return existing, False
     name = title if title else Path(filename).stem
     try:
-        item = crud.create_item(db, name, type, digest, path.name, len(data), artist=artist, **metadata)
+        item = crud.create_item(
+            db, name, type, digest, path.name, len(data), artist=artist,
+            owner_user_id=owner_user_id, visibility=visibility, **metadata,
+        )
         crud.create_audio(db, item.id, "original", str(path), digest, len(data))
         return item, True
     except IntegrityError:

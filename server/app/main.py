@@ -99,6 +99,9 @@ class HeavyRateLimitMiddleware:
                     bucket = f"heavy:{client[0]}"
                     limit = max(1, settings.heavy_rate_limit)
                 if not rate_limit.hit_and_allow(bucket, limit):
+                    from . import security_log
+
+                    security_log.security_event("heavy_rate_limited", bucket=bucket, path=path)
                     response = JSONResponse(
                         {"detail": "too many requests, slow down"},
                         status_code=429,
@@ -168,6 +171,31 @@ class BodyLimitMiddleware:
         await self.app(scope, counting_receive, send)
 
 
+class SheddingMiddleware:
+    def __init__(self, app, max_in_flight=0):
+        self.app = app
+        self.max_in_flight = max_in_flight
+        self.in_flight = 0
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or self.max_in_flight <= 0:
+            await self.app(scope, receive, send)
+            return
+        if self.in_flight >= self.max_in_flight:
+            response = JSONResponse(
+                {"detail": "server busy, retry shortly"},
+                status_code=503,
+                headers={"Retry-After": "5", "Connection": "close"},
+            )
+            await response(scope, receive, send)
+            return
+        self.in_flight += 1
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self.in_flight -= 1
+
+
 def _validate_secret_key() -> None:
     if not settings.auth_required:
         return
@@ -222,12 +250,13 @@ def create_app() -> FastAPI:
     db = SessionLocal()
     try:
         crud.fail_stale_running_tasks(db)
+        crud.prune_old_tasks(db, settings.task_retention_days)
     finally:
         db.close()
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.1",
+        version="0.0.2-preview",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -244,6 +273,7 @@ def create_app() -> FastAPI:
     application.add_middleware(NoGzipAudioMiddleware)
     application.add_middleware(HeavyRateLimitMiddleware)
     application.add_middleware(BodyLimitMiddleware)
+    application.add_middleware(SheddingMiddleware, max_in_flight=settings.shed_concurrency)
     if settings.auth_required and settings.allowed_origins.strip() == "*":
         import logging
 
@@ -265,8 +295,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.1",
-            "stage": "0.0.1",
+            "version": "0.0.2-preview",
+            "stage": "0.0.2-preview",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             from .ai import ace_step_engine

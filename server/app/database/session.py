@@ -12,8 +12,8 @@ class Base(DeclarativeBase):
 engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False, "timeout": 30},
-    pool_size=40,
-    max_overflow=60,
+    pool_size=64,
+    max_overflow=160,
     pool_timeout=60,
 )
 
@@ -72,6 +72,8 @@ MIGRATION_COLUMNS = {
         "is_instrumental": "BOOLEAN DEFAULT 0 NOT NULL",
         "audio_backing_path": "VARCHAR(512) DEFAULT '' NOT NULL",
         "featured_in_creation": "BOOLEAN DEFAULT 1 NOT NULL",
+        "owner_user_id": "VARCHAR(64)",
+        "visibility": "VARCHAR(16) DEFAULT 'public' NOT NULL",
     },
     "tasks": {
         "user_id": "VARCHAR(64)",
@@ -97,10 +99,15 @@ def init_db():
 def _enforce_admin_truong():
     from ..config import settings
     with engine.begin() as conn:
-        conn.execute(
-            text("UPDATE users SET role = 'admin' WHERE username = :name"),
+        row = conn.execute(
+            text("SELECT id, role FROM users WHERE username = :name"),
             {"name": settings.admin_truong_username},
-        )
+        ).first()
+        if row is not None and (row.role or "user") != "admin":
+            conn.execute(
+                text("UPDATE users SET role = 'admin', token_epoch = token_epoch + 1 WHERE id = :id"),
+                {"id": row.id},
+            )
         conn.execute(
             text("UPDATE users SET role = 'user' WHERE username <> :name AND (role IS NULL OR role <> 'user')"),
             {"name": settings.admin_truong_username},

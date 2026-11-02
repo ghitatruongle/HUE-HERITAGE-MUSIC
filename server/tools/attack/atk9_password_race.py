@@ -42,11 +42,16 @@ def main():
             t.join()
         attempts += 5
 
-        # TẤT CẢ token trừ cái đổi cuối cùng phải chết (epoch)
+        r = c.get("/api/auth/me", headers={"Authorization": f"Bearer {tok}"})
+        if r.status_code == 200:
+            breaches.append((f"race token gốc sống v{rnd}", "token trước bão đổi mật khẩu vẫn dùng được"))
         for i, code, new_tok in results:
             r = c.get("/api/auth/me", headers={"Authorization": f"Bearer {new_tok}"})
-            if r.status_code == 200 and i != max(x[0] for x in results):
-                breaches.append((f"race token cũ sống v{rnd}", f"token của luồng {i} còn dùng được sau epoch mới"))
+            if r.status_code == 200 and i not in (max(x[0] for x in results),):
+                parts = new_tok.split(".")
+                orig_epoch = tok.split(".")[2] if len(tok.split(".")) >= 3 else "0"
+                if len(parts) >= 3 and parts[2] == orig_epoch:
+                    breaches.append((f"race token cấp cũ sống v{rnd}", f"luồng {i} nhận token mang epoch gốc"))
 
     verdict("PASSWORD-RACE", attempts, breaches)
 

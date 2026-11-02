@@ -1,8 +1,9 @@
 from typing import Optional
 import asyncio
 import json
+import math
 
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,7 @@ from ..database import crud
 from ..services import amt_eval, media_pipeline
 from ..storage import manager
 from ..audio_access import require_audio_access
-from .auth import require_user
+from .auth import require_user, resolve_bearer_user
 
 router = APIRouter(tags=["transcription"])
 LABEL = "Ký âm tự động – cần kiểm duyệt"
@@ -28,6 +29,7 @@ def xml_dir():
 
 @router.post("/music/transcribe")
 async def transcribe(
+    request: Request,
     file: UploadFile = File(...),
     bpm: float = Form(60.0),
     heritage_id: str = Form(""),
@@ -40,7 +42,7 @@ async def transcribe(
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
-    if bpm < 1 or bpm > 300:
+    if not math.isfinite(bpm) or bpm < 1 or bpm > 300:
         raise HTTPException(status_code=400, detail="bad bpm")
     try:
         notes, used, engine_error = await asyncio.to_thread(
@@ -50,6 +52,10 @@ async def transcribe(
         raise HTTPException(status_code=400, detail="wav decode failed")
     digest = manager.sha256_bytes(data)
     item = crud.get_item(db, heritage_id) if heritage_id else None
+    if item:
+        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+        if not crud.can_view_item(item, viewer):
+            raise HTTPException(status_code=404, detail="not found")
     if item and item.sha256 != digest:
         raise HTTPException(status_code=400, detail="sha mismatch with heritage item")
     _, stem, mid, xm = await asyncio.to_thread(
@@ -89,17 +95,37 @@ def _find_artifact(directory, sha: str, ext: str, bpm: float = 0.0):
     return matches[-1] if matches else None
 
 
+def _safe_bpm(bpm: float) -> float:
+    if not math.isfinite(bpm) or bpm <= 0 or bpm > 10**6:
+        return 0.0
+    return bpm
+
+
+def _sha_viewable(db: Session, request: Request, sha: str) -> bool:
+    from ..database.models import HeritageItem
+
+    item = db.query(HeritageItem).filter(HeritageItem.sha256 == sha).first()
+    if item is None:
+        return True
+    viewer = resolve_bearer_user(request, db)
+    return crud.can_view_item(item, viewer)
+
+
 @router.get("/music/midi/{sha}")
-def download_midi(sha: str, bpm: float = 0.0, access=Depends(require_audio_access)):
-    path = _find_artifact(midi_dir(), sha, "mid", bpm)
+def download_midi(sha: str, request: Request, bpm: float = 0.0, db: Session = Depends(get_db), access=Depends(require_audio_access)):
+    if not _sha_viewable(db, request, sha):
+        raise HTTPException(status_code=404, detail="not found")
+    path = _find_artifact(midi_dir(), sha, "mid", _safe_bpm(bpm))
     if not path:
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(path, media_type="audio/midi")
 
 
 @router.get("/music/musicxml/{sha}")
-def download_xml(sha: str, bpm: float = 0.0, access=Depends(require_audio_access)):
-    path = _find_artifact(xml_dir(), sha, "musicxml", bpm)
+def download_xml(sha: str, request: Request, bpm: float = 0.0, db: Session = Depends(get_db), access=Depends(require_audio_access)):
+    if not _sha_viewable(db, request, sha):
+        raise HTTPException(status_code=404, detail="not found")
+    path = _find_artifact(xml_dir(), sha, "musicxml", _safe_bpm(bpm))
     if not path:
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(path, media_type="application/xml")
@@ -118,7 +144,7 @@ async def evaluate_transcription(
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
-    if bpm <= 0 or bpm > 300:
+    if not math.isfinite(bpm) or bpm <= 0 or bpm > 300:
         raise HTTPException(status_code=400, detail="bad bpm")
     try:
         items = json.loads(truth)

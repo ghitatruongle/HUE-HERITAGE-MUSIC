@@ -73,7 +73,8 @@ def main(base):
     r = c.get("/api/heritage", params={"q": "'; DROP TABLE heritage_items;--"})
     check("search SQLi DROP TABLE → 200 (parameterized)", r.status_code == 200)
     r2 = c.get("/api/heritage", params={"q": ""})
-    check("bảng heritage còn nguyên sau DROP attempt", r2.status_code == 200 and isinstance(r2.json(), list))
+    heritage_items = r2.json().get("items", []) if isinstance(r2.json(), dict) else r2.json()
+    check("bảng heritage còn nguyên sau DROP attempt", r2.status_code == 200 and isinstance(heritage_items, list))
 
     r = c.get("/api/lessons", params={})
     ok = r.status_code == 200

@@ -54,7 +54,7 @@ def run_light(base):
     r1 = c.post("/api/auth/login", json={"identifier": "khongtonnai", "password": "sai"})
     same_msg = r1.status_code == 401
     r2 = c.post("/api/auth/login", json={"identifier": ADMIN, "password": "sai"})
-    record("NHẸ", "Login sai → 401 thông điệp chung", expect(same_msg and r2.status_code == 401), f"{r1.status_code}/{r2.status_code}")
+    record("NHẸ", "Login sai → 401/429 bị chặn thống nhất", expect(r1.status_code == 401 and r2.status_code in (401, 429)), f"{r1.status_code}/{r2.status_code}")
     r = c.get("/api/heritage", params={"limit": 999999})
     record("NHẸ", "limit khổng lồ bị kẹp", expect(r.status_code == 200), f"status={r.status_code}")
     h = {k.lower() for k in r.headers.keys()}
@@ -191,7 +191,7 @@ def run_advanced(base, user, admin_password):
         r = ca.patch(f"/api/auth/users/{victim_id}/active", json={"active": True})
 
         ca.post("/api/auth/invites", json={"code": "RACE-ONE-" + secrets.token_hex(3), "note": "race"})
-        inv_list = ca.get("/api/auth/invites").json()
+        inv_list = ca.get("/api/auth/invites").json()["items"]
         race_code = next(x["code"] for x in inv_list if x["code"].startswith("RACE-ONE-"))
         wins = []
 

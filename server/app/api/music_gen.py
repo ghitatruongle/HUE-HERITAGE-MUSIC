@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import threading
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -15,8 +16,8 @@ from ..database.session import get_db
 from ..database import crud
 from ..services import generator_service, heritage_service
 from ..storage import manager
-from ..audio_access import require_audio_access, sign_path
-from .auth import require_user
+from ..audio_access import require_audio_access, sign_path, HERITAGE_AUDIO_RE
+from .auth import require_user, resolve_bearer_user
 
 router = APIRouter(tags=["music_gen"])
 
@@ -48,7 +49,12 @@ PLAYABLE_SUFFIXES = (
 
 
 @router.get("/music/play-url")
-def issue_play_url(path: str = "", user_id: Optional[str] = Depends(require_user)):
+def issue_play_url(
+    request: Request,
+    path: str = "",
+    user_id: Optional[str] = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     cleaned = (path or "").split("?")[0].strip()
     if (
         not cleaned.startswith(PLAYABLE_PREFIXES)
@@ -58,7 +64,15 @@ def issue_play_url(path: str = "", user_id: Optional[str] = Depends(require_user
         or " " in cleaned
     ):
         raise HTTPException(status_code=400, detail="bad path")
-    token = sign_path(cleaned)
+    scope = ""
+    m = HERITAGE_AUDIO_RE.match(cleaned)
+    if m:
+        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+        item = crud.get_item(db, m.group(1))
+        if item is None or not crud.can_view_item(item, viewer):
+            raise HTTPException(status_code=404, detail="not found")
+        scope = f"vis:{getattr(item, 'visibility', None) or 'public'}"
+    token = sign_path(cleaned, scope=scope)
     return {"url": token["url"], "expires": token["expires"]}
 
 
@@ -112,6 +126,7 @@ def generate(
 
 @router.post("/music/cover")
 def cover(
+    request: Request,
     heritage_id: str = "",
     style: str = "",
     duration: int = 60,
@@ -129,6 +144,9 @@ def cover(
     item = crud.get_item(db, heritage_id.strip())
     if not item:
         raise HTTPException(status_code=404, detail="heritage item not found")
+    viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+    if not crud.can_view_item(item, viewer):
+        raise HTTPException(status_code=404, detail="heritage item not found")
     prompt = f"cover heritage {heritage_id.strip()}: {style.strip()}"
     return generator_service.create_task(
         "cover", prompt, duration, lora.strip(), strength, 0,
@@ -138,15 +156,17 @@ def cover(
 
 
 @router.get("/music/heritage-tunes")
-def list_heritage_tunes(db: Session = Depends(get_db)):
-    items = crud.get_creation_tunes(db)
+def list_heritage_tunes(request: Request, db: Session = Depends(get_db)):
+    viewer = resolve_bearer_user(request, db)
+    items = crud.get_creation_tunes(db, viewer=viewer)
     if not items:
-        items = crud.list_items(db, limit=50)
+        items = crud.list_items(db, limit=50, viewer=viewer)
     return [heritage_service.item_to_dict(i) for i in items]
 
 
 @router.post("/music/sing-original")
 def sing_original(
+    request: Request,
     heritage_id: str = "",
     vocal: str = "Nữ",
     tempo: str = "Vừa",
@@ -162,6 +182,9 @@ def sing_original(
     _validate_generation(duration, strength)
     item = crud.get_item(db, heritage_id.strip())
     if not item:
+        raise HTTPException(status_code=404, detail="heritage item not found")
+    viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+    if not crud.can_view_item(item, viewer):
         raise HTTPException(status_code=404, detail="heritage item not found")
     lyrics_text = item.lyrics_with_ornaments or item.lyrics
     prompt = f"original heritage recreation {item.title}: {item.mode_system or item.tonal or item.genre}"
@@ -182,6 +205,7 @@ def sing_original(
 
 @router.post("/music/sing-new-lyrics")
 def sing_new_lyrics(
+    request: Request,
     heritage_id: str = "",
     new_lyrics: str = "",
     vocal: str = "Nữ",
@@ -199,6 +223,9 @@ def sing_new_lyrics(
     _validate_generation(duration, strength)
     item = crud.get_item(db, heritage_id.strip())
     if not item:
+        raise HTTPException(status_code=404, detail="heritage item not found")
+    viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+    if not crud.can_view_item(item, viewer):
         raise HTTPException(status_code=404, detail="heritage item not found")
     prompt = f"sing new lyrics on heritage melody {item.title}: {item.mode_system or item.tonal or item.genre}"
     return generator_service.create_task(
@@ -247,26 +274,52 @@ def cancel_gen_task(
 
 NON_TERMINAL_STATUSES = ("running", "pending", "queued")
 
+_SSE_LOCK = threading.Lock()
+_SSE_ACTIVE: dict = {}
+_SSE_LIMIT_PER_CLIENT = 8
+
 
 @router.get("/music/task/{task_id}/events")
-async def gen_task_events(task_id: str, user_id: Optional[str] = Depends(require_user)):
+async def gen_task_events(request: Request, task_id: str):
+    user_id = None
+    if settings.auth_required:
+        from ..database.session import SessionLocal
+
+        db = SessionLocal()
+        try:
+            user_id = require_user(request, db)
+        finally:
+            db.close()
     task = generator_service.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="not found")
     if settings.auth_required and task.get("user_id") and task["user_id"] != user_id:
         raise HTTPException(status_code=404, detail="not found")
+    key = user_id or (request.client.host if request.client else "unknown")
+    with _SSE_LOCK:
+        if _SSE_ACTIVE.get(key, 0) >= _SSE_LIMIT_PER_CLIENT:
+            raise HTTPException(status_code=429, detail="too many live streams")
+        _SSE_ACTIVE[key] = _SSE_ACTIVE.get(key, 0) + 1
 
     async def stream():
-        deadline = time.time() + 960.0
-        while time.time() < deadline:
-            payload = generator_service.get_task(task_id)
-            if payload is None:
-                yield "event: gone\ndata: {}\n\n"
-                return
-            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-            if payload.get("status") not in NON_TERMINAL_STATUSES:
-                return
-            await asyncio.sleep(2.0)
+        try:
+            deadline = time.time() + 960.0
+            while time.time() < deadline:
+                payload = await asyncio.to_thread(generator_service.get_task, task_id)
+                if payload is None:
+                    yield "event: gone\ndata: {}\n\n"
+                    return
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                if payload.get("status") not in NON_TERMINAL_STATUSES:
+                    return
+                await asyncio.sleep(2.0)
+        finally:
+            with _SSE_LOCK:
+                remaining = _SSE_ACTIVE.get(key, 0) - 1
+                if remaining > 0:
+                    _SSE_ACTIVE[key] = remaining
+                else:
+                    _SSE_ACTIVE.pop(key, None)
 
     return StreamingResponse(
         stream(),

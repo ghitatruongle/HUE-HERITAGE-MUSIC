@@ -4,7 +4,7 @@ import re
 import secrets
 import time
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
@@ -13,17 +13,18 @@ from ..database import crud
 from ..services import lesson_service, compare_service, scale_service
 from ..storage import manager
 from ..audio_access import require_audio_access
-from .auth import require_user
+from .auth import require_user, resolve_bearer_user
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
 MAX_BYTES = manager.MAX_ANALYSIS_BYTES
 
 
 @router.get("")
-def list_lessons(db: Session = Depends(get_db)):
-    items = crud.get_creation_tunes(db)
+def list_lessons(request: Request, db: Session = Depends(get_db)):
+    viewer = resolve_bearer_user(request, db)
+    items = crud.get_creation_tunes(db, viewer=viewer)
     if not items:
-        items = crud.list_items(db, limit=100)
+        items = crud.list_items(db, limit=100, viewer=viewer)
     lessons = []
     for item in items:
         summary = lesson_service.lesson_summary(item)
@@ -82,9 +83,10 @@ def download_practice_midi(name: str, access=Depends(require_audio_access)):
 
 
 @router.get("/{lesson_id}")
-def lesson_detail(lesson_id: str, db: Session = Depends(get_db)):
+def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db)):
+    viewer = resolve_bearer_user(request, db)
     item = crud.get_item(db, lesson_id)
-    if not item:
+    if not item or not crud.can_view_item(item, viewer):
         raise HTTPException(status_code=404, detail="lesson not found")
     try:
         lesson = lesson_service.get_lesson(item)
@@ -115,9 +117,10 @@ async def practice_section(
     db = SessionLocal()
     try:
         item = _crud.get_item(db, lesson_id)
+        viewer = _crud.get_user_by_id(db, user_id) if user_id else None
     finally:
         db.close()
-    if not item:
+    if not item or not _crud.can_view_item(item, viewer):
         raise HTTPException(status_code=404, detail="lesson not found")
     data = await file.read()
     if len(data) == 0:

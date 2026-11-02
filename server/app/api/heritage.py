@@ -10,7 +10,7 @@ from ..database import crud
 from ..services import heritage_service
 from ..storage import manager
 from ..audio_access import require_audio_access, sign_path
-from .auth import require_user
+from .auth import require_user, resolve_bearer_user
 
 router = APIRouter(prefix="/heritage", tags=["heritage"])
 
@@ -25,9 +25,18 @@ def _collect_metadata(**kwargs):
 
 
 @router.get("")
-def list_heritage(q: str = "", limit: int = 50, db: Session = Depends(get_db)):
-    items = crud.list_items(db, q, max(1, min(limit, 200)))
-    return [heritage_service.item_to_dict(i) for i in items]
+def list_heritage(
+    request: Request,
+    q: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    viewer = resolve_bearer_user(request, db)
+    lim = max(1, min(limit, 200))
+    items = crud.list_items(db, q, lim, offset=offset, viewer=viewer)
+    total = crud.count_items(db, q, viewer=viewer)
+    return {"items": [heritage_service.item_to_dict(i) for i in items], "total": total}
 
 
 @router.post("/upload")
@@ -94,16 +103,23 @@ async def upload_heritage(
         instruments=instruments, tonal=tonal,
         description=description, notes=notes, bpm=bpm_val, source=source, license=license,
     )
-    item, created = heritage_service.ingest_upload(db, data, file.filename or "audio.wav", title, type, artist, **metadata)
+    uploader = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+    visibility = "admin_only" if crud.is_admin_user(uploader) else "public"
+    item, created = heritage_service.ingest_upload(
+        db, data, file.filename or "audio.wav", title, type, artist,
+        owner_user_id=uploader.id if uploader is not None else None,
+        visibility=visibility, **metadata,
+    )
     result = heritage_service.item_to_dict(item)
     result["created"] = created
     return result
 
 
 @router.get("/{item_id}")
-def get_heritage(item_id: str, db: Session = Depends(get_db)):
+def get_heritage(request: Request, item_id: str, db: Session = Depends(get_db)):
+    viewer = resolve_bearer_user(request, db)
     item = crud.get_item(db, item_id)
-    if not item:
+    if not item or not crud.can_view_item(item, viewer):
         raise HTTPException(status_code=404, detail="not found")
     return heritage_service.item_to_dict(item)
 
@@ -122,9 +138,10 @@ def download_audio(item_id: str, db: Session = Depends(get_db), access: Optional
 
 
 @router.get("/{item_id}/audio-url")
-def issue_audio_url(item_id: str, db: Session = Depends(get_db), user_id: Optional[str] = Depends(require_user)):
+def issue_audio_url(request: Request, item_id: str, db: Session = Depends(get_db), user_id: Optional[str] = Depends(require_user)):
+    viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
     item = crud.get_item(db, item_id)
-    if not item:
+    if not item or not crud.can_view_item(item, viewer):
         raise HTTPException(status_code=404, detail="not found")
-    token = sign_path(f"/api/heritage/{item_id}/audio")
+    token = sign_path(f"/api/heritage/{item_id}/audio", scope=f"vis:{getattr(item, 'visibility', None) or 'public'}")
     return {"url": token["url"], "expires": token["expires"]}

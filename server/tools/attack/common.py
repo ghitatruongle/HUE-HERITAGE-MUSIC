@@ -21,13 +21,23 @@ def register_user(base, code=None, username=None, password="secret123", extra=No
     body = {"username": u, "email": f"{u}@gmail.com", "password": password, "invite_code": code}
     if extra:
         body.update(extra)
-    c = httpx.Client(base_url=base, timeout=30.0)
-    r = c.post("/api/auth/register", json=body)
-    c.close()
-    if r.status_code != 200:
+    d = None
+    for _ in range(6):
+        c = httpx.Client(base_url=base, timeout=30.0)
+        r = c.post("/api/auth/register", json=body)
+        c.close()
+        if r.status_code == 200:
+            d = r.json()
+            break
+        if r.status_code in (429, 503):
+            import time as _t
+
+            _t.sleep(2.5)
+            continue
         return None
-    d = r.json()
-    return {"username": u, "token": d["token"], "id": d["id"], "role": d.get("role", "user")}
+    if d is None:
+        return None
+    return {"username": u, "token": d["token"], "id": d["id"], "role": d.get("role", "user"), "email": d.get("email", "")}
 
 
 def admin_token(base):

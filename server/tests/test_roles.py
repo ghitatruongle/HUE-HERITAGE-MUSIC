@@ -106,7 +106,7 @@ def test_users_endpoint_admin_only(monkeypatch):
     admin_token = _login(client, settings.admin_truong_username)["token"]
     ok = client.get("/api/auth/users", headers={"Authorization": f"Bearer {admin_token}"})
     assert ok.status_code == 200
-    rows = {u["username"]: u["role"] for u in ok.json()}
+    rows = {u["username"]: u["role"] for u in ok.json()["items"]}
     assert rows[settings.admin_truong_username] == "admin"
     assert rows["plainuser2"] == "user"
 

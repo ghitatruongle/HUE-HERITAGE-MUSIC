@@ -51,7 +51,7 @@ def test_full_heritage_pipeline():
 
     list_resp = client.get("/api/heritage?q=" + unique_title)
     assert list_resp.status_code == 200
-    items = list_resp.json()
+    items = list_resp.json()["items"]
     assert any(i["id"] == item_id for i in items)
 
     audio_resp = client.get(f"/api/heritage/{item_id}/audio")

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../api/api_client.dart';
 import '../../api/endpoints/heritage_api.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/heritage_item.dart';
@@ -19,22 +18,62 @@ class HeritageListScreen extends StatefulWidget {
 
 class _HeritageListScreenState extends State<HeritageListScreen> {
   final _searchCtrl = TextEditingController();
-  Future<List<HeritageItem>>? _future;
+  final List<HeritageItem> _items = [];
+  int _total = 0;
+  bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasError = false;
   HeritageItem? _selectedItem;
 
   @override
   void initState() {
     super.initState();
-    _future = _load('');
+    _reload();
   }
 
-  Future<List<HeritageItem>> _load(String q) {
-    final dio = context.read<ServerConfig>().api.dio;
-    return HeritageApi(dio).list(q: q);
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await HeritageApi(dio).list(q: _searchCtrl.text.trim());
+      if (!mounted) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(page.items);
+        _total = page.total;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _hasError = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
-  void _reload() {
-    setState(() => _future = _load(_searchCtrl.text));
+  Future<void> _loadMore() async {
+    if (_loadingMore || _items.length >= _total) return;
+    setState(() => _loadingMore = true);
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await HeritageApi(dio).list(
+        q: _searchCtrl.text.trim(),
+        offset: _items.length,
+      );
+      if (!mounted) return;
+      final known = _items.map((e) => e.id).toSet();
+      setState(() {
+        for (final it in page.items) {
+          if (!known.contains(it.id)) _items.add(it);
+        }
+        _total = page.total;
+      });
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   void _select(HeritageItem item) {
@@ -66,10 +105,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         _buildSearchBar(strings),
         Expanded(
           child: _buildItemsFuture(
-            (items) => ListView.builder(
-              itemCount: items.length,
-              itemBuilder: (context, i) => _buildItemTile(items[i], i + 1, strings, false),
-            ),
+            (it, i, _) => _buildItemTile(it, i, strings, false),
             strings,
           ),
         ),
@@ -91,20 +127,9 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
               _buildSearchBar(strings),
               Expanded(
                 child: _buildItemsFuture(
-                  (items) {
-                    if (_selectedItem == null && items.isNotEmpty) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() => _selectedItem = items.first);
-                      });
-                    }
-                    return ListView.builder(
-                      itemCount: items.length,
-                      itemBuilder: (context, i) {
-                        final it = items[i];
-                        final isSel = _selectedItem?.id == it.id;
-                        return _buildItemTile(it, i + 1, strings, isSel);
-                      },
-                    );
+                  (it, i, isSel) {
+                    _autoSelectFirst();
+                    return _buildItemTile(it, i, strings, isSel);
                   },
                   strings,
                 ),
@@ -195,23 +220,55 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
     );
   }
 
-  Widget _buildItemsFuture(Widget Function(List<HeritageItem>) builder, dynamic strings) {
-    return FutureBuilder<List<HeritageItem>>(
-      future: _future,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+  Widget _buildItemsFuture(
+    Widget Function(HeritageItem item, int index, bool isSelected) tileBuilder,
+    dynamic strings,
+  ) {
+    if (_loading && _items.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_hasError && _items.isEmpty) {
+      return Center(child: Text('${strings.errorPrefix}: ${strings.loadFailGeneric}'));
+    }
+    if (_items.isEmpty) {
+      return Center(child: Text(strings.noRecordings));
+    }
+    final hasMore = _items.length < _total;
+    return ListView.builder(
+      itemCount: _items.length + (hasMore ? 1 : 0),
+      itemBuilder: (context, i) {
+        if (i >= _items.length) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Center(
+              child: _loadingMore
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: _loadMore,
+                      icon: const Icon(Icons.expand_more, size: 18),
+                      label: Text('${strings.adminLoadMore} ($_total)'),
+                    ),
+            ),
+          );
         }
-        if (snap.hasError) {
-          return Center(child: Text('${strings.errorPrefix}: ${ApiClient.describe(snap.error!)}'));
-        }
-        final items = snap.data ?? [];
-        if (items.isEmpty) {
-          return Center(child: Text(strings.noRecordings));
-        }
-        return builder(items);
+        final it = _items[i];
+        return tileBuilder(it, i + 1, _selectedItem?.id == it.id);
       },
     );
+  }
+
+  void _autoSelectFirst() {
+    if (_selectedItem == null && _items.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectedItem == null && _items.isNotEmpty) {
+          setState(() => _selectedItem = _items.first);
+        }
+      });
+    }
   }
 
   Widget _buildItemTile(HeritageItem it, int index, dynamic strings, bool isSelected) {

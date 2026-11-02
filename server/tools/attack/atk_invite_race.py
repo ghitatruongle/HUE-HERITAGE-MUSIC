@@ -48,10 +48,12 @@ def main():
         if r.status_code == 200 and u.lower() in ("admin", "administrator", "root", "moderator", "system"):
             breaches.append((f"đăng ký tên nhạy cảm '{u}'", "tạo được TK mang tên quản trị dễ đoán"))
 
-    # 2. Đua mã one-time: mỗi vòng tạo 1 mã mới qua admin? — script này chỉ dùng 1 code tĩnh,
-    #    mã one-time thật do orchestrator cấp qua --code; 10 luồng đua cùng lúc:
+    # 2. Đua mã one-time: mã one-time thật do orchestrator cấp qua --codes-file;
+    #    mã tĩnh (mặc định) dùng lại được là thiết kế — không tính là đua.
     for rnd in range(args.rounds):
-        race_code = codes[rnd] if rnd < len(codes) else args.code
+        if rnd >= len(codes):
+            break
+        race_code = codes[rnd]
         username_base = f"race{rnd}_{secrets.token_hex(2)}"
         with ThreadPoolExecutor(max_workers=10) as ex:
             rs = list(ex.map(

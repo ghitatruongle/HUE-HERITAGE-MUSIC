@@ -80,7 +80,7 @@ def _make_item(sha_suffix, size=2048):
 def test_admin_destructive_ops_require_fresh_unlock(monkeypatch):
     client, admin_headers = _admin_client(monkeypatch)
     _register(client, "unlocktest1")
-    users = client.get("/api/auth/users", headers=admin_headers).json()
+    users = client.get("/api/auth/users", headers=admin_headers).json()["items"]
     target = next(u for u in users if u["username"] == "unlocktest1")
 
     r = client.post(f"/api/auth/users/{target['id']}/reset-password", headers=admin_headers)
@@ -375,7 +375,7 @@ def test_admin_reset_password_sets_flag(monkeypatch):
     _admin_unlock(client, admin_headers)
     _register(client, "needreset1")
     client = TestClient(create_app())
-    users = client.get("/api/auth/users", headers=admin_headers).json()
+    users = client.get("/api/auth/users", headers=admin_headers).json()["items"]
     target = next(u for u in users if u["username"] == "needreset1")
     r = client.post(f"/api/auth/users/{target['id']}/reset-password", headers=admin_headers)
     assert r.status_code == 200
@@ -502,3 +502,603 @@ def test_register_accepts_valid_non_gmail_email(monkeypatch):
     )
     assert bad.status_code == 400
     assert bad.json()["detail"] == "invalid email address"
+
+
+def _upload_item(client, title, headers=None):
+    data = b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00" + secrets.token_hex(8).encode()
+    r = client.post(
+        "/api/heritage/upload",
+        files={"file": (f"{title}.wav", data, "audio/wav")},
+        data={"title": title},
+        headers=headers or {},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_auth_required_defaults_on():
+    from app.config import Settings
+
+    assert Settings.model_fields["auth_required"].default is True
+
+
+def test_admin_upload_visibility_hidden_from_users(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client, admin_headers = _admin_client(monkeypatch)
+    body = _upload_item(client, "Admin Test File 1", headers=admin_headers)
+    assert body["visibility"] == "admin_only"
+
+    _register(client, "vieweruser1")
+    user_headers = {"Authorization": f"Bearer {_login(client, 'vieweruser1')['token']}"}
+
+    listing = client.get("/api/heritage", headers=user_headers).json()
+    assert all(i["id"] != body["id"] for i in listing["items"])
+    assert client.get(f"/api/heritage/{body['id']}", headers=user_headers).status_code == 404
+    assert client.get(f"/api/heritage/{body['id']}/audio", headers=user_headers).status_code == 404
+    assert client.get(f"/api/heritage/{body['id']}/audio-url", headers=user_headers).status_code == 404
+    assert (
+        client.get(
+            "/api/music/play-url",
+            params={"path": f"/api/heritage/{body['id']}/audio"},
+            headers=user_headers,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/api/music/cover",
+            params={"heritage_id": body["id"], "style": "nha nhac"},
+            headers=user_headers,
+        ).status_code
+        == 404
+    )
+
+    admin_listing = client.get("/api/heritage", headers=admin_headers).json()
+    assert any(i["id"] == body["id"] for i in admin_listing["items"])
+
+
+def test_user_upload_public_and_visible_to_others(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client = TestClient(create_app())
+    _register(client, "uploader1")
+    uploader_headers = {"Authorization": f"Bearer {_login(client, 'uploader1')['token']}"}
+    body = _upload_item(client, "User Public Song 1", headers=uploader_headers)
+    assert body["visibility"] == "public"
+
+    _register(client, "vieweruser2")
+    viewer_headers = {"Authorization": f"Bearer {_login(client, 'vieweruser2')['token']}"}
+    listing = client.get("/api/heritage", headers=viewer_headers).json()
+    assert any(i["id"] == body["id"] for i in listing["items"])
+    assert client.get(f"/api/heritage/{body['id']}", headers=viewer_headers).status_code == 200
+
+
+def test_visibility_toggle_revokes_old_signed_urls(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client = TestClient(create_app())
+    _register(client, "uploader2")
+    uploader_headers = {"Authorization": f"Bearer {_login(client, 'uploader2')['token']}"}
+    body = _upload_item(client, "Toggle Song 1", headers=uploader_headers)
+    item_id = body["id"]
+
+    url_user = client.get(f"/api/heritage/{item_id}/audio-url", headers=uploader_headers).json()["url"]
+    assert client.get(url_user).status_code == 200
+
+    client2, admin_headers = _admin_client(monkeypatch)
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    uploader_headers = {"Authorization": f"Bearer {_login(client, 'uploader2')['token']}"}
+    url_user = client.get(f"/api/heritage/{item_id}/audio-url", headers=uploader_headers).json()["url"]
+    assert (
+        client2.patch(
+            f"/api/admin/storage/{item_id}/visibility",
+            json={"visibility": "admin_only"},
+            headers=admin_headers,
+        ).status_code
+        == 403
+    )
+    _admin_unlock(client2, admin_headers)
+    r = client2.patch(
+        f"/api/admin/storage/{item_id}/visibility",
+        json={"visibility": "admin_only"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["visibility"] == "admin_only"
+
+    assert client.get(url_user).status_code == 401
+    assert client.get(f"/api/heritage/{item_id}/audio", headers=uploader_headers).status_code == 404
+
+    url_admin = client2.get(f"/api/heritage/{item_id}/audio-url", headers=admin_headers).json()["url"]
+    assert client2.get(url_admin).status_code == 200
+
+    r = client2.patch(
+        f"/api/admin/storage/{item_id}/visibility",
+        json={"visibility": "public"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200
+    assert client2.get(url_admin).status_code == 401
+    assert client.get(url_user).status_code == 200
+
+
+def test_bad_visibility_value_rejected(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+    body = _make_item(secrets.token_hex(4))
+    r = client.patch(
+        f"/api/admin/storage/{body['id']}/visibility",
+        json={"visibility": "secret"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 400
+
+
+def test_creation_tunes_and_lessons_respect_visibility(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client, admin_headers = _admin_client(monkeypatch)
+    hidden = _upload_item(client, "Hidden Tune 1", headers=admin_headers)
+    _register(client, "tunesviewer1")
+    user_headers = {"Authorization": f"Bearer {_login(client, 'tunesviewer1')['token']}"}
+
+    tunes_user = client.get("/api/music/heritage-tunes", headers=user_headers).json()
+    assert all(i["id"] != hidden["id"] for i in tunes_user)
+    tunes_admin = client.get("/api/music/heritage-tunes", headers=admin_headers).json()
+    assert any(i["id"] == hidden["id"] for i in tunes_admin)
+
+    lessons_user = client.get("/api/lessons", headers=user_headers).json()
+    assert all(l.get("id") != hidden["id"] for l in lessons_user)
+
+
+def test_heritage_pagination_offset(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    client = TestClient(create_app())
+    prefix = "PageTest" + secrets.token_hex(4)
+    ids = [_upload_item(client, f"{prefix} {i}")["id"] for i in range(3)]
+
+    page1 = client.get("/api/heritage", params={"q": prefix, "limit": 2}).json()
+    assert page1["total"] == 3
+    assert len(page1["items"]) == 2
+    page2 = client.get("/api/heritage", params={"q": prefix, "limit": 2, "offset": 2}).json()
+    assert page2["total"] == 3
+    assert len(page2["items"]) == 1
+    got = {i["id"] for i in page1["items"]} | {i["id"] for i in page2["items"]}
+    assert got == set(ids)
+
+
+def test_users_and_invites_pagination(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    for n in range(3):
+        _register(client, f"pageuser{n}")
+    r = client.get("/api/auth/users", params={"limit": 2}, headers=admin_headers).json()
+    assert r["total"] >= 4
+    assert len(r["items"]) == 2
+    r2 = client.get("/api/auth/users", params={"limit": 2, "offset": 2}, headers=admin_headers).json()
+    assert not {u["id"] for u in r["items"]} & {u["id"] for u in r2["items"]}
+
+    for n in range(3):
+        c = client.post("/api/auth/invites", json={}, headers=admin_headers)
+        assert c.status_code == 200
+    inv = client.get("/api/auth/invites", params={"limit": 2}, headers=admin_headers).json()
+    assert inv["total"] >= 3
+    assert len(inv["items"]) == 2
+
+
+def test_admin_storage_lists_visibility_and_owner(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    client = TestClient(create_app())
+    body = _upload_item(client, "Storage Row 1")
+
+    client2, admin_headers = _admin_client(monkeypatch)
+    rows = client2.get("/api/admin/storage", params={"q": "Storage Row 1"}, headers=admin_headers).json()
+    assert rows["items_total"] >= 1
+    row = next(i for i in rows["items"] if i["id"] == body["id"])
+    assert row["visibility"] == "public"
+    assert row["owner_username"] == ""
+
+    paged = client2.get(
+        "/api/admin/storage", params={"q": "Storage Row 1", "limit": 1, "offset": 0}, headers=admin_headers
+    ).json()
+    assert paged["count"] == 1
+    assert paged["items_total"] == rows["items_total"]
+
+    _admin_unlock(client2, admin_headers)
+    r = client2.patch(
+        f"/api/admin/storage/{body['id']}/visibility",
+        json={"visibility": "admin_only"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200
+    row2 = client2.get("/api/admin/storage", params={"q": "Storage Row 1"}, headers=admin_headers).json()["items"][0]
+    assert row2["visibility"] == "admin_only"
+    assert client.get(f"/api/heritage/{body['id']}").status_code == 404
+
+
+def test_admin_security_events_endpoint(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client = TestClient(create_app())
+    _register(client, "secviewer1")
+    bad = client.post("/api/auth/login", json={"identifier": "secviewer1", "password": "wrong-pass"})
+    assert bad.status_code == 401
+    user_headers = {"Authorization": f"Bearer {_login(client, 'secviewer1')['token']}"}
+
+    assert client.get("/api/admin/security/events", headers=user_headers).status_code == 403
+    assert client.get("/api/admin/security/summary", headers=user_headers).status_code == 403
+
+    client2, admin_headers = _admin_client(monkeypatch)
+    events = client2.get("/api/admin/security/events", params={"event": "login_failed"}, headers=admin_headers).json()
+    assert events["total"] >= 1
+    assert any(e["event"] == "login_failed" for e in events["events"])
+
+    summary = client2.get("/api/admin/security/summary", headers=admin_headers).json()
+    assert summary["counts"].get("login_failed", 0) >= 1
+    assert summary["last_admin_login"] is not None
+
+
+def test_admin_security_events_filter_by_username(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    events = client.get(
+        "/api/admin/security/events", params={"q": settings.admin_truong_username}, headers=admin_headers
+    ).json()
+    assert events["total"] >= 1
+    assert all(settings.admin_truong_username in str(e) for e in events["events"])
+
+
+def test_admin_stats_cached_and_refreshable(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    r1 = client.get("/api/admin/stats", headers=admin_headers)
+    assert r1.status_code == 200
+    r2 = client.get("/api/admin/stats", headers=admin_headers)
+    assert r2.status_code == 200
+    r3 = client.get("/api/admin/stats", params={"refresh": 1}, headers=admin_headers)
+    assert r3.status_code == 200
+    assert r3.json()["users"]["total"] >= 1
+
+
+def test_admin_cleanup_frees_old_files_and_tasks(monkeypatch):
+    import os
+    from datetime import datetime, timedelta
+
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+
+    gen_dir = Path(settings.storage_dir) / "generated"
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    old_file = gen_dir / f"cleanup_test_{secrets.token_hex(4)}.mp3"
+    old_file.write_bytes(b"x" * 2048)
+    old_ts = time.time() - 40 * 86400
+    os.utime(old_file, (old_ts, old_ts))
+
+    db = SessionLocal()
+    try:
+        task = crud.create_task(db, "generate", {"x": 1})
+        db_task = crud.get_task(db, task["id"] if isinstance(task, dict) else task.id)
+        db_task.finished_at = datetime.now() - timedelta(days=40)
+        db.commit()
+        task_id = db_task.id
+    finally:
+        db.close()
+
+    r = client.post("/api/admin/maintenance/cleanup", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["freed_bytes"] >= 2048
+    assert data["details"]["generated"]["files"] >= 1
+    assert data["details"]["tasks"]["deleted"] >= 1
+    assert not old_file.exists()
+
+    db = SessionLocal()
+    try:
+        assert crud.get_task(db, task_id) is None
+    finally:
+        db.close()
+
+
+def test_offset_bomb_and_limit_bomb_rejected_safely(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    client = TestClient(create_app())
+    for params in (
+        {"offset": 10**30},
+        {"offset": -5},
+        {"limit": 10**30},
+        {"limit": -1},
+    ):
+        r = client.get("/api/heritage", params=params)
+        assert r.status_code == 200, f"{params} → {r.status_code}"
+        assert isinstance(r.json()["items"], list)
+    r = client.get("/api/heritage", params={"offset": 10**30, "limit": 10**30})
+    assert r.status_code == 200
+    bomb = "[" * 20000 + "]" * 20000
+    r = client.post(
+        "/api/auth/login",
+        content=bomb,
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code < 500, f"depth bomb → {r.status_code}"
+
+
+def test_admin_promotion_invalidates_old_tokens(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client = TestClient(create_app())
+    body = _register(client, settings.admin_truong_username)
+    old_token = body["token"]
+
+    client2 = TestClient(create_app())
+    r = client2.get("/api/auth/me", headers={"Authorization": f"Bearer {old_token}"})
+    assert r.status_code == 401, "token cấp trước khi thăng chức phải chết (epoch bump)"
+    fresh = _login(client2, settings.admin_truong_username)
+    assert fresh["role"] == "admin"
+    r = client2.get("/api/auth/me", headers={"Authorization": f"Bearer {fresh['token']}"})
+    assert r.status_code == 200
+
+
+def test_unicode_sig_rejected_cleanly_no_500(monkeypatch):
+    from fastapi import HTTPException
+
+    from app.api.auth import parse_token
+
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    with pytest.raises(HTTPException) as ei:
+        parse_token("00000000-0000-0000-0000-000000000000.9999999999.0.f\u0641")
+    assert ei.value.status_code == 401
+
+    client, admin_headers = _admin_client(monkeypatch)
+    body = _upload_item(client, "Unicode Sig Song")
+    iid = body["id"]
+    url = client.get(f"/api/heritage/{iid}/audio-url", headers=admin_headers).json()["url"]
+    exp = url.split("e=")[1].split("&")[0]
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    r = client.get(f"/api/heritage/{iid}/audio?e={exp}&s=f\u0641")
+    assert r.status_code == 401, f"sig unicode → {r.status_code}"
+    r = client.get(f"/api/heritage/{iid}/audio?e={exp}&s=%D9%81")
+    assert r.status_code == 401, f"sig unicode percent-encoded → {r.status_code}"
+
+
+def test_register_failure_ip_cap(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "register_failure_ip_limit", 3, raising=False)
+    client = TestClient(create_app())
+    codes = []
+    for i in range(5):
+        r = client.post(
+            "/api/auth/register",
+            json={
+                "username": f"capuser{i}",
+                "email": f"capuser{i}@gmail.com",
+                "password": "secret123",
+                "invite_code": "SAI-CODE",
+            },
+        )
+        codes.append(r.status_code)
+    assert 429 in codes, f"trần thất bại/IP không kích hoạt: {codes}"
+    assert all(x in (400, 429) for x in codes)
+
+
+def _tone_wav(seconds=1.0, sr=16000, freq=440.0):
+    import io
+    import math
+    import struct
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        n = int(sr * seconds)
+        frames = b"".join(
+            struct.pack("<h", int(9000 * math.sin(2 * math.pi * freq * i / sr))) for i in range(n)
+        )
+        w.writeframes(frames)
+    return buf.getvalue() + b"HUEJUNK" + secrets.token_hex(16).encode()
+
+
+def test_restore_and_instruments_item_enforce_visibility(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    monkeypatch.setattr(settings, "heavy_rate_limit", 100000, raising=False)
+    client = TestClient(create_app())
+    client2, admin_headers = _admin_client(monkeypatch)
+    wav = _tone_wav()
+    up = client2.post(
+        "/api/heritage/upload",
+        files={"file": ("secret_tone.wav", wav, "audio/wav")},
+        data={"title": "Secret Tone"},
+        headers=admin_headers,
+    )
+    assert up.status_code == 200, up.text
+    item_id = up.json()["id"]
+    sha = up.json()["sha256"]
+
+    normal = _register(client, "visuser1")
+    nh = {"Authorization": f"Bearer {normal['token']}"}
+    ah = admin_headers
+
+    assert client.get(f"/api/heritage/{item_id}", headers=nh).status_code == 404
+    r = client.post(f"/api/music/restore-item/{item_id}", headers=nh)
+    assert r.status_code == 404, f"restore-item phải 404 với item admin_only: {r.status_code} {r.text[:120]}"
+    r = client.post(f"/api/music/instruments-item/{item_id}", headers=nh)
+    assert r.status_code == 404, f"instruments-item phải 404 với item admin_only: {r.status_code}"
+
+    rr = client2.post(f"/api/music/restore-item/{item_id}", headers=ah)
+    assert rr.status_code == 200, rr.text
+    assert rr.json()["sha"] == sha
+
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    assert client.get(f"/api/music/restored-url/{sha}", headers=nh).status_code == 404
+    assert client.get(f"/api/music/midi/{sha}", headers=nh).status_code == 404
+    assert client.get(f"/api/music/musicxml/{sha}", headers=nh).status_code == 404
+
+    url = client2.get(f"/api/music/restored-url/{sha}", headers=ah).json()["url"]
+    got = client2.get(url)
+    assert got.status_code == 200, f"anonymous signed url đúng scope phải tải được: {got.status_code}"
+    assert got.content.startswith(b"RIFF")
+
+
+def test_restored_chain_open_for_public_item(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", True, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client = TestClient(create_app())
+    body = _register(client, "pubrestore1")
+    nh = {"Authorization": f"Bearer {body['token']}"}
+    wav = _tone_wav(seconds=0.5)
+    up = client.post(
+        "/api/heritage/upload",
+        files={"file": ("pub_tone.wav", wav, "audio/wav")},
+        data={"title": "Pub Tone"},
+        headers=nh,
+    )
+    assert up.status_code == 200, up.text
+    sha = up.json()["sha256"]
+    r = client.post(f"/api/music/restore-item/{up.json()['id']}", headers=nh)
+    assert r.status_code == 200, r.text
+    url = client.get(f"/api/music/restored-url/{sha}", headers=nh).json()["url"]
+    got = client.get(url)
+    assert got.status_code == 200
+    assert got.content.startswith(b"RIFF")
+
+
+def test_restore_item_file_race_returns_404_not_500(monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client = TestClient(create_app())
+    wav = _tone_wav(seconds=0.4)
+    up = client.post(
+        "/api/heritage/upload",
+        files={"file": ("race_tone.wav", wav, "audio/wav")},
+        data={"title": "Race Tone"},
+    )
+    assert up.status_code == 200, up.text
+    filename = up.json()["filename"]
+    real_read = Path.read_bytes
+
+    def boom(self, *a, **k):
+        if self.name == filename:
+            raise OSError("file vanished mid-read")
+        return real_read(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", boom)
+    r = client.post(f"/api/music/restore-item/{up.json()['id']}")
+    assert r.status_code == 404, f"race đọc file phải 404: {r.status_code} {r.text[:120]}"
+
+
+def test_transcribe_and_evaluate_reject_nonfinite_bpm(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    client = TestClient(create_app())
+    wav = _tone_wav(seconds=0.4)
+    for bpm_value in ("nan", "NaN"):
+        r = client.post(
+            "/api/music/transcribe",
+            files={"file": ("a.wav", wav, "audio/wav")},
+            data={"bpm": bpm_value},
+        )
+        assert r.status_code == 400, f"bpm={bpm_value} → {r.status_code} (trước đây 500)"
+        r2 = client.post(
+            "/api/music/evaluate",
+            files={"file": ("a.wav", wav, "audio/wav")},
+            data={"truth": "[]", "bpm": bpm_value},
+        )
+        assert r2.status_code == 400, f"evaluate bpm={bpm_value} → {r2.status_code}"
+
+
+def test_sse_events_cap_per_client(monkeypatch):
+    from app.api import music_gen as mg
+
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    tid = "task-sse-cap-1"
+    with generator_service.TASKS_LOCK:
+        generator_service.TASKS[tid] = {
+            "id": tid,
+            "kind": "generate",
+            "status": "done",
+            "created_at": time.time(),
+        }
+    try:
+        client = TestClient(create_app())
+        r = client.get(f"/api/music/task/{tid}/events")
+        assert r.status_code == 200
+        with mg._SSE_LOCK:
+            mg._SSE_ACTIVE["testclient"] = mg._SSE_LIMIT_PER_CLIENT
+        try:
+            r2 = client.get(f"/api/music/task/{tid}/events")
+            assert r2.status_code == 429, f"vượt trần SSE phải 429: {r2.status_code}"
+        finally:
+            with mg._SSE_LOCK:
+                mg._SSE_ACTIVE.pop("testclient", None)
+    finally:
+        with generator_service.TASKS_LOCK:
+            generator_service.TASKS.pop(tid, None)
+
+
+def test_task_audio_path_enforces_item_visibility(monkeypatch):
+    from app.storage import manager as storage_manager
+
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
+    monkeypatch.setattr(settings, "heavy_rate_limit", 100000, raising=False)
+    client = TestClient(create_app())
+    client2, admin_headers = _admin_client(monkeypatch)
+    wav = _tone_wav(seconds=0.4)
+    up = client2.post(
+        "/api/heritage/upload",
+        files={"file": ("hidden_task.wav", wav, "audio/wav")},
+        data={"title": "Hidden Task Tone"},
+        headers=admin_headers,
+    )
+    assert up.status_code == 200, up.text
+    sha = up.json()["sha256"]
+    audio_path = Path(settings.storage_dir) / "heritage" / "original" / f"{sha}.wav"
+
+    r = client.post(
+        "/api/task",
+        params={"kind": "transcribe"},
+        json={"params": {"audio_path": str(audio_path), "bpm": 60}},
+    )
+    assert r.status_code == 404, f"transcribe file gốc admin_only phải 404: {r.status_code} {r.text[:120]}"
+
+    outside = client.post(
+        "/api/task",
+        params={"kind": "transcribe"},
+        json={"params": {"audio_path": "/etc/hosts", "bpm": 60}},
+    )
+    assert outside.status_code == 400
+
+    orphan = storage_manager.temp_dir() / "orphan_tone.wav"
+    orphan.write_bytes(wav)
+    ok = client.post(
+        "/api/task",
+        params={"kind": "transcribe"},
+        json={"params": {"audio_path": str(orphan), "bpm": 60}},
+    )
+    assert ok.status_code == 200, ok.text
+
+
+def test_generic_task_is_terminal(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    client = TestClient(create_app())
+    r = client.post("/api/task", json={"note": "x"}, params={"kind": "generic"})
+    assert r.status_code == 200, r.text
+    tid = r.json()["id"]
+    body = client.get(f"/api/task/{tid}").json()
+    assert body["status"] == "done"
+    assert body["finished_at"] is not None
+
+
+def test_admin_can_create_multiple_emailless_users(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+    for n in range(3):
+        r = client.post("/api/auth/users", json={"username": f"noemail{n}"}, headers=admin_headers)
+        assert r.status_code == 200, f"user thứ {n + 1} không tạo được: {r.text}"
+    users = client.get("/api/auth/users", params={"limit": 200}, headers=admin_headers).json()["items"]
+    noemails = [u for u in users if u["username"].startswith("noemail")]
+    assert len(noemails) == 3

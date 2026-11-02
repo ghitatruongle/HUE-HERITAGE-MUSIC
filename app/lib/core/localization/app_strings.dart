@@ -527,4 +527,106 @@ class AppStrings {
   String get adminReauthConfirm => isVi ? 'Xác nhận' : 'Confirm';
   String get adminReauthWrong => isVi ? 'Mật khẩu không đúng' : 'Wrong password';
   String get adminReauthCancelled => isVi ? 'Đã hủy — chưa xác thực quản trị.' : 'Cancelled — admin not re-authorized.';
+
+  String get adminTabSecurity => isVi ? 'Bảo mật' : 'Security';
+  String get adminLoadMore => isVi ? 'Tải thêm' : 'Load more';
+  String get loadFailGeneric => isVi ? 'Không tải được dữ liệu.' : 'Failed to load data.';
+
+  String get adminVisibilityPublic => isVi ? 'Công khai' : 'Public';
+  String get adminVisibilityAdminOnly => isVi ? 'Chỉ admin' : 'Admin only';
+  String get adminVisibilityToggleHint => isVi
+      ? 'Bật = chỉ admin thấy (ẩn khỏi người dùng). Tắt = công khai.'
+      : 'On = admin only (hidden from users). Off = public.';
+  String get adminVisibilityNowAdminOnly => isVi
+      ? 'Đã chuyển sang "Chỉ admin" — người dùng thường không còn thấy bản ghi này.'
+      : 'Switched to "Admin only" — regular users can no longer see this item.';
+  String get adminVisibilityNowPublic => isVi
+      ? 'Đã chuyển sang "Công khai" — mọi người dùng đều thấy bản ghi này.'
+      : 'Switched to "Public" — all users can see this item.';
+
+  String get adminCleanupTitle => isVi ? 'Dọn dẹp dữ liệu thừa' : 'Cleanup stale data';
+  String get adminCleanupHint => isVi
+      ? 'Xóa bản thu AI đã tạo, practice MIDI, cache bài học quá hạn và tác vụ đã xong quá lâu.'
+      : 'Delete expired AI-generated audio, practice MIDI, lesson caches and old finished tasks.';
+  String get adminCleanupRun => isVi ? 'Dọn dẹp' : 'Clean up';
+  String get adminCleanupConfirm => isVi
+      ? 'Chạy dọn dẹp ngay? Các file quá hạn sẽ bị xóa vĩnh viễn.'
+      : 'Run cleanup now? Expired files will be permanently deleted.';
+  String get adminCleanupDonePrefix => isVi ? 'Đã thu hồi' : 'Reclaimed';
+  String adminCleanupTasksDeleted(int n) => isVi ? 'đã xóa $n tác vụ cũ' : 'deleted $n old tasks';
+  String get adminCleanupFail => isVi ? 'Dọn dẹp thất bại.' : 'Cleanup failed.';
+
+  String get securityTitle => isVi ? 'Sự kiện bảo mật' : 'Security events';
+  String get securityEmpty => isVi ? 'Chưa có sự kiện bảo mật nào.' : 'No security events yet.';
+  String get securityQuietWindow => isVi ? '24 giờ qua: không có sự kiện bất thường.' : 'Last 24h: no notable events.';
+  String get securityLastAdminLogin => isVi ? 'Đăng nhập admin gần nhất' : 'Last admin login';
+  String get securitySearchHint => isVi ? 'Tìm theo username/IP...' : 'Search by username/IP...';
+  String get securityFilterAll => isVi ? 'Tất cả sự kiện' : 'All events';
+  String get securityTruncated => isVi
+      ? 'Log quá dài — chỉ quét được phần mới nhất (20.000 dòng).'
+      : 'Log too long — only the newest part was scanned (20,000 lines).';
+  String securityEventLabel(String event) {
+    final vi = <String, String>{
+      'login_success': 'Đăng nhập thành công',
+      'login_failed': 'Đăng nhập sai mật khẩu',
+      'login_ip_flood': 'Flood đăng nhập (IP)',
+      'login_rate_limited': 'Bị chặn do thử sai nhiều lần',
+      'login_blocked_disabled': 'Đăng nhập tài khoản bị khóa',
+      'register_success': 'Đăng ký thành công',
+      'register_failed': 'Đăng ký bị từ chối',
+      'register_ip_flood': 'Flood đăng ký (IP)',
+      'register_rate_limited': 'Bị chặn đăng ký',
+      'admin_login': 'Admin đăng nhập',
+      'admin_unlock': 'Xác thực quản trị thành công',
+      'admin_unlock_failed': 'Xác thực quản trị sai mật khẩu',
+      'admin_visibility_changed': 'Đổi chế độ hiển thị bản ghi',
+      'admin_cleanup_run': 'Chạy dọn dẹp',
+      'storage_item_deleted': 'Xóa bản ghi kho lưu trữ',
+      'user_created_by_admin': 'Admin tạo tài khoản',
+      'user_deleted': 'Xóa tài khoản',
+      'user_active_changed': 'Bật/tắt tài khoản',
+      'password_changed': 'Đổi mật khẩu',
+      'password_rehashed': 'Nâng chuẩn mã hóa mật khẩu',
+      'password_reset_by_admin': 'Admin đặt lại mật khẩu',
+      'change_password_failed': 'Đổi mật khẩu sai mật khẩu cũ',
+      'tokens_revoked': 'Đăng xuất mọi thiết bị',
+      'invite_created': 'Tạo mã mời',
+      'invite_deleted': 'Xóa mã mời',
+      'invite_code_conflict': 'Mã mời bị trùng dùng',
+      'heavy_rate_limited': 'Chặn yêu cầu nặng quá hạn mức',
+    };
+    final en = <String, String>{
+      'login_success': 'Login success',
+      'login_failed': 'Login failed',
+      'login_ip_flood': 'Login flood (IP)',
+      'login_rate_limited': 'Rate-limited (repeated failures)',
+      'login_blocked_disabled': 'Login of disabled account',
+      'register_success': 'Registration success',
+      'register_failed': 'Registration rejected',
+      'register_ip_flood': 'Registration flood (IP)',
+      'register_rate_limited': 'Registration rate-limited',
+      'admin_login': 'Admin login',
+      'admin_unlock': 'Admin unlock success',
+      'admin_unlock_failed': 'Admin unlock wrong password',
+      'admin_visibility_changed': 'Item visibility changed',
+      'admin_cleanup_run': 'Cleanup run',
+      'storage_item_deleted': 'Storage item deleted',
+      'user_created_by_admin': 'Account created by admin',
+      'user_deleted': 'Account deleted',
+      'user_active_changed': 'Account enabled/disabled',
+      'password_changed': 'Password changed',
+      'password_rehashed': 'Password hash upgraded',
+      'password_reset_by_admin': 'Password reset by admin',
+      'change_password_failed': 'Change password wrong old password',
+      'tokens_revoked': 'Logged out everywhere',
+      'invite_created': 'Invite created',
+      'invite_deleted': 'Invite deleted',
+      'invite_code_conflict': 'Invite code reuse conflict',
+      'heavy_rate_limited': 'Heavy request rate-limited',
+    };
+    if (isVi) {
+      return vi[event] ?? event;
+    }
+    return en[event] ?? event;
+  }
 }
