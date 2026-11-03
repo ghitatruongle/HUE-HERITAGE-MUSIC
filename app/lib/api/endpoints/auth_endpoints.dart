@@ -69,6 +69,20 @@ class CreatedAccount {
       );
 }
 
+class AccountPage {
+  final List<AccountEntry> items;
+  final int total;
+
+  AccountPage({required this.items, required this.total});
+}
+
+class InvitePage {
+  final List<InviteEntry> items;
+  final int total;
+
+  InvitePage({required this.items, required this.total});
+}
+
 class AuthEndpoints {
   final Dio dio;
 
@@ -106,18 +120,26 @@ class AuthEndpoints {
     return AuthUser.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
-  Future<List<InviteEntry>> listInvites() async {
-    final res = await dio.get('/api/auth/invites');
+  Future<InvitePage> listInvites({int limit = 50, int offset = 0}) async {
+    final res = await dio.get(
+      '/api/auth/invites',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
     final raw = res.data;
     final list = <InviteEntry>[];
-    if (raw is List) {
-      for (final e in raw) {
-        if (e is Map) {
-          list.add(InviteEntry.fromJson(Map<String, dynamic>.from(e)));
+    int total = 0;
+    if (raw is Map) {
+      total = raw['total'] is num ? (raw['total'] as num).toInt() : 0;
+      final items = raw['items'];
+      if (items is List) {
+        for (final e in items) {
+          if (e is Map) {
+            list.add(InviteEntry.fromJson(Map<String, dynamic>.from(e)));
+          }
         }
       }
     }
-    return list;
+    return InvitePage(items: list, total: total);
   }
 
   Future<InviteEntry> createInvite({String code = '', String note = ''}) async {
@@ -141,18 +163,26 @@ class AuthEndpoints {
     await dio.post('/api/auth/revoke-all');
   }
 
-  Future<List<AccountEntry>> listAccounts() async {
-    final res = await dio.get('/api/auth/users');
+  Future<AccountPage> listAccounts({int limit = 50, int offset = 0}) async {
+    final res = await dio.get(
+      '/api/auth/users',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
     final raw = res.data;
     final list = <AccountEntry>[];
-    if (raw is List) {
-      for (final e in raw) {
-        if (e is Map) {
-          list.add(AccountEntry.fromJson(Map<String, dynamic>.from(e)));
+    int total = 0;
+    if (raw is Map) {
+      total = raw['total'] is num ? (raw['total'] as num).toInt() : 0;
+      final items = raw['items'];
+      if (items is List) {
+        for (final e in items) {
+          if (e is Map) {
+            list.add(AccountEntry.fromJson(Map<String, dynamic>.from(e)));
+          }
         }
       }
     }
-    return list;
+    return AccountPage(items: list, total: total);
   }
 
   Future<void> setAccountActive(String id, bool active) async {

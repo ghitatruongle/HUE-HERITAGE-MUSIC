@@ -33,6 +33,9 @@ _auth_failures: dict = {}
 _auth_failures_lock = threading.Lock()
 _identifier_failures: dict = {}
 _IDENTIFIER_FAILURE_LIMIT = 20
+_ADMIN_UNLOCK_FAILURE_LIMIT = 5
+_admin_unlock_failures: dict = {}
+_register_ip_failures: dict = {}
 _invite_lock = threading.Lock()
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
@@ -121,6 +124,23 @@ def _clear_failures(key: str) -> None:
         _auth_failures.pop(key, None)
 
 
+def _ip_failures_exceeded(store: dict, key: str, limit: int) -> bool:
+    now = time.time()
+    with _auth_failures_lock:
+        stamps = [t for t in store.get(key, []) if now - t < AUTH_FAILURE_WINDOW]
+        store[key] = stamps
+        return len(stamps) >= limit
+
+
+def _record_ip_failure(store: dict, key: str) -> None:
+    now = time.time()
+    with _auth_failures_lock:
+        if len(store) > 20000:
+            for k in [k for k, v in store.items() if not v or now - v[-1] > AUTH_FAILURE_WINDOW]:
+                store.pop(k, None)
+        store.setdefault(key, []).append(now)
+
+
 def get_valid_invite_codes(db=None) -> List[str]:
     codes: List[str] = []
     if db is not None:
@@ -204,7 +224,7 @@ def parse_token(token: str) -> tuple:
         raise HTTPException(status_code=401, detail="invalid token")
     sig = token.rsplit(".", 1)[1]
     expected = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
+    if not hmac.compare_digest(sig.encode("utf-8", "replace"), expected.encode("ascii")):
         raise HTTPException(status_code=401, detail="invalid token")
     if expires < time.time():
         raise HTTPException(status_code=401, detail="token expired")
@@ -287,6 +307,22 @@ def _bearer_user(request: Request, db: Session):
     return user
 
 
+def resolve_bearer_user(request: Request, db: Session):
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return None
+    try:
+        user_id, epoch = parse_token(header[7:].strip())
+    except HTTPException:
+        return None
+    user = crud.get_user_by_id(db, user_id)
+    if user is None or epoch < (user.token_epoch or 0):
+        return None
+    if getattr(user, "active", 1) == 0:
+        raise HTTPException(status_code=403, detail="account disabled")
+    return user
+
+
 def _role_of(user) -> str:
     return user.role or "user"
 
@@ -319,6 +355,11 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
         security_log.security_event("register_ip_flood", ip=_client_ip(request))
         raise HTTPException(status_code=429, detail="too many requests, slow down")
 
+    fail_key = f"regfail:{_client_ip(request)}"
+    if _ip_failures_exceeded(_register_ip_failures, fail_key, max(1, settings.register_failure_ip_limit)):
+        security_log.security_event("register_failures_ip_limited", ip=_client_ip(request))
+        raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
+
     key = f"register:{_client_ip(request)}:{u.lower()}"
     if _attempts_exceeded(key):
         security_log.security_event("register_rate_limited", ip=_client_ip(request), username=u)
@@ -328,6 +369,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
             _validate_registration(db, u, e, p, c)
         except HTTPException as exc:
             _record_failure(key)
+            _record_ip_failure(_register_ip_failures, fail_key)
             security_log.security_event("register_failed", ip=_client_ip(request), username=u, detail=exc.detail)
             raise
 
@@ -340,6 +382,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
             user = crud.create_user(db, username=u, email=e, password_hash=hash_password(p))
         except IntegrityError:
             _record_failure(key)
+            _record_ip_failure(_register_ip_failures, fail_key)
             security_log.security_event("register_failed", ip=_client_ip(request), username=u, detail="duplicate")
             raise HTTPException(status_code=409, detail="username or email already exists")
 
@@ -423,21 +466,27 @@ def _generate_invite_code() -> str:
 
 
 @router.get("/invites")
-def list_invites(admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def list_invites(limit: int = 50, offset: int = 0, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
     from ..database.models import InviteCode
 
-    rows = db.query(InviteCode).order_by(InviteCode.created_at.desc()).all()
-    return [
-        {
-            "id": r.id,
-            "code": r.code,
-            "note": r.note or "",
-            "used": r.used_by is not None,
-            "used_at": str(r.used_at) if r.used_at else None,
-            "created_at": str(r.created_at),
-        }
-        for r in rows
-    ]
+    base = db.query(InviteCode).order_by(InviteCode.created_at.desc())
+    total = base.count()
+    safe_offset = max(0, min(int(offset), 10**9))
+    rows = base.offset(safe_offset).limit(max(1, min(limit, 200))).all()
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": r.id,
+                "code": r.code,
+                "note": r.note or "",
+                "used": r.used_by is not None,
+                "used_at": str(r.used_at) if r.used_at else None,
+                "created_at": str(r.created_at),
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.post("/invites")
@@ -544,11 +593,18 @@ class AdminUnlockRequest(BaseModel):
 
 
 @router.post("/admin-unlock")
-def admin_unlock(req: AdminUnlockRequest, db: Session = Depends(get_db), admin_id: str = Depends(require_admin)):
+def admin_unlock(req: AdminUnlockRequest, request: Request, db: Session = Depends(get_db), admin_id: str = Depends(require_admin)):
+    unlock_key = f"unlock:{_client_ip(request)}:{admin_id}"
+    if _ip_failures_exceeded(_admin_unlock_failures, unlock_key, _ADMIN_UNLOCK_FAILURE_LIMIT):
+        security_log.security_event("admin_unlock_rate_limited", admin=admin_id, ip=_client_ip(request))
+        raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
     user = crud.get_user_by_id(db, admin_id)
     if not user or not _uniform_verify(req.password, user.password_hash):
-        security_log.security_event("admin_unlock_failed", admin=admin_id)
+        _record_ip_failure(_admin_unlock_failures, unlock_key)
+        security_log.security_event("admin_unlock_failed", admin=admin_id, ip=_client_ip(request))
         raise HTTPException(status_code=401, detail="wrong password")
+    with _auth_failures_lock:
+        _admin_unlock_failures.pop(unlock_key, None)
     _admin_unlocks[admin_id] = time.time()
     security_log.security_event("admin_unlock", admin=admin_id)
     return {"unlocked": True, "window_seconds": settings.admin_unlock_window_seconds}
@@ -613,5 +669,6 @@ def revoke_all_tokens(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/users")
-def list_users(admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
-    return crud.list_users(db)
+def list_users(limit: int = 50, offset: int = 0, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+    total, rows = crud.list_users(db, limit=max(1, min(limit, 200)), offset=max(0, offset))
+    return {"items": rows, "total": total}

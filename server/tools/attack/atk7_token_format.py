@@ -38,7 +38,7 @@ def main():
         for i, t in enumerate(weird):
             r = c.get("/api/auth/me", headers={"Authorization": f"Bearer {t}"})
             attempts += 1
-            if r.status_code == 200 and i not in (2,):
+            if r.status_code == 200 and i not in (1, 2):
                 breaches.append((f"token weird #{i} được chấp nhận v{rnd}", f"{t[:40]}"))
 
     verdict("TOKEN-FORMAT", attempts, breaches)

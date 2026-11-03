@@ -84,11 +84,11 @@ def test_heritage_metadata_and_search():
     assert r.status_code == 200
     assert r.json()["recorded_time"] == "1968"
     r = client.get("/api/heritage", params={"q": "đàn tranh"})
-    assert any(i["id"] == item_id for i in r.json())
+    assert any(i["id"] == item_id for i in r.json()["items"])
     r = client.get("/api/heritage", params={"q": "Sáu Thùng"})
-    assert any(i["id"] == item_id for i in r.json())
+    assert any(i["id"] == item_id for i in r.json()["items"])
     r = client.get("/api/heritage", params={"q": "1968"})
-    assert any(i["id"] == item_id for i in r.json())
+    assert any(i["id"] == item_id for i in r.json()["items"])
 
 
 def test_transcribe_basic_pitch_detects_440hz():

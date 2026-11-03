@@ -9,6 +9,7 @@ import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../auth/account_manager_section.dart';
 import '../auth/invite_manager_section.dart';
+import 'security_section.dart';
 
 String formatBytes(num bytes) {
   if (bytes < 1024) return '$bytes B';
@@ -30,7 +31,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -61,6 +62,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 Tab(text: strings.adminTabUsers),
                 Tab(text: strings.adminTabInvites),
                 Tab(text: strings.adminTabStorage),
+                Tab(text: strings.adminTabSecurity),
               ],
             ),
           ),
@@ -72,6 +74,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 _UsersTab(),
                 _InvitesTab(),
                 _StorageTab(),
+                SecuritySection(),
               ],
             ),
           ),
@@ -88,8 +91,12 @@ class _DashboardTab extends StatefulWidget {
   State<_DashboardTab> createState() => _DashboardTabState();
 }
 
-class _DashboardTabState extends State<_DashboardTab> {
+class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveClientMixin {
   late Future<AdminStats> _future;
+  AdminStats? _last;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -108,16 +115,20 @@ class _DashboardTabState extends State<_DashboardTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final strings = context.watch<LocaleProvider>().strings;
     return RefreshIndicator(
       onRefresh: () async => _reload(),
       child: FutureBuilder<AdminStats>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
+          if (snap.connectionState != ConnectionState.done && _last == null) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError || !snap.hasData) {
+            if (_last != null) {
+              return _buildStats(_last!, strings);
+            }
             return ListView(
               children: [
                 const SizedBox(height: 48),
@@ -133,78 +144,82 @@ class _DashboardTabState extends State<_DashboardTab> {
               ],
             );
           }
-          final s = snap.data!;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                color: s.engineOnline
-                    ? AppTheme.emeraldGreen.withValues(alpha: 0.12)
-                    : Colors.redAccent.withValues(alpha: 0.10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: ListTile(
-                  leading: Icon(
-                    s.engineOnline ? Icons.dns : Icons.dns_outlined,
-                    color: s.engineOnline ? AppTheme.emeraldGreen : Colors.redAccent,
-                  ),
-                  title: Text(
-                    s.engineOnline ? strings.adminEngineOnline : strings.adminEngineOffline,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: s.engineOnline ? AppTheme.emeraldGreen : Colors.redAccent,
-                    ),
-                  ),
-                  subtitle: s.engineOnline ? null : Text(strings.adminEngineOfflineHint),
-                ),
-              ),
-              const SizedBox(height: 12),
-              GridView.count(
-                crossAxisCount: MediaQuery.of(context).size.width >= 720 ? 4 : 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 2.4,
-                children: [
-                  _StatCard(
-                    icon: Icons.people_alt_outlined,
-                    label: strings.adminStatUsers,
-                    value: '${s.usersTotal}',
-                    sub: '${strings.adminStatActive}: ${s.usersActive}',
-                  ),
-                  _StatCard(
-                    icon: Icons.confirmation_number_outlined,
-                    label: strings.adminStatInvites,
-                    value: '${s.invitesTotal}',
-                    sub: '${strings.adminStatUnused}: ${s.invitesUnused}',
-                  ),
-                  _StatCard(
-                    icon: Icons.library_music_outlined,
-                    label: strings.adminStatItems,
-                    value: '${s.itemsTotal}',
-                    sub: formatBytes(s.itemsBytes),
-                  ),
-                  _StatCard(
-                    icon: Icons.graphic_eq_outlined,
-                    label: strings.adminStatDerived,
-                    value: '${s.derivedFiles}',
-                    sub: formatBytes(s.derivedBytes),
-                  ),
-                  _StatCard(
-                    icon: Icons.auto_awesome_outlined,
-                    label: strings.adminStatGenerated,
-                    value: formatBytes(s.generatedBytes),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _TaskGroupCard(title: strings.adminStatTasks, counts: s.tasksByStatus),
-              const SizedBox(height: 10),
-              _TaskGroupCard(title: strings.adminStatTasksKind, counts: s.tasksByKind),
-            ],
-          );
+          _last = snap.data!;
+          return _buildStats(_last!, strings);
         },
       ),
+    );
+  }
+
+  Widget _buildStats(AdminStats s, dynamic strings) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          color: s.engineOnline
+              ? AppTheme.emeraldGreen.withValues(alpha: 0.12)
+              : Colors.redAccent.withValues(alpha: 0.10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: Icon(
+              s.engineOnline ? Icons.dns : Icons.dns_outlined,
+              color: s.engineOnline ? AppTheme.emeraldGreen : Colors.redAccent,
+            ),
+            title: Text(
+              s.engineOnline ? strings.adminEngineOnline : strings.adminEngineOffline,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: s.engineOnline ? AppTheme.emeraldGreen : Colors.redAccent,
+              ),
+            ),
+            subtitle: s.engineOnline ? null : Text(strings.adminEngineOfflineHint),
+          ),
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: MediaQuery.of(context).size.width >= 720 ? 4 : 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 2.4,
+          children: [
+            _StatCard(
+              icon: Icons.people_alt_outlined,
+              label: strings.adminStatUsers,
+              value: '${s.usersTotal}',
+              sub: '${strings.adminStatActive}: ${s.usersActive}',
+            ),
+            _StatCard(
+              icon: Icons.confirmation_number_outlined,
+              label: strings.adminStatInvites,
+              value: '${s.invitesTotal}',
+              sub: '${strings.adminStatUnused}: ${s.invitesUnused}',
+            ),
+            _StatCard(
+              icon: Icons.library_music_outlined,
+              label: strings.adminStatItems,
+              value: '${s.itemsTotal}',
+              sub: formatBytes(s.itemsBytes),
+            ),
+            _StatCard(
+              icon: Icons.graphic_eq_outlined,
+              label: strings.adminStatDerived,
+              value: '${s.derivedFiles}',
+              sub: formatBytes(s.derivedBytes),
+            ),
+            _StatCard(
+              icon: Icons.auto_awesome_outlined,
+              label: strings.adminStatGenerated,
+              value: formatBytes(s.generatedBytes),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _TaskGroupCard(title: strings.adminStatTasks, counts: s.tasksByStatus),
+        const SizedBox(height: 10),
+        _TaskGroupCard(title: strings.adminStatTasksKind, counts: s.tasksByKind),
+      ],
     );
   }
 }
@@ -488,15 +503,23 @@ class _StorageTab extends StatefulWidget {
   State<_StorageTab> createState() => _StorageTabState();
 }
 
-class _StorageTabState extends State<_StorageTab> {
+class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientMixin {
   final _searchCtrl = TextEditingController();
-  late Future<List<StorageEntry>> _future;
+  final List<StorageEntry> _items = [];
+  int _total = 0;
+  bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasError = false;
+  bool _cleaning = false;
   String _query = '';
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _reload();
   }
 
   @override
@@ -505,13 +528,46 @@ class _StorageTabState extends State<_StorageTab> {
     super.dispose();
   }
 
-  Future<List<StorageEntry>> _load() async {
-    final dio = context.read<ServerConfig>().api.dio;
-    return AdminEndpoints(dio).storage(q: _query, limit: 200);
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await AdminEndpoints(dio).storage(q: _query, limit: 50);
+      if (!mounted) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(page.items);
+        _total = page.total;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _hasError = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
-  void _reload() {
-    setState(() => _future = _load());
+  Future<void> _loadMore() async {
+    if (_loadingMore || _items.length >= _total) return;
+    setState(() => _loadingMore = true);
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await AdminEndpoints(dio).storage(q: _query, limit: 50, offset: _items.length);
+      if (!mounted) return;
+      final known = _items.map((e) => e.id).toSet();
+      setState(() {
+        for (final entry in page.items) {
+          if (!known.contains(entry.id)) _items.add(entry);
+        }
+        _total = page.total;
+      });
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _confirmDelete(StorageEntry entry) async {
@@ -540,16 +596,94 @@ class _StorageTabState extends State<_StorageTab> {
       await runWithAdminReauth(context, () => AdminEndpoints(dio).deleteStorageItem(entry.id));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminStorageDeleted)));
+      setState(() {
+        _items.removeWhere((e) => e.id == entry.id);
+        _total = _total > 0 ? _total - 1 : 0;
+      });
     } on AdminReauthCancelled {
       return;
     } catch (_) {
-    } finally {
       if (mounted) _reload();
+    }
+  }
+
+  Future<void> _toggleVisibility(StorageEntry entry, bool adminOnly) async {
+    final strings = context.read<LocaleProvider>().strings;
+    final newVisibility = adminOnly ? 'admin_only' : 'public';
+    final idx = _items.indexWhere((e) => e.id == entry.id);
+    if (idx >= 0) {
+      setState(() => _items[idx] = entry.copyWith(visibility: newVisibility));
+    }
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      await runWithAdminReauth(context, () => AdminEndpoints(dio).setVisibility(entry.id, newVisibility));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            adminOnly ? strings.adminVisibilityNowAdminOnly : strings.adminVisibilityNowPublic,
+          ),
+        ),
+      );
+    } on AdminReauthCancelled {
+      if (mounted && idx >= 0) {
+        setState(() => _items[idx] = entry);
+      }
+    } catch (_) {
+      if (mounted && idx >= 0) {
+        setState(() => _items[idx] = entry);
+      }
+    }
+  }
+
+  Future<void> _confirmCleanup() async {
+    final strings = context.read<LocaleProvider>().strings;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.adminCleanupTitle),
+        content: Text(strings.adminCleanupConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(strings.adminCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(strings.adminCleanupRun),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _cleaning = true);
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final result = await runWithAdminReauth(context, () => AdminEndpoints(dio).cleanup());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${strings.adminCleanupDonePrefix} ${formatBytes(result.freedBytes)}'
+            ' · ${strings.adminCleanupTasksDeleted(result.tasksDeleted)}',
+          ),
+        ),
+      );
+      _reload();
+    } on AdminReauthCancelled {
+      return;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminCleanupFail)));
+      }
+    } finally {
+      if (mounted) setState(() => _cleaning = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final strings = context.watch<LocaleProvider>().strings;
     return Column(
       children: [
@@ -574,73 +708,172 @@ class _StorageTabState extends State<_StorageTab> {
               ),
               IconButton(
                 tooltip: strings.adminRefresh,
-                onPressed: _reload,
+                onPressed: _loading ? null : _reload,
                 icon: const Icon(Icons.refresh),
               ),
             ],
           ),
         ),
         Expanded(
-          child: FutureBuilder<List<StorageEntry>>(
-            future: _future,
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snap.hasError || !snap.hasData) {
-                return Center(child: Text(strings.adminLoadFail));
-              }
-              final items = snap.data!;
-              if (items.isEmpty) {
-                return Center(child: Text(strings.adminStorageEmpty));
-              }
-              return ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final entry = items[index];
-                  return Card(
-                    margin: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: ListTile(
-                      title: Text(
+          child: _buildList(strings),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList(dynamic strings) {
+    if (_loading && _items.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_hasError && _items.isEmpty) {
+      return Center(child: Text(strings.adminLoadFail));
+    }
+    if (_items.isEmpty) {
+      return Center(child: Text(strings.adminStorageEmpty));
+    }
+    final hasMore = _items.length < _total;
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _items.length + 1 + (hasMore ? 1 : 0),
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return _buildCleanupCard(strings);
+        }
+        final rowIndex = index - 1;
+        if (rowIndex < _items.length) {
+          return _buildStorageRow(_items[rowIndex], strings);
+        }
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Center(
+            child: _loadingMore
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: _loadMore,
+                    icon: const Icon(Icons.expand_more, size: 16),
+                    label: Text('${strings.adminLoadMore} ($_total)'),
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCleanupCard(dynamic strings) {
+    return Card(
+      margin: EdgeInsets.zero,
+      color: AppTheme.amberGold.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: const Icon(Icons.cleaning_services_outlined, color: AppTheme.amberGold),
+        title: Text(
+          strings.adminCleanupTitle,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+        ),
+        subtitle: Text(
+          strings.adminCleanupHint,
+          style: const TextStyle(fontSize: 11.5),
+        ),
+        trailing: FilledButton.tonal(
+          onPressed: _cleaning ? null : _confirmCleanup,
+          child: _cleaning
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(strings.adminCleanupRun),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStorageRow(StorageEntry entry, dynamic strings) {
+    final scheme = Theme.of(context).colorScheme;
+    final adminOnly = entry.adminOnly;
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
                       ),
-                      subtitle: Text(
+                      Text(
                         '${entry.filename} · ${formatBytes(entry.size)}'
                         '${entry.derivedBytes > 0 ? ' + ${formatBytes(entry.derivedBytes)}' : ''}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 11.5),
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!entry.originalExists)
-                            Tooltip(
-                              message: strings.adminStorageOriginalMissing,
-                              child: const Icon(Icons.warning_amber_rounded,
-                                  color: Colors.amber, size: 20),
-                            ),
-                          IconButton(
-                            tooltip: strings.adminDelete,
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                            onPressed: () => _confirmDelete(entry),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                    ],
+                  ),
+                ),
+                if (!entry.originalExists)
+                  Tooltip(
+                    message: strings.adminStorageOriginalMissing,
+                    child: const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                  ),
+                IconButton(
+                  tooltip: strings.adminDelete,
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: () => _confirmDelete(entry),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Icon(
+                  adminOnly ? Icons.lock_outline : Icons.public,
+                  size: 15,
+                  color: adminOnly ? AppTheme.amberGold : AppTheme.emeraldGreen,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  adminOnly ? strings.adminVisibilityAdminOnly : strings.adminVisibilityPublic,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: adminOnly ? AppTheme.amberGold : AppTheme.emeraldGreen,
+                  ),
+                ),
+                if (entry.ownerUsername.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    entry.ownerUsername,
+                    style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+                const Spacer(),
+                Tooltip(
+                  message: strings.adminVisibilityToggleHint,
+                  child: Switch(
+                    value: adminOnly,
+                    onChanged: (v) => _toggleVisibility(entry, v),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

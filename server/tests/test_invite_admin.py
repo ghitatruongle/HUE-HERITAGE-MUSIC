@@ -93,7 +93,7 @@ def test_invite_crud_admin_only(monkeypatch):
 
     listing = client.get("/api/auth/invites", headers={"Authorization": f"Bearer {admin_token}"})
     assert listing.status_code == 200
-    codes = {x["code"] for x in listing.json()}
+    codes = {x["code"] for x in listing.json()["items"]}
     assert body["code"] in codes and "MACHUNGCHI" in codes
 
     deleted = client.delete(
@@ -102,7 +102,7 @@ def test_invite_crud_admin_only(monkeypatch):
     )
     assert deleted.status_code == 200
     listing2 = client.get("/api/auth/invites", headers={"Authorization": f"Bearer {admin_token}"})
-    assert "MACHUNGCHI" not in {x["code"] for x in listing2.json()}
+    assert "MACHUNGCHI" not in {x["code"] for x in listing2.json()["items"]}
 
     missing = client.delete(
         "/api/auth/invites/nonexistent",

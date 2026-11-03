@@ -47,6 +47,8 @@ class HeritageItem(Base):
     is_instrumental: Mapped[bool] = mapped_column(Boolean, default=False)
     audio_backing_path: Mapped[str] = mapped_column(String(512), default="")
     featured_in_creation: Mapped[bool] = mapped_column(Boolean, default=True)
+    owner_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    visibility: Mapped[str] = mapped_column(String(16), default="public")
     sha256: Mapped[str] = mapped_column(String(64), unique=True)
     filename: Mapped[str] = mapped_column(String(256))
     size: Mapped[int] = mapped_column(Integer, default=0)

@@ -1,5 +1,37 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.2-preview (2026-11-03)
+
+### Riêng tư dữ liệu — file test/thử mẫu không còn lộ cho người dùng
+- Thêm chế độ hiển thị từng bản ghi: `Công khai` / `Chỉ admin` (cột `visibility` + `owner_user_id` tự migrate vào DB khi khởi động, bản cũ giữ nguyên công khai)
+- **Upload của admin trưởng tự động ở chế độ "Chỉ admin"** — file test/thử mẫu không xuất hiện với người dùng thường ở mọi đường đọc: thư viện, chi tiết, audio, audio-url, play-url, heritage-tunes, bài học, cover/sing-original/sing-new-lyrics, luyện tập
+- **Công tắc "Chỉ admin" ngay trong tab Kho lưu trữ** (Admin → Storage) — đổi chế độ tức thì, không cần tải lại trang
+- **Vá lỗ signed-URL**: chữ ký gắn kèm chế độ hiện tại của bản ghi (`vis:...`) — chuyển bản ghi sang "Chỉ admin" làm vô hiệu ngay mọi URL ký cũ, không phải chờ TTL 6h; URL mới cấp cho admin vẫn phát bình thường
+- Người dùng thường dò trộm bản ghi ẩn qua bất kỳ endpoint nào đều nhận 404 (không lộ sự tồn tại)
+
+### Giao diện bảo mật — tab "Bảo mật" mới trong Quản trị
+- Bảng sự kiện bảo mật đọc trực tiếp từ security.log của server: đăng nhập thành công/sai mật khẩu, flood IP, admin-unlock, đổi visibility, xóa bản ghi, tạo/xóa tài khoản, mã mời…
+- Thống kê 24 giờ dạng chip + thời điểm đăng nhập admin gần nhất; lọc theo loại sự kiện, tìm theo username/IP; phân trang "Tải thêm"
+- Server bổ sung 2 endpoint: `GET /api/admin/security/events` + `GET /api/admin/security/summary` (chỉ admin), log thêm sự kiện `heavy_rate_limited`
+
+### Chống giật lag
+- **Diệt "refetch storm"**: danh sách Người dùng / Mã mời trước đây gọi API lại mỗi lần rebuild giao diện — giờ fetch một lần khi mở tab, hành động (xóa/khóa/tạo) cập nhật cục bộ không tải lại cả danh sách
+- **Keep-alive cả 5 tab Quản trị**: chuyển qua lại tab không còn gọi lại API, giữ nguyên trạng thái cuộn
+- Phân trang "Tải thêm" cho: Kho lưu trữ, Người dùng, Mã mời, Thư viện di sản (hết cảnh cắt lặng im ở mốc 200 bản ghi)
+- Server: vá N+1 query ở `GET /api/admin/storage` (1 query gộp thay vì query từng bản ghi), cache thống kê Dashboard TTL 30s (riêng dung lượng generated TTL 60s, `?refresh=1` bỏ qua)
+
+### Dọn dẹp tự động
+- Tự xóa task đã hoàn tất quá `TASK_RETENTION_DAYS` (mặc định 30 ngày) khi khởi động server — bảng tasks trước đây phình vô hạn
+- Nút "Dọn dẹp dữ liệu thừa" trong tab Kho lưu trữ: xóa bản thu AI đã tạo / practice MIDI / cache bài học quá hạn (`GENERATED_RETENTION_DAYS`, `PRACTICE_MIDI_RETENTION_DAYS`, `LESSON_CACHE_RETENTION_DAYS`), báo dung lượng thu hồi + số task đã xóa, ghi sự kiện bảo mật
+
+### Hardening
+- `AUTH_REQUIRED` mặc định **true** ngay trong code — server quên cấu hình không còn mở cửa hoàn toàn
+- `.env.example` bổ sung 4 biến retention + `ENABLE_DOCS` (khớp tên biến thật trong code)
+
+### Khác
+- Version app `0.0.2+1`, server stage `0.0.2-preview`
+- Kiểm định: pytest 137/137 (13 test hồi quy mới), flutter analyze 0, flutter test 29/29, red-team visibility-IDOR sạch, sweep bảo mật liên tục toàn xanh
+
 ## 0.0.1 (chính thức) (2026-10-28)
 
 ### Sửa lỗi — tải lại trang không còn bị đăng xuất

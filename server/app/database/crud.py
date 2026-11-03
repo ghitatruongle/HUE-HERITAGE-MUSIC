@@ -30,17 +30,74 @@ def get_by_sha(db: Session, sha: str):
     return db.query(HeritageItem).filter(HeritageItem.sha256 == sha).first()
 
 
-def list_items(db: Session, q: str = "", limit: int = 50):
+def is_admin_user(user) -> bool:
+    if user is None:
+        return False
+    if (user.role or "user") != "admin":
+        return False
+    from ..config import settings
+
+    return user.username == settings.admin_truong_username
+
+
+def _visibility_filter(viewer):
+    if is_admin_user(viewer):
+        return None
+    return or_(HeritageItem.visibility.is_(None), HeritageItem.visibility == "public")
+
+
+def can_view_item(item, viewer) -> bool:
+    if item is None:
+        return False
+    if is_admin_user(viewer):
+        return True
+    return (getattr(item, "visibility", None) or "public") == "public"
+
+
+def _search_filter(q: str):
+    if not q:
+        return None
+    like = "%" + q + "%"
+    return or_(*[getattr(HeritageItem, f).like(like) for f in SEARCH_FIELDS])
+
+
+def _clamp_offset(offset: int) -> int:
+    return max(0, min(int(offset), 10**9))
+
+
+def list_items(db: Session, q: str = "", limit: int = 50, offset: int = 0, viewer=None):
     query = db.query(HeritageItem)
-    if q:
-        like = "%" + q + "%"
-        conds = [getattr(HeritageItem, f).like(like) for f in SEARCH_FIELDS]
-        query = query.filter(or_(*conds))
-    return query.order_by(HeritageItem.created_at.desc()).limit(limit).all()
+    vf = _visibility_filter(viewer)
+    if vf is not None:
+        query = query.filter(vf)
+    sf = _search_filter(q)
+    if sf is not None:
+        query = query.filter(sf)
+    return (
+        query.order_by(HeritageItem.created_at.desc())
+        .offset(_clamp_offset(offset))
+        .limit(max(1, int(limit)))
+        .all()
+    )
 
 
-def get_creation_tunes(db: Session):
-    return db.query(HeritageItem).filter(HeritageItem.featured_in_creation.is_(True)).order_by(HeritageItem.title.asc()).all()
+def count_items(db: Session, q: str = "", viewer=None) -> int:
+    query = db.query(HeritageItem)
+    vf = _visibility_filter(viewer)
+    if vf is not None:
+        query = query.filter(vf)
+    sf = _search_filter(q)
+    if sf is not None:
+        query = query.filter(sf)
+    return query.count()
+
+
+def get_creation_tunes(db: Session, viewer=None):
+    query = db.query(HeritageItem).filter(HeritageItem.featured_in_creation.is_(True))
+    vf = _visibility_filter(viewer)
+    if vf is not None:
+        query = query.filter(vf)
+    return query.order_by(HeritageItem.title.asc()).all()
 
 
 def update_item_metadata(db: Session, item_id: str, **fields):
@@ -55,11 +112,14 @@ def update_item_metadata(db: Session, item_id: str, **fields):
     return item
 
 
-def create_item(db: Session, title: str, type: str, sha256: str, filename: str, size: int, artist: str = "", **metadata):
+def create_item(db: Session, title: str, type: str, sha256: str, filename: str, size: int, artist: str = "", owner_user_id: Optional[str] = None, visibility: str = "public", **metadata):
     fields = {k: v for k, v in metadata.items() if k != "bpm"}
     item = HeritageItem(
         title=title, type=type, artist=artist, sha256=sha256, filename=filename, size=size,
-        bpm=metadata.get("bpm"), **fields,
+        bpm=metadata.get("bpm"),
+        owner_user_id=owner_user_id,
+        visibility=visibility if visibility in ("public", "admin_only") else "public",
+        **fields,
     )
     db.add(item)
     db.commit()
@@ -98,9 +158,16 @@ def get_user_by_id(db: Session, user_id: str):
     return db.get(User, user_id)
 
 
-def list_users(db: Session):
-    rows = db.query(User).order_by(User.created_at).all()
-    return [
+def list_users(db: Session, limit: int = 0, offset: int = 0):
+    base = db.query(User).order_by(User.created_at)
+    total = base.count()
+    query = base
+    if offset and int(offset) > 0:
+        query = query.offset(_clamp_offset(offset))
+    if limit and int(limit) > 0:
+        query = query.limit(max(1, int(limit)))
+    rows = query.all()
+    return total, [
         {
             "id": u.id,
             "username": u.username,
@@ -163,7 +230,8 @@ def reset_user_password(db: Session, user_id: str, password_hash: str):
 
 def create_user(db: Session, username: str, password_hash: str, email: str = "", must_change_password: bool = False):
     from sqlalchemy.exc import IntegrityError
-    user = User(username=username, email=email, password_hash=password_hash, must_change_password=1 if must_change_password else 0)
+    safe_email = email.strip() or f"{username}@no-email.local"
+    user = User(username=username, email=safe_email, password_hash=password_hash, must_change_password=1 if must_change_password else 0)
     db.add(user)
     try:
         db.commit()
@@ -283,6 +351,20 @@ def fail_stale_running_tasks(db: Session, reason: str = "interrupted by server r
         task.finished_at = datetime.now()
     db.commit()
     return len(stale)
+
+
+def prune_old_tasks(db: Session, days: int = 30) -> int:
+    if days <= 0:
+        return 0
+    from datetime import timedelta
+
+    cutoff = datetime.now() - timedelta(days=int(days))
+    query = db.query(Task).filter(Task.finished_at.isnot(None), Task.finished_at < cutoff)
+    count = query.count()
+    if count:
+        query.delete(synchronize_session=False)
+        db.commit()
+    return count
 
 
 def _safe_json_loads(val: str) -> dict:

@@ -1,5 +1,6 @@
 """HACKER 8 — Header injection: CRLF trong params, XFF nhiều tầng, header Oversized."""
 import argparse
+import secrets
 import sys
 from pathlib import Path
 

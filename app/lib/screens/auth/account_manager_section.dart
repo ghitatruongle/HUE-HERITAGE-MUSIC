@@ -16,10 +16,70 @@ class AccountManagerSection extends StatefulWidget {
 }
 
 class _AccountManagerSectionState extends State<AccountManagerSection> {
+  final List<AccountEntry> _accounts = [];
+  int _total = 0;
+  bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await AuthEndpoints(dio).listAccounts();
+      if (!mounted) return;
+      setState(() {
+        _accounts
+          ..clear()
+          ..addAll(page.items);
+        _total = page.total;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _hasError = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _accounts.length >= _total) return;
+    setState(() => _loadingMore = true);
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await AuthEndpoints(dio).listAccounts(offset: _accounts.length);
+      if (!mounted) return;
+      final known = _accounts.map((e) => e.id).toSet();
+      setState(() {
+        for (final acc in page.items) {
+          if (!known.contains(acc.id)) _accounts.add(acc);
+        }
+        _total = page.total;
+      });
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  void _replaceLocal(AccountEntry updated) {
+    final idx = _accounts.indexWhere((e) => e.id == updated.id);
+    if (idx >= 0 && mounted) {
+      setState(() => _accounts[idx] = updated);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
-    final dio = context.read<ServerConfig>().api.dio;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -27,76 +87,93 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
           children: [
             const Icon(Icons.manage_accounts, size: 18, color: Colors.amber),
             const SizedBox(width: 8),
-            Text(strings.accountManagerTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Expanded(
+              child: Text(
+                '${strings.accountManagerTitle} ($_total)',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+            IconButton(
+              tooltip: strings.adminRefresh,
+              onPressed: _loading ? null : _reload,
+              icon: const Icon(Icons.refresh, size: 18),
+            ),
           ],
         ),
         const SizedBox(height: 4),
         Text(strings.accountManagerHint, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 10),
-        FutureBuilder<List<AccountEntry>>(
-          future: AuthEndpoints(dio).listAccounts(),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()));
-            }
-            if (snap.hasError) {
-              return Text(
-                '${strings.authInviteLoadFail}: ${ApiClient.describe(snap.error!)}',
-                style: const TextStyle(fontSize: 12, color: Colors.red),
-              );
-            }
-            final accounts = snap.data ?? [];
-            return Column(
-              children: [
-                for (final acc in accounts)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
+        if (_loading && _accounts.isEmpty)
+          const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+        else if (_hasError && _accounts.isEmpty)
+          Text(
+            strings.authInviteLoadFail,
+            style: const TextStyle(fontSize: 12, color: Colors.red),
+          )
+        else ...[
+          for (final acc in _accounts)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(acc.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  const SizedBox(width: 6),
-                                  if (acc.role == 'admin')
-                                    const Icon(Icons.admin_panel_settings, size: 13, color: Colors.amber)
-                                  else
-                                    const Icon(Icons.person, size: 13, color: Colors.blueGrey),
-                                  if (!acc.active) ...[
-                                    const SizedBox(width: 6),
-                                    const Icon(Icons.block, size: 13, color: Colors.red),
-                                  ],
-                                ],
-                              ),
-                              if (acc.email.isNotEmpty)
-                                Text(acc.email, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+                        Row(
+                          children: [
+                            Text(acc.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(width: 6),
+                            if (acc.role == 'admin')
+                              const Icon(Icons.admin_panel_settings, size: 13, color: Colors.amber)
+                            else
+                              const Icon(Icons.person, size: 13, color: Colors.blueGrey),
+                            if (!acc.active) ...[
+                              const SizedBox(width: 6),
+                              const Icon(Icons.block, size: 13, color: Colors.red),
                             ],
-                          ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.vpn_key_outlined, size: 16),
-                          tooltip: strings.accountResetPassword,
-                          onPressed: () => _resetAccountPassword(acc),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.person_remove, size: 16, color: Colors.red),
-                          tooltip: strings.accountDeleteTitle,
-                          onPressed: acc.role == 'admin' ? null : () => _deleteAccount(acc),
-                        ),
-                        Switch(
-                          value: acc.active,
-                          onChanged: acc.role == 'admin' ? null : (v) => _toggleAccountActive(acc, v),
-                        ),
+                        if (acc.email.isNotEmpty)
+                          Text(acc.email, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
                       ],
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                  IconButton(
+                    icon: const Icon(Icons.vpn_key_outlined, size: 16),
+                    tooltip: strings.accountResetPassword,
+                    onPressed: () => _resetAccountPassword(acc),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.person_remove, size: 16, color: Colors.red),
+                    tooltip: strings.accountDeleteTitle,
+                    onPressed: acc.role == 'admin' ? null : () => _deleteAccount(acc),
+                  ),
+                  Switch(
+                    value: acc.active,
+                    onChanged: acc.role == 'admin' ? null : (v) => _toggleAccountActive(acc, v),
+                  ),
+                ],
+              ),
+            ),
+          if (_accounts.length < _total)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Center(
+                child: _loadingMore
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: _loadMore,
+                        icon: const Icon(Icons.expand_more, size: 16),
+                        label: Text('${strings.adminLoadMore} ($_total)'),
+                      ),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -122,12 +199,14 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       await runWithAdminReauth(context, () => AuthEndpoints(dio).deleteAccount(acc.id));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${strings.accountDeleted}: ${acc.username}')),
-        );
-        setState(() {});
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${strings.accountDeleted}: ${acc.username}')),
+      );
+      setState(() {
+        _accounts.removeWhere((e) => e.id == acc.id);
+        _total = _total > 0 ? _total - 1 : 0;
+      });
     } on AdminReauthCancelled {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));
@@ -144,7 +223,15 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       await runWithAdminReauth(context, () => AuthEndpoints(dio).setAccountActive(acc.id, active));
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      _replaceLocal(AccountEntry(
+        id: acc.id,
+        username: acc.username,
+        email: acc.email,
+        role: acc.role,
+        active: active,
+        mustChangePassword: acc.mustChangePassword,
+      ));
     } on AdminReauthCancelled {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));

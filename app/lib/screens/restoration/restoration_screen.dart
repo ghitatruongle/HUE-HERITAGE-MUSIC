@@ -54,7 +54,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
   Future<List<HeritageItem>> _loadItems(String q) async {
     final dio = context.read<ServerConfig>().api.dio;
-    final list = await HeritageApi(dio).list(q: q);
+    final list = (await HeritageApi(dio).list(q: q, limit: 200)).items;
     if (mounted) {
       setState(() {
         _allTracks = list;

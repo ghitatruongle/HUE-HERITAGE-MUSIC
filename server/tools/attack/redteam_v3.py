@@ -233,7 +233,8 @@ def crypto_section(base, admin_h, user_h):
     print("\n== D. THAY THẾ MẬT MÃ ==")
     c = httpx.Client(base_url=base, timeout=30, headers=user_h)
     r = c.get("/api/heritage").json()
-    item_id = r[0]["id"] if r else None
+    items = r.get("items", []) if isinstance(r, dict) else r
+    item_id = items[0]["id"] if items else None
     if item_id:
         c2 = httpx.Client(base_url=base, timeout=30)
         url = c.get(f"/api/heritage/{item_id}/audio-url").json()["url"]
@@ -268,10 +269,75 @@ def mass_section(base, user_h):
     hdr_injected = any(k.lower() in ("set-cookie", "x-inject") for k in r.headers.keys())
     check("E2 title CRLF → không inject header phản hồi", ok_status and not hdr_injected, f"status={r.status_code}")
     r = c.get("/api/heritage", params={"q": "T"})
-    found = [x for x in r.json() if "Set-Cookie" in x.get("title", "")]
+    payload = r.json()
+    rows = payload.get("items", []) if isinstance(payload, dict) else payload
+    found = [x for x in rows if "Set-Cookie" in x.get("title", "")]
     stored_raw = len(found) > 0
     check("E3 title CRLF lưu trong JSON vẫn escape an toàn", not stored_raw or True, f"n={len(found)}")
     c.close()
+
+
+def visibility_section(base, admin_h, user_h, attacker_h):
+    print("\n== F. VISIBILITY-IDOR — FILE ADMIN_ONLY KHÔNG LỘ CHO USER ==")
+    ca = httpx.Client(base_url=base, timeout=60, headers=admin_h)
+    cu = httpx.Client(base_url=base, timeout=30, headers=user_h)
+    cx = httpx.Client(base_url=base, timeout=30, headers=attacker_h)
+    marker = "AdminOnly v3 " + secrets.token_hex(3)
+    wav = make_wav(31)
+    r = ca.post("/api/heritage/upload", files={"file": ("adminonly.wav", wav, "audio/wav")}, data={"title": marker})
+    ok = r.status_code == 200
+    check("F0 admin upload → tự động admin_only", ok and r.json().get("visibility") == "admin_only", f"status={r.status_code} vis={r.json().get('visibility') if ok else '?'}")
+    if not ok:
+        ca.close()
+        cu.close()
+        cx.close()
+        return
+    item_id = r.json()["id"]
+
+    r = cu.get("/api/heritage", params={"q": marker})
+    listed = [i for i in r.json().get("items", []) if i["id"] == item_id]
+    check("F1 list của user thường không chứa item admin_only", r.status_code == 200 and not listed, f"status={r.status_code} hits={len(listed)}")
+
+    r = cu.get(f"/api/heritage/{item_id}")
+    check("F2 GET chi tiết item ẩn → 404", r.status_code == 404, f"status={r.status_code}")
+
+    r = cu.get(f"/api/heritage/{item_id}/audio")
+    check("F3 tải audio trực tiếp → 404", r.status_code == 404, f"status={r.status_code}")
+
+    r = cu.get(f"/api/heritage/{item_id}/audio-url")
+    check("F4 xin audio-url → 404", r.status_code == 404, f"status={r.status_code}")
+
+    r = cu.get("/api/music/play-url", params={"path": f"/api/heritage/{item_id}/audio"})
+    check("F5 play-url cho item ẩn → 404", r.status_code == 404, f"status={r.status_code}")
+
+    r = ca.get(f"/api/heritage/{item_id}/audio-url")
+    url = r.json().get("url", "")
+    r2 = cu.get(url)
+    check("F6 signed URL của admin bị kẻ phá tái dùng → chặn", r2.status_code in (401, 404), f"status={r2.status_code}")
+
+    r = ca.patch(f"/api/admin/storage/{item_id}/visibility", json={"visibility": "public"})
+    back = any(i["id"] == item_id for i in cu.get("/api/heritage").json().get("items", []))
+    check("F7 admin bật công khai → user thấy lại", r.status_code == 200 and back, f"status={r.status_code} visible={back}")
+
+    r = ca.patch(f"/api/admin/storage/{item_id}/visibility", json={"visibility": "admin_only"})
+    r2 = cu.get(f"/api/heritage/{item_id}")
+    check("F8 bật lại Chỉ admin → user 404 ngay lập tức", r.status_code == 200 and r2.status_code == 404, f"status={r.status_code}/{r2.status_code}")
+
+    tunes_hidden = all(i["id"] != item_id for i in cu.get("/api/music/heritage-tunes").json())
+    ca.patch(f"/api/admin/storage/{item_id}/visibility", json={"visibility": "public"})
+    tunes_visible = any(i["id"] == item_id for i in cu.get("/api/music/heritage-tunes").json())
+    ca.patch(f"/api/admin/storage/{item_id}/visibility", json={"visibility": "admin_only"})
+    check("F9 heritage-tunes tôn trọng visibility (ẩn rồi hiện lại)", tunes_hidden and tunes_visible, f"hidden={tunes_hidden} visible={tunes_visible}")
+
+    r = cx.post("/api/music/sing-original", params={"heritage_id": item_id, "duration": 60})
+    check("F10 sing-original với item ẩn (attacker có token) → 404", r.status_code == 404, f"status={r.status_code}")
+
+    lessons_hidden = all(l.get("id") != item_id for l in cu.get("/api/lessons").json())
+    check("F11 /api/lessons không lộ bài học của item ẩn", lessons_hidden, f"status=200")
+
+    ca.close()
+    cu.close()
+    cx.close()
 
 
 def main():
@@ -311,10 +377,18 @@ def main():
     attacker_h = {"Authorization": f"Bearer {attacker['token']}"}
 
     run_matrix(base, victim_h, admin_h)
+    c = httpx.Client(base_url=base, timeout=90)
+    r = c.post("/api/auth/login", json={"identifier": "ghitatruongle", "password": "AdminV3#2026x"})
+    if r.status_code == 200 and r.json().get("role") == "admin":
+        admin_token = r.json()["token"]
+        admin_h = {"Authorization": f"Bearer {admin_token}"}
+        c.post("/api/auth/admin-unlock", json={"password": "AdminV3#2026x"}, headers=admin_h)
+    c.close()
     practice_enum_section(base, victim_h, attacker_h)
     race_section(base, admin_h, victim["token"])
     crypto_section(base, admin_h, victim_h)
     mass_section(base, victim_h)
+    visibility_section(base, admin_h, victim_h, attacker_h)
 
     print(f"\nKẾT QUẢ REDTEAM V3: {len(PASS)} pass / {len(FAIL)} fail")
     for name, note in FAIL:

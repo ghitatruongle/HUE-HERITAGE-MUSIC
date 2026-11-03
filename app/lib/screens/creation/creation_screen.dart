@@ -92,7 +92,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       try {
         items = await musicApi.getHeritageTunes();
       } catch (_) {
-        items = await HeritageApi(dio).list();
+        items = (await HeritageApi(dio).list(limit: 200)).items;
       }
 
       final seenTune = <String>{};

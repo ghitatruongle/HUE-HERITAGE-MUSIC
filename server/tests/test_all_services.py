@@ -173,7 +173,8 @@ def test_fastapi_endpoints():
 
     resp_heritage = client.get("/api/heritage")
     assert resp_heritage.status_code == 200
-    assert isinstance(resp_heritage.json(), list)
+    assert isinstance(resp_heritage.json()["items"], list)
+    assert isinstance(resp_heritage.json()["total"], int)
 
     wav_bytes = make_sine_wav(freq=440.0, duration=0.5, sr=16000)
     resp_pitch = client.post(

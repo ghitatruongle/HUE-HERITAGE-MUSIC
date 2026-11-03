@@ -16,12 +16,64 @@ class InviteManagerSection extends StatefulWidget {
 }
 
 class _InviteManagerSectionState extends State<InviteManagerSection> {
+  final List<InviteEntry> _invites = [];
+  int _total = 0;
+  bool _loading = false;
+  bool _loadingMore = false;
   bool _creatingInvite = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await AuthEndpoints(dio).listInvites();
+      if (!mounted) return;
+      setState(() {
+        _invites
+          ..clear()
+          ..addAll(page.items);
+        _total = page.total;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _hasError = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _invites.length >= _total) return;
+    setState(() => _loadingMore = true);
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final page = await AuthEndpoints(dio).listInvites(offset: _invites.length);
+      if (!mounted) return;
+      final known = _invites.map((e) => e.id).toSet();
+      setState(() {
+        for (final inv in page.items) {
+          if (!known.contains(inv.id)) _invites.add(inv);
+        }
+        _total = page.total;
+      });
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
-    final dio = context.read<ServerConfig>().api.dio;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -29,7 +81,17 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
           children: [
             const Icon(Icons.vpn_key_outlined, size: 18, color: Colors.amber),
             const SizedBox(width: 8),
-            Text(strings.authInviteTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Expanded(
+              child: Text(
+                '${strings.authInviteTitle} ($_total)',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+            IconButton(
+              tooltip: strings.adminRefresh,
+              onPressed: _loading ? null : _reload,
+              icon: const Icon(Icons.refresh, size: 18),
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -38,79 +100,86 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
           style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
         const SizedBox(height: 10),
-        FutureBuilder<List<InviteEntry>>(
-          future: AuthEndpoints(dio).listInvites(),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()));
-            }
-            if (snap.hasError) {
-              return Text(
-                '${strings.authInviteLoadFail}: ${ApiClient.describe(snap.error!)}',
-                style: const TextStyle(fontSize: 12, color: Colors.red),
-              );
-            }
-            final invites = snap.data ?? [];
-            return Column(
-              children: [
-                if (invites.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Text(strings.authInviteEmpty, style: const TextStyle(fontSize: 12.5)),
-                  ),
-                for (final inv in invites)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
+        if (_loading && _invites.isEmpty)
+          const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+        else if (_hasError && _invites.isEmpty)
+          Text(
+            strings.authInviteLoadFail,
+            style: const TextStyle(fontSize: 12, color: Colors.red),
+          )
+        else ...[
+          if (_invites.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(strings.authInviteEmpty, style: const TextStyle(fontSize: 12.5)),
+            ),
+          for (final inv in _invites)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  SelectableText(
-                                    inv.code,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    inv.used ? Icons.check_circle : Icons.schedule,
-                                    size: 14,
-                                    color: inv.used ? Colors.green : Colors.amber,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    inv.used ? strings.authInviteUsed : strings.authInviteAvailable,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: inv.used ? Colors.green : Colors.amber.shade800,
-                                    ),
-                                  ),
-                                ],
+                        Row(
+                          children: [
+                            SelectableText(
+                              inv.code,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              inv.used ? Icons.check_circle : Icons.schedule,
+                              size: 14,
+                              color: inv.used ? Colors.green : Colors.amber,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              inv.used ? strings.authInviteUsed : strings.authInviteAvailable,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: inv.used ? Colors.green : Colors.amber.shade800,
                               ),
-                              if (inv.note.isNotEmpty)
-                                Text(inv.note, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.copy, size: 16),
-                          tooltip: strings.authInviteCopy,
-                          onPressed: () => _copyInvite(inv),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 16),
-                          tooltip: strings.authInviteDelete,
-                          onPressed: () => _deleteInvite(strings, inv),
-                        ),
+                        if (inv.note.isNotEmpty)
+                          Text(inv.note, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
                       ],
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 16),
+                    tooltip: strings.authInviteCopy,
+                    onPressed: () => _copyInvite(inv),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 16),
+                    tooltip: strings.authInviteDelete,
+                    onPressed: () => _deleteInvite(strings, inv),
+                  ),
+                ],
+              ),
+            ),
+          if (_invites.length < _total)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Center(
+                child: _loadingMore
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      )
+                    : OutlinedButton.icon(
+                        onPressed: _loadMore,
+                        icon: const Icon(Icons.expand_more, size: 16),
+                        label: Text('${strings.adminLoadMore} ($_total)'),
+                      ),
+              ),
+            ),
+        ],
         const SizedBox(height: 6),
         OutlinedButton.icon(
           icon: const Icon(Icons.add_circle_outline, size: 16),
@@ -141,12 +210,14 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final inv = await AuthEndpoints(dio).createInvite();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${context.read<LocaleProvider>().strings.authInviteCreated}: ${inv.code}')),
-        );
-        setState(() {});
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${context.read<LocaleProvider>().strings.authInviteCreated}: ${inv.code}')),
+      );
+      setState(() {
+        _invites.insert(0, inv);
+        _total += 1;
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -176,7 +247,11 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       await AuthEndpoints(dio).deleteInvite(inv.id);
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {
+        _invites.removeWhere((e) => e.id == inv.id);
+        _total = _total > 0 ? _total - 1 : 0;
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

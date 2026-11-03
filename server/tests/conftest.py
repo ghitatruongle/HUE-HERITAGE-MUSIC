@@ -18,6 +18,8 @@ os.environ["DATABASE_URL"] = "sqlite:///" + Path(_db_path).as_posix()
 os.environ["STORAGE_DIR"] = str(_tmp / "storage")
 os.environ["MODELS_DIR"] = str(_tmp / "models")
 os.environ["HUE_SECURITY_LOG"] = str(_tmp / "security.log")
+os.environ.setdefault("AUTH_REQUIRED", "false")
+os.environ.setdefault("SECRET_KEY", "hue-test-secret-key-" + "0" * 48)
 
 
 @pytest.fixture(autouse=True)

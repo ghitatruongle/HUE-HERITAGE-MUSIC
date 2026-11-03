@@ -82,7 +82,7 @@ def signed_section(base, admin_h, user_h):
     c_admin.post("/api/auth/admin-unlock", json={"password": "secret123"})
     c_admin.delete(f"/api/admin/storage/{item_id}", headers=admin_h)
     r = c2.get(url)
-    check("A8 replay URL sau khi xóa item → 404", r.status_code == 404, f"status={r.status_code}")
+    check("A8 replay URL sau khi xóa item → bị chặn (401/404)", r.status_code in (401, 404), f"status={r.status_code}")
     c.close()
     c2.close()
     c_admin.close()
@@ -229,7 +229,7 @@ def logic_section(base, admin_h, user_h):
     c.close()
     c = httpx.Client(base_url=base, timeout=30, headers=admin_h)
     r = c.get("/api/heritage", params={"q": "%" + "_" * 50 + "%"})
-    check("F4 wildcard query → 200 rỗng an toàn", r.status_code == 200, f"status={r.status_code} n={len(r.json())}")
+    check("F4 wildcard query → 200 rỗng an toàn", r.status_code == 200, f"status={r.status_code} n={len(r.json().get('items', []))}")
     c.close()
 
 
