@@ -1,0 +1,4 @@
+storeFile=/absolute/path/to/hue-heritage-release.jks
+storePassword=CHANGE_ME
+keyAlias=hue-heritage
+keyPassword=CHANGE_ME

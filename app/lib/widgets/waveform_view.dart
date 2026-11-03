@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../services/locale_provider.dart';
 
 class WaveformData {
   final List<double> peaks;
@@ -66,7 +69,7 @@ class WaveformView extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: data.peaks.isEmpty
-          ? const Center(child: Text('Chưa có dữ liệu sóng âm'))
+          ? Center(child: Text(context.watch<LocaleProvider>().strings.waveformEmpty))
           : CustomPaint(size: Size.infinite, painter: _WavePainter(peaks: data.peaks, color: color)),
     );
   }

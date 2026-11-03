@@ -10,6 +10,7 @@ import '../../api/endpoints/instrument_api.dart';
 import '../../models/instrument_result.dart';
 import '../../models/pitch_data.dart';
 import '../../api/endpoints/sing_api.dart';
+import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/pitch_contour_chart.dart';
 import '../../widgets/waveform_view.dart';
@@ -26,6 +27,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String? _error;
   PitchData? _pitch;
   InstrumentResult? _instruments;
+  bool _instrumentsFailed = false;
   WaveformData? _wave;
   String _source = '';
 
@@ -47,7 +49,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Future<void> _run(Uint8List bytes, String name) async {
     final config = context.read<ServerConfig>();
     if (!config.hasServer) {
-      setState(() => _error = 'Chưa cấu hình máy chủ. Vào Cài đặt để nhập địa chỉ.');
+      setState(() => _error = context.read<LocaleProvider>().strings.analysisNoServer);
       return;
     }
     setState(() {
@@ -55,21 +57,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _error = null;
       _pitch = null;
       _instruments = null;
+      _instrumentsFailed = false;
       _wave = WaveformData.fromWavBytes(bytes);
       _source = name;
     });
     try {
       final pitch = await SingApi(config.api.dio).analyzePitchBytes(bytes);
       InstrumentResult? instruments;
+      bool instrumentsFailed = false;
       try {
         instruments = await InstrumentApi(config.api.dio).detectBytes(bytes, name);
       } catch (_) {
+        instrumentsFailed = true;
         instruments = null;
       }
       if (!mounted) return;
       setState(() {
         _pitch = pitch;
         _instruments = instruments;
+        _instrumentsFailed = instrumentsFailed;
       });
     } catch (e) {
       if (!mounted) return;
@@ -81,6 +87,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -93,12 +100,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Chọn bản thu để phân tích cao độ F0 và nhận diện nhạc cụ.'),
+                Text(strings.analysisPickHint),
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: _loading ? null : _pickAndAnalyze,
                   icon: const Icon(Icons.folder_open),
-                  label: const Text('Chọn tệp âm thanh'),
+                  label: Text(strings.analysisPickBtn),
                 ),
               ],
             ),
@@ -131,24 +138,28 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ],
         if (_source.isNotEmpty) ...[
           const SizedBox(height: 16),
-          Text('Tệp: $_source', style: Theme.of(context).textTheme.bodySmall),
+          Text(strings.analysisFileLabel(_source), style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 8),
           if (_wave != null) WaveformView(data: _wave!),
         ],
         if (_pitch != null) ...[
           const SizedBox(height: 16),
-          Text('Đường cao độ F0', style: Theme.of(context).textTheme.titleMedium),
+          Text(strings.analysisF0Title, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           PitchContourChart(data: _pitch!),
           const SizedBox(height: 8),
           Text(
-            'F0 trung bình: ${_pitch!.meanF0.toStringAsFixed(1)} Hz',
+            strings.analysisMeanF0(_pitch!.meanF0.toStringAsFixed(1)),
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
+        if (_instrumentsFailed) ...[
+          const SizedBox(height: 16),
+          Text(strings.analysisInstrumentsFail, style: Theme.of(context).textTheme.bodySmall),
+        ],
         if (_instruments != null) ...[
           const SizedBox(height: 16),
-          Text('Nhạc cụ nhận diện được', style: Theme.of(context).textTheme.titleMedium),
+          Text(strings.analysisInstrumentsTitle, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           ..._instruments!.segments.map(
             (s) => ListTile(
@@ -160,9 +171,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ),
           if (_instruments!.segments.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('Không nhận diện được nhạc cụ nào.'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(strings.analysisNoInstruments),
             ),
         ],
       ],

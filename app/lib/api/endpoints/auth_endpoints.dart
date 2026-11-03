@@ -24,8 +24,16 @@ class AccountEntry {
   final String email;
   final String role;
   final bool active;
+  final bool mustChangePassword;
 
-  AccountEntry({required this.id, required this.username, required this.email, required this.role, required this.active});
+  AccountEntry({
+    required this.id,
+    required this.username,
+    required this.email,
+    required this.role,
+    required this.active,
+    this.mustChangePassword = false,
+  });
 
   static AccountEntry fromJson(Map<String, dynamic> j) => AccountEntry(
         id: j['id']?.toString() ?? '',
@@ -33,6 +41,31 @@ class AccountEntry {
         email: j['email']?.toString() ?? '',
         role: j['role']?.toString() ?? 'user',
         active: j['active'] != false,
+        mustChangePassword: j['must_change_password'] == true,
+      );
+}
+
+class CreatedAccount {
+  final String id;
+  final String username;
+  final String email;
+  final String tempPassword;
+  final bool generated;
+
+  CreatedAccount({
+    required this.id,
+    required this.username,
+    required this.email,
+    required this.tempPassword,
+    required this.generated,
+  });
+
+  static CreatedAccount fromJson(Map<String, dynamic> j) => CreatedAccount(
+        id: j['id']?.toString() ?? '',
+        username: j['username']?.toString() ?? '',
+        email: j['email']?.toString() ?? '',
+        tempPassword: j['temp_password']?.toString() ?? '',
+        generated: j['generated'] == true,
       );
 }
 
@@ -133,5 +166,22 @@ class AuthEndpoints {
   Future<String> resetAccountPassword(String id) async {
     final res = await dio.post('/api/auth/users/$id/reset-password');
     return (res.data as Map)['temp_password']?.toString() ?? '';
+  }
+
+  Future<void> adminUnlock(String password) async {
+    await dio.post('/api/auth/admin-unlock', data: {'password': password});
+  }
+
+  Future<CreatedAccount> createUser({
+    required String username,
+    String email = '',
+    String password = '',
+    String note = '',
+  }) async {
+    final res = await dio.post(
+      '/api/auth/users',
+      data: {'username': username, 'email': email, 'password': password, 'note': note},
+    );
+    return CreatedAccount.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 }

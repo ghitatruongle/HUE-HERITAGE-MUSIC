@@ -41,6 +41,21 @@ class AppStrings {
   String get featAnalysisDesc => isVi
       ? 'Phân tích đường cao độ F0 của một bản thu bất kỳ'
       : 'Analyze F0 fundamental frequency curve of any recording';
+  String get analysisNoServer => isVi
+      ? 'Chưa cấu hình máy chủ. Vào Cài đặt để nhập địa chỉ.'
+      : 'Server not configured. Go to Settings to enter the address.';
+  String get analysisPickHint => isVi
+      ? 'Chọn bản thu để phân tích cao độ F0 và nhận diện nhạc cụ.'
+      : 'Pick a recording to analyze its F0 pitch and detect instruments.';
+  String get analysisPickBtn => isVi ? 'Chọn tệp âm thanh' : 'Choose audio file';
+  String analysisFileLabel(String name) => isVi ? 'Tệp: $name' : 'File: $name';
+  String get analysisF0Title => isVi ? 'Đường cao độ F0' : 'F0 Pitch Curve';
+  String analysisMeanF0(String hz) => isVi ? 'F0 trung bình: $hz Hz' : 'Mean F0: $hz Hz';
+  String get analysisInstrumentsTitle => isVi ? 'Nhạc cụ nhận diện được' : 'Detected Instruments';
+  String get analysisNoInstruments => isVi ? 'Không nhận diện được nhạc cụ nào.' : 'No instruments detected.';
+  String get analysisInstrumentsFail => isVi
+      ? 'Không nhận diện được nhạc cụ (máy chủ gặp sự cố với bản thu này).'
+      : 'Instrument detection failed (the server had trouble with this recording).';
 
   String get featTranscriptionTitle => isVi ? 'Audio -> Bản nhạc' : 'Audio to Sheet';
   String get featTranscriptionDesc => isVi
@@ -102,6 +117,18 @@ class AppStrings {
   String get practiceAvg5 => isVi ? 'TB 5 lượt' : 'Avg of 5';
   String get practiceLastScore => isVi ? 'Điểm lần gần nhất' : 'Latest score';
   String get practiceSentence => isVi ? 'Câu' : 'Phrase';
+  String practiceHistoryPhrase(String title, int n) => isVi ? '$title — Câu $n' : '$title — Phrase $n';
+  String practiceHistoryScale(String name) => isVi ? 'Luyện thang $name' : 'Scale practice $name';
+  String lessonModeChip(String mode) => isVi ? 'Điệu $mode' : 'Mode $mode';
+  String lessonSectionCount(int n) => isVi ? '$n câu' : '$n phrases';
+  String practiceCountInLabel(String bpmInfo) => isVi ? 'Đếm nhập $bpmInfo' : 'Count-in $bpmInfo';
+  String get practiceScoreTotal => isVi ? 'Tổng' : 'Total';
+  String get practiceScorePitch => isVi ? 'Cao độ' : 'Pitch';
+  String get practiceScoreTime => isVi ? 'Nhịp' : 'Timing';
+  String practiceAvgError(String cents) => isVi ? 'Sai số TB: $cents cents' : 'Avg deviation: $cents cents';
+  String practiceScaleResult(String score, String onScale) => isVi
+      ? 'Độ bám thang: $score/100 (trong thang: $onScale%)'
+      : 'Scale adherence: $score/100 (on scale: $onScale%)';
   String get listenTabTitle => isVi ? 'Thu & phân tích' : 'Record & analyze';
   String get practiceTabTitle => isVi ? 'Luyện tập theo bài' : 'Practice by lesson';
   String get learnRecordBtn => isVi ? 'Thu âm giọng hát' : 'Record your voice';
@@ -124,6 +151,84 @@ class AppStrings {
   String get transcribeRunBtn => isVi ? 'Phân tích ký âm' : 'Transcribe';
   String get transcribeMidiBtn => isVi ? 'Tải MIDI' : 'Download MIDI';
   String get transcribeXmlBtn => isVi ? 'Tải MusicXML' : 'Download MusicXML';
+  String get transcribePickHint => isVi
+      ? 'Chọn tệp âm thanh (bản thu đã lưu ở máy chủ sẽ được liên kết khi ký âm).'
+      : 'Pick an audio file (recordings already stored on the server will be linked during transcription).';
+  String get transcribeRecordedSource => isVi ? 'bản thu vừa ghi' : 'last recording';
+  String transcribeHistoryTitle(String source, int notes) => isVi
+      ? 'Ký âm $source ($notes nốt)'
+      : 'Transcription of $source ($notes notes)';
+  String transcribeDownloadedFile(String name) => isVi ? 'Đã tải xuống $name' : 'Downloaded $name';
+  String transcribeSavedTempFile(String name) => isVi ? 'Đã lưu $name vào thư mục tạm' : 'Saved $name to temp folder';
+  String transcribeSavedTo(String path) => isVi ? 'Đã lưu $path' : 'Saved to $path';
+  String transcribeShareDialog(String name) => isVi ? 'Đã mở hộp thoại lưu/chia sẻ cho $name' : 'Opened save/share dialog for $name';
+  String transcribeNotesSummary(String label, int notes) => isVi ? '$label · $notes nốt' : '$label · $notes notes';
+  String transcribeMoreNotes(int n) => isVi
+      ? '... và $n nốt nữa (xem trong tệp MIDI/MusicXML)'
+      : '... and $n more notes (see the MIDI/MusicXML file)';
+  String saveFileDialog(String name) => isVi ? 'Lưu $name' : 'Save $name';
+
+  String get creationBannerSubtitle => isVi
+      ? 'Bảo tồn 100% lòng bản di sản — Thăng hoa sáng tạo lời ca mới'
+      : 'Preserving 100% of the heritage melody — soar with your new lyrics';
+  String get creationTabOriginal => isVi ? 'Hát Nguyên Bản' : 'Sing Original';
+  String get creationTabNewLyrics => isVi ? 'Sáng Tạo Lời Mới' : 'New Lyrics';
+  String get creationPickTuneLabel => isVi ? 'Chọn Bài Bản Di Sản:' : 'Choose a Heritage Piece:';
+  String get creationFolkArtist => isVi ? 'Nghệ nhân dân gian Huế' : 'Hue folk artisan';
+  String get creationModeLabel => isVi ? 'Hơi / Điệu thức:' : 'Mode / Scale:';
+  String get creationVerseLabel => isVi ? 'Thể thơ:' : 'Verse form:';
+  String get creationInstrumentsLabel => isVi ? 'Dàn nhạc cụ:' : 'Instrumental ensemble:';
+  String get creationLyricsTitle => isVi ? 'Lời Ca Di Sản Chuẩn Mực' : 'Canonical Heritage Lyrics';
+  String get creationModeOrnamented => isVi ? 'Chế độ: Có luyến láy' : 'Mode: With ornaments';
+  String get creationModePlain => isVi ? 'Chế độ: Lời thơ' : 'Mode: Plain verse';
+  String get creationNoLyrics => isVi ? '[Không có lời ca]' : '[No lyrics]';
+  String get creationListenMaster => isVi ? '🎧 Nghe Bản Gốc Nghệ Nhân' : '🎧 Listen to the Artisan Original';
+  String get creationCollapseMaster => isVi ? 'Thu gọn nghe bản gốc' : 'Collapse original player';
+  String creationOriginalTrack(String title) => isVi ? 'Bản gốc: $title' : 'Original: $title';
+  String get creationAiRecreateTitle => isVi ? 'AI Tái Hiện Bài Bản Nguyên Gốc' : 'AI Recreation of the Original Piece';
+  String get creationVocalLabel => isVi ? 'Giọng hát' : 'Voice';
+  String get creationTempoLabel => isVi ? 'Tốc độ' : 'Tempo';
+  String get creationDurationLabel => isVi ? 'Thời lượng' : 'Duration';
+  String get creationMoodLabel => isVi ? 'Cảm xúc' : 'Mood';
+  String get creationLoraModelLabel => isVi ? 'Mô hình LoRA' : 'LoRA model';
+  String get creationLoraBaseDefault => isVi ? 'Mô hình nền mặc định' : 'Default base model';
+  String get creationDefault => isVi ? 'Mặc định' : 'Default';
+  String get creationRunOriginalBtn => isVi ? '✨ Bắt Đầu AI Tái Hiện Nguyên Bản' : '✨ Start AI Original Recreation';
+  String get creationRunNewLyricsBtn => isVi ? '✨ AI Cất Giọng Hát Lời Mới' : '✨ AI Sings Your New Lyrics';
+  String get creationLyricsRequired => isVi ? 'Vui lòng nhập lời thơ hoặc sáng tác mới.' : 'Please enter new or original verses.';
+  String get creationFallbackTuneTitle => isVi ? 'Bài bản di sản' : 'Heritage piece';
+  String creationLockedMelody(String title) => isVi ? 'KHÓA 100% GIAI ĐIỆU LÒNG BẢN: $title' : 'MELODY 100% LOCKED: $title';
+  String get creationLockedMelodyDesc => isVi
+      ? 'Hệ thống dùng toàn bộ xương sống giai điệu lòng bản di sản cổ truyền làm nhạc nền. AI sẽ giữ nguyên vẹn giai điệu và hát chính xác theo lời thơ mới do bạn sáng tạo.'
+      : 'The system uses the full traditional heritage melody as the backing track. The AI keeps the melody intact and sings exactly your new lyrics.';
+  String get creationRhymeGuideTitle => isVi ? 'Hướng Dẫn Thể Thơ & Vần Điệu:' : 'Verse Form & Rhyme Guide:';
+  String creationRhymeGuideDefault(String? bpm) {
+    final bpmText = bpm ?? (isVi ? 'khoan thai' : 'leisurely');
+    return isVi
+        ? 'Khuyên dùng thơ Lục bát hoặc thể 4 chữ, ngắt nhịp tương ứng với nhịp $bpmText.'
+        : 'Prefer Luc Bat or four-word verse, phrasing to match the $bpmText tempo.';
+  }
+  String get creationSampleVerseTitle => isVi ? 'Gợi ý thơ mẫu 1 chạm:' : 'One-tap sample verses:';
+  String get creationSampleLucBat => isVi ? 'Thơ Lục bát Sông Hương' : 'Perfume River Luc Bat';
+  String get creationSampleFourWord => isVi ? 'Thơ 4 chữ rộn ràng' : 'Lively four-word verse';
+  String get creationSampleTuTinh => isVi ? 'Tự tình cố đô' : 'Old Capital Musings';
+  String get creationComposeTitle => isVi ? 'Soạn Thảo Lời Thơ Mới *' : 'Compose New Verses *';
+  String creationWordCount(int n) => isVi ? '$n từ' : '$n words';
+  String get creationLyricsHint => isVi
+      ? 'Nhập lời ca hoặc bài thơ do bạn sáng tác vào đây...\n(Ví dụ: thơ lục bát, thơ 4 chữ hoặc khúc hát đối đáp)'
+      : 'Type your own lyrics or poem here...\n(e.g. Luc Bat, four-word verse or an antiphonal song)';
+  String get creationEmptyTunesTitle => isVi ? 'Chưa có bài bản di sản nào trong cơ sở dữ liệu' : 'No heritage pieces in the database yet';
+  String get creationEmptyTunesDesc => isVi
+      ? 'Hãy chạy lệnh "python -m app.database.seed_heritage" trên máy chủ hoặc tải lên bài bản mới từ mục Kho di sản.'
+      : 'Run "python -m app.database.seed_heritage" on the server or upload new pieces from the Heritage Archive.';
+  String get creationReloadData => isVi ? 'Tải lại dữ liệu' : 'Reload data';
+  String creationPollLost(int attempts) => isVi
+      ? 'Mất kết nối máy chủ khi chờ kết quả (đã thử $attempts lần). Tác vụ vẫn chạy phía máy chủ.'
+      : 'Lost server connection while waiting for the result (tried $attempts times). The task is still running on the server.';
+
+  String get serverNotConfigured => isVi ? 'Chưa cấu hình máy chủ.' : 'Server not configured.';
+  String get errorPrefix => isVi ? 'Lỗi' : 'Error';
+  String get noData => isVi ? 'Chưa có dữ liệu' : 'No data';
 
   String get cancelBtn => isVi ? 'Hủy' : 'Cancel';
   String get processing => isVi ? 'Đang xử lý...' : 'Processing...';
@@ -137,6 +242,10 @@ class AppStrings {
   String get langEnglish => 'English';
   String get langVietnamese => 'Tiếng Việt';
 
+  String get settingsAppInfo => isVi ? 'Ứng dụng' : 'Application';
+  String get settingsName => isVi ? 'Tên' : 'Name';
+  String get settingsDescription => isVi ? 'Mô tả' : 'Summary';
+
   String get offlineMessage => isVi
       ? 'Mất kết nối mạng. Một số chức năng cần internet.'
       : 'No network connection. Some online features may be unavailable.';
@@ -144,6 +253,17 @@ class AppStrings {
   String get playBtn => isVi ? 'Phát' : 'Play';
   String get versionLabel => isVi ? 'Phiên bản' : 'Version';
   String get sidebarTagline => isVi ? 'AI Di sản âm nhạc' : 'AI Heritage Music';
+  String get sheetDisclaimer => isVi
+      ? 'Bản nhạc dự đoán tự động – cần nghệ nhân kiểm duyệt.'
+      : 'Auto-predicted sheet music – needs artisan review.';
+  String get sheetEmpty => isVi ? 'Chưa có nốt nhạc để hiển thị' : 'No notes to display';
+  String get waveformEmpty => isVi ? 'Chưa có dữ liệu sóng âm' : 'No waveform data';
+  String get taskStatusLabel => isVi ? 'Trạng thái tác vụ:' : 'Task status:';
+  String taskNotice(String reason) => isVi ? 'Thông báo: $reason' : 'Notice: $reason';
+  String get taskBlockedNote => isVi
+      ? 'Máy chủ AI đang ở chế độ chờ kiểm thử trọng số. Tác phẩm AI cần HuếMusic-LoRA được nạp từ các checkpoint đã huấn luyện.'
+      : 'The AI server is on standby for checkpoint testing. AI works require the trained HueMusic-LoRA checkpoints to be loaded.';
+  String get taskAiGenerated => isVi ? 'TÁC PHẨM ĐƯỢC AI TẠO MỚI (AI_GENERATED)' : 'AI-GENERATED WORK (AI_GENERATED)';
 
   String modulesCount(int n) => isVi ? '$n chức năng' : '$n modules';
 
@@ -162,6 +282,13 @@ class AppStrings {
   String get heritageArchiveSubtitle => isVi
       ? 'Lưu trữ và thưởng thức các bản ghi âm cổ truyền nguyên bản'
       : 'Preserve and enjoy authentic traditional heritage recordings';
+  String heritageTonal(String t) => isVi ? 'Cung bậc / Tông: $t' : 'Mode / Key: $t';
+  String heritageNowPlaying(String title) => isVi ? 'Đang phát: $title' : 'Now playing: $title';
+  String get heritageLyricsTitle => isVi ? 'Lời ca di sản' : 'Heritage Lyrics';
+  String get heritageInfoTitle => isVi ? 'Thông tin tư liệu di sản' : 'Heritage Documentation';
+  String get heritageOriginalNote => isVi
+      ? 'Bản thu gốc di sản được bảo toàn nguyên trạng, dành riêng cho nghe và thưởng thức.'
+      : 'The original heritage recording is preserved intact, for listening and enjoyment only.';
 
   String get restorationLabTitle => isVi
       ? 'Phân hệ Nghiên cứu Phục dựng Âm thanh Cổ truyền (Beta)'
@@ -197,11 +324,37 @@ class AppStrings {
   String get compareContourTitle => isVi ? 'Biểu đồ đối chiếu cao độ F0' : 'F0 Pitch Contour Alignment';
   String get compareUploadPrompt => isVi ? 'Tải lên bản ghi của bạn để đối chiếu' : 'Upload Your Own Recording to Compare';
   String get restorationUploadVintageBtn => isVi ? 'Tải lên bản thu cũ để phục dựng' : 'Upload Vintage Recording';
+  String get restorationCompareAB => isVi
+      ? 'So sánh Đối chứng A/B (Trước & Sau phục dựng)'
+      : 'A/B Reference Comparison (Before & After Restoration)';
+  String get compareTabDescription => isVi
+      ? 'Đối chiếu bản thu âm cổ chưa rõ nguồn gốc với cơ sở dữ liệu làn điệu Ca Huế và Nhã nhạc cung đình để tìm ra tên bài và kiểm định âm luật.'
+      : 'Cross-compare vintage recordings against the Hue heritage tune database to identify song names and verify musical scales.';
+  String get compareNoTarget => isVi ? 'Chưa chọn bản ghi cần đối chiếu' : 'No target track selected';
+  String get compareVerdictHigh => isVi ? 'Trùng khớp điệu thức cao' : 'High Match';
+  String get compareVerdictModerate => isVi ? 'Tương đồng một phần điệu thức' : 'Moderate Match';
+  String get compareVerdictDifferent => isVi ? 'Khác làn điệu hoặc chênh lệch âm giai' : 'Different Tune';
+  String get compareResultsTitle => isVi ? 'Kết quả Nhận diện & Đối chiếu' : 'Identification & Match Results';
+  String compareVerdictLine(String verdict) => isVi ? 'Nhận định: $verdict' : 'Verdict: $verdict';
+  String compareMetricsLine(String cents, String ms) => isVi
+      ? 'Sai số cao độ: $cents cents · Lệch thời gian: $ms ms'
+      : 'Pitch deviation: $cents cents · Time offset: $ms ms';
+  String get compareChartSample => isVi ? 'Bản ghi mẫu' : 'Sample track';
+  String get compareChartTarget => isVi ? 'Bản ghi đối chiếu' : 'Comparison track';
+  String get compareChartSampleDataset => isVi ? 'Bản ghi mẫu (Dataset)' : 'Sample track';
 
   String get emptyHistory => isVi ? 'Chưa có hoạt động nào được ghi lại trên thiết bị này.' : 'No activity recorded on this device yet.';
   String get clearHistory => isVi ? 'Xóa lịch sử' : 'Clear History';
   String get confirmClearHistory => isVi ? 'Bạn có chắc chắn muốn xóa toàn bộ lịch sử hoạt động trên thiết bị này?' : 'Are you sure you want to clear all activity history on this device?';
   String get historyPrivacyNote => isVi ? 'Lịch sử được lưu trữ bảo mật cục bộ trên thiết bị của bạn và không gửi lên máy chủ.' : 'Activity history is stored securely on your local device and never sent to any server.';
+  String get historyFilterAll => isVi ? 'Tất cả' : 'All';
+  String get historyFilterPractice => isVi ? 'Luyện tập' : 'Practice';
+  String get historyStatusDone => isVi ? 'Hoàn thành' : 'Done';
+  String get historyStatusError => isVi ? 'Lỗi' : 'Error';
+  String get historyStatusRunning => isVi ? 'Đang chạy' : 'Running';
+  String historyScore(String score) => isVi ? '$score đ' : '$score pts';
+  String historySingOriginal(String title) => isVi ? 'Hát nguyên bản: $title' : 'Sing original: $title';
+  String historySingNew(String title) => isVi ? 'Sáng tạo mới: $title' : 'New creation: $title';
   String get deleteBtn => isVi ? 'Xóa' : 'Delete';
   String get collapseSidebar => isVi ? 'Thu gọn thanh bên' : 'Collapse sidebar';
   String get expandSidebar => isVi ? 'Mở rộng thanh bên' : 'Expand sidebar';
@@ -213,13 +366,13 @@ class AppStrings {
   String get authScreenTitle => isVi ? 'Tài khoản & Xác thực' : 'Account & Authentication';
   String get authTabLogin => isVi ? 'Đăng nhập' : 'Sign In';
   String get authTabRegister => isVi ? 'Đăng ký (Mã mời)' : 'Register (Invite Code)';
-  String get authLoginIdLabel => isVi ? 'Tên tài khoản hoặc Gmail' : 'Username or Gmail';
+  String get authLoginIdLabel => isVi ? 'Tên tài khoản hoặc Email' : 'Username or Email';
   String get authLoginIdHint => isVi ? 'user123 hoặc abc@gmail.com' : 'user123 or abc@gmail.com';
   String get authPasswordLabel => isVi ? 'Mật khẩu' : 'Password';
   String get authPasswordMinLabel => isVi ? 'Mật khẩu (tối thiểu 6 ký tự)' : 'Password (min 6 characters)';
   String get authUsernameLabel => isVi ? 'Tên tài khoản' : 'Username';
-  String get authGmailLabel => 'Gmail (@gmail.com)';
-  String get authGmailHint => isVi ? 'vidu@gmail.com' : 'example@gmail.com';
+  String get authGmailLabel => 'Email';
+  String get authGmailHint => isVi ? 'vidu@tenmien.vn' : 'you@example.com';
   String get authInviteLabel => isVi ? 'Mã mời tham gia' : 'Invitation code';
   String get authInviteHint => isVi
       ? 'Nhập mã mời do ban quản trị cấp (VD: QHH2026)'
@@ -231,14 +384,14 @@ class AppStrings {
       ? '* Chế độ khách cho phép trải nghiệm trực tiếp nhưng không lưu lại dữ liệu sau khi thoát ứng dụng.'
       : '* Guest mode lets you explore instantly, but nothing is saved after you exit the app.';
   String get authNoResetNote => isVi
-      ? 'Phiên bản hiện tại chưa hỗ trợ đặt lại mật khẩu. Vui lòng ghi nhớ thông tin đăng nhập.'
-      : 'The current version does not support password reset yet. Please remember your credentials.';
+      ? 'Quên mật khẩu? Liên hệ quản trị viên để được đặt lại (bạn sẽ nhận mật khẩu tạm).'
+      : 'Forgot your password? Contact the administrator for a reset (you will receive a temporary password).';
   String get authStorageWarning => isVi
       ? 'Máy này chưa có kho bảo mật (keyring/libsecret trên Linux) nên không lưu được phiên đăng nhập. Hãy cài libsecret hoặc dùng Chế độ Khách.'
       : 'This machine has no secure keyring (libsecret on Linux), so sign-in cannot be saved. Install libsecret or use Guest Mode.';
   String get authRegisterFootnote => isVi
-      ? '* Mỗi Gmail chỉ được tạo 1 tài khoản. Cần mã mời hợp lệ.'
-      : '* Each Gmail can create only one account. A valid invite code is required.';
+      ? '* Mỗi email chỉ được tạo 1 tài khoản. Cần mã mời hợp lệ.'
+      : '* Each email can create only one account. A valid invite code is required.';
   String get authOrDivider => isVi ? 'HOẶC' : 'OR';
   String get authLogoutBtn => isVi ? 'Đăng xuất' : 'Sign Out';
   String get authGuestModeBtn => isVi ? 'Chế độ Khách' : 'Guest Mode';
@@ -299,16 +452,79 @@ class AppStrings {
   String get authGuestUsername => isVi ? 'Khách' : 'Guest';
   String get authTooltipLoggedIn => isVi ? 'Tài khoản' : 'Account';
   String get authTooltipGuest => isVi ? 'Tài khoản / Chế độ Khách' : 'Account / Guest Mode';
-  String get authErrLoginId => isVi ? 'Vui lòng nhập tên tài khoản hoặc Gmail' : 'Please enter your username or Gmail';
+  String get authErrLoginId => isVi ? 'Vui lòng nhập tên tài khoản hoặc Email' : 'Please enter your username or Email';
   String get authErrPasswordEmpty => isVi ? 'Vui lòng nhập mật khẩu' : 'Please enter your password';
   String get authErrUsernameShort => isVi
       ? 'Tên tài khoản phải có ít nhất 3 ký tự'
       : 'Username must be at least 3 characters';
-  String get authErrGmail => isVi
-      ? 'Chỉ chấp nhận địa chỉ email có đuôi @gmail.com'
-      : 'Only @gmail.com addresses are accepted';
+  String get authErrEmail => isVi
+      ? 'Địa chỉ email không hợp lệ'
+      : 'Invalid email address';
   String get authErrPasswordShort => isVi
       ? 'Mật khẩu phải có ít nhất 6 ký tự'
       : 'Password must be at least 6 characters';
   String get authErrInvite => isVi ? 'Vui lòng nhập mã mời hợp lệ' : 'Please enter a valid invite code';
+
+  String get sessionExpired => isVi
+      ? 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.'
+      : 'Your session has expired, please log in again.';
+
+  String get mustChangeTitle => isVi ? 'Đổi mật khẩu' : 'Change password';
+  String get mustChangeBody => isVi
+      ? 'Quản trị viên đã đặt mật khẩu tạm cho tài khoản của bạn. Hãy đặt mật khẩu mới để bảo mật.'
+      : 'An administrator set a temporary password for your account. Please set a new one.';
+  String get mustChangeNow => isVi ? 'Đổi mật khẩu' : 'Change password';
+  String get mustChangeLater => isVi ? 'Để sau' : 'Later';
+
+  String get navAdmin => isVi ? 'Quản trị' : 'Admin';
+  String get adminTitle => isVi ? 'Quản trị hệ thống' : 'System Administration';
+  String get adminTabDashboard => isVi ? 'Tổng quan' : 'Dashboard';
+  String get adminTabUsers => isVi ? 'Người dùng' : 'Users';
+  String get adminTabInvites => isVi ? 'Mã mời' : 'Invites';
+  String get adminTabStorage => isVi ? 'Kho lưu trữ' : 'Storage';
+  String get adminStatUsers => isVi ? 'Tài khoản' : 'Accounts';
+  String get adminStatActive => isVi ? 'Đang hoạt động' : 'Active';
+  String get adminStatInvites => isVi ? 'Mã mời' : 'Invites';
+  String get adminStatUnused => isVi ? 'Còn hiệu lực' : 'Unused';
+  String get adminStatItems => isVi ? 'Bản ghi di sản' : 'Heritage items';
+  String get adminStatStorage => isVi ? 'Dung lượng kho' : 'Archive size';
+  String get adminStatDerived => isVi ? 'File dẫn xuất' : 'Derived files';
+  String get adminStatGenerated => isVi ? 'Bản thu AI đã tạo' : 'AI-generated audio';
+  String get adminStatTasks => isVi ? 'Tác vụ theo trạng thái' : 'Tasks by status';
+  String get adminStatTasksKind => isVi ? 'Tác vụ theo loại' : 'Tasks by kind';
+  String get adminEngineOnline => isVi ? 'Engine AI: ĐANG CHẠY' : 'AI engine: ONLINE';
+  String get adminEngineOffline => isVi ? 'Engine AI: NGOẠI TUYẾN' : 'AI engine: OFFLINE';
+  String get adminEngineOfflineHint => isVi
+      ? 'Engine AI đang ngoại tuyến — tính năng Sáng tạo sẽ bị chặn cho tới khi máy chủ AI hoạt động lại.'
+      : 'The AI engine is offline — Creation features will be blocked until the AI server is back.';
+  String get adminCreateUserTitle => isVi ? 'Tạo tài khoản mới' : 'Create new account';
+  String get adminCreateUserUsername => isVi ? 'Tên tài khoản' : 'Username';
+  String get adminCreateUserEmail => isVi ? 'Email (không bắt buộc)' : 'Email (optional)';
+  String get adminCreateUserPassword => isVi
+      ? 'Mật khẩu (để trống để tự sinh)'
+      : 'Password (leave empty to auto-generate)';
+  String get adminCreateUserButton => isVi ? 'Tạo tài khoản' : 'Create account';
+  String adminCreateUserDone(String username, String pass) => isVi
+      ? 'Đã tạo "$username" — mật khẩu tạm: $pass'
+      : 'Created "$username" — temporary password: $pass';
+  String get adminCreateUserFail => isVi ? 'Không tạo được tài khoản.' : 'Could not create the account.';
+  String get adminStorageEmpty => isVi ? 'Kho lưu trữ trống.' : 'Storage is empty.';
+  String get adminStorageDeleteConfirm => isVi
+      ? 'Xóa bản ghi này cùng toàn bộ file đính kèm (gốc, MIDI, MusicXML, phục dựng)?'
+      : 'Delete this item and all attached files (original, MIDI, MusicXML, restored)?';
+  String get adminStorageDeleted => isVi ? 'Đã xóa bản ghi.' : 'Item deleted.';
+  String get adminStorageOriginalMissing => isVi ? 'Thiếu file gốc' : 'Original file missing';
+  String get adminRefresh => isVi ? 'Làm mới' : 'Refresh';
+  String get adminSearchHint => isVi ? 'Tìm trong kho...' : 'Search storage...';
+  String get adminDelete => isVi ? 'Xóa' : 'Delete';
+  String get adminCancel => isVi ? 'Hủy' : 'Cancel';
+  String get adminLoadFail => isVi ? 'Không tải được dữ liệu quản trị.' : 'Failed to load admin data.';
+  String get adminReauthTitle => isVi ? 'Xác thực quản trị' : 'Admin re-authorization';
+  String get adminReauthBody => isVi
+      ? 'Hành động này nhạy cảm — nhập lại mật khẩu tài khoản quản trị để tiếp tục (hiệu lực 10 phút).'
+      : 'This is a sensitive action — re-enter the admin password to continue (valid for 10 minutes).';
+  String get adminReauthPasswordLabel => isVi ? 'Mật khẩu quản trị' : 'Admin password';
+  String get adminReauthConfirm => isVi ? 'Xác nhận' : 'Confirm';
+  String get adminReauthWrong => isVi ? 'Mật khẩu không đúng' : 'Wrong password';
+  String get adminReauthCancelled => isVi ? 'Đã hủy — chưa xác thực quản trị.' : 'Cancelled — admin not re-authorized.';
 }

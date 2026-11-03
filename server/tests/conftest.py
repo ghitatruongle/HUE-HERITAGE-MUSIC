@@ -22,9 +22,11 @@ os.environ["HUE_SECURITY_LOG"] = str(_tmp / "security.log")
 
 @pytest.fixture(autouse=True)
 def _isolated_settings(monkeypatch):
+    from app import rate_limit
     from app.config import settings
 
     monkeypatch.setattr(settings, "invite_codes", "TESTINVITE", raising=False)
+    rate_limit.reset()
     yield
 
 

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import secrets
 import threading
 import time
@@ -14,9 +15,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..database.session import get_db
+from ..database.session import acquire_write_slot, get_db
 from ..database import crud
-from .. import security_log
+from .. import rate_limit, security_log
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,46 @@ _auth_failures_lock = threading.Lock()
 _identifier_failures: dict = {}
 _IDENTIFIER_FAILURE_LIMIT = 20
 _invite_lock = threading.Lock()
+
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+_admin_unlocks: dict = {}
+
+
+def _must_change(user) -> bool:
+    return bool(getattr(user, "must_change_password", 0))
+
+
+def _token_ttl_for(user) -> int:
+    if _role_of(user) == "admin":
+        return min(settings.admin_token_ttl_hours, settings.token_ttl_hours)
+    return settings.token_ttl_hours
+
+
+_DUMMY_HASH: Optional[str] = None
+
+
+def _uniform_verify(password: str, stored: Optional[str]) -> bool:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = hash_password("timing-uniform-dummy-verification-hash")
+    ok = verify_password(password, stored or _DUMMY_HASH)
+    time.sleep((2 + secrets.randbelow(5)) / 1000)
+    return ok
+
+
+def _admin_password_ok(password: str) -> bool:
+    if len(password) < 12:
+        return False
+    return any(c.isalpha() for c in password) and any(c.isdigit() for c in password)
+
+
+def make_token_for(user) -> str:
+    expires = int(time.time()) + _token_ttl_for(user) * 3600
+    epoch = user.token_epoch or 0
+    payload = f"{user.id}.{expires}.{epoch}"
+    sig = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
 
 
 def _client_ip(request: Request) -> str:
@@ -183,6 +224,9 @@ class LoginRequest(BaseModel):
     password: str
 
 
+FORCE_CHANGE_ALLOWED_PATHS = ("/api/auth/change-password", "/api/auth/revoke-all")
+
+
 def require_user(request: Request, db: Session = Depends(get_db)) -> Optional[str]:
     if not settings.auth_required:
         return None
@@ -197,6 +241,10 @@ def require_user(request: Request, db: Session = Depends(get_db)) -> Optional[st
         raise HTTPException(status_code=401, detail="token revoked")
     if getattr(user, "active", 1) == 0:
         raise HTTPException(status_code=403, detail="account disabled")
+    if getattr(user, "must_change_password", 0) and request.method not in ("GET", "HEAD", "OPTIONS"):
+        path = request.url.path
+        if not any(path == p or path.startswith(p + "/") for p in FORCE_CHANGE_ALLOWED_PATHS):
+            raise HTTPException(status_code=403, detail="password change required")
     return user_id
 
 
@@ -215,6 +263,13 @@ def require_admin(request: Request, db: Session = Depends(get_db)) -> str:
     if (user.role or "user") != "admin" or user.username != settings.admin_truong_username:
         raise HTTPException(status_code=403, detail="admin truong only")
     return user.id
+
+
+def require_admin_fresh(admin_id: str = Depends(require_admin)) -> str:
+    ts = _admin_unlocks.get(admin_id)
+    if ts is None or time.time() - ts > settings.admin_unlock_window_seconds:
+        raise HTTPException(status_code=403, detail="admin reauth required")
+    return admin_id
 
 
 def _bearer_user(request: Request, db: Session):
@@ -241,8 +296,8 @@ def _validate_registration(db: Session, u: str, e: str, p: str, c: str) -> None:
         raise HTTPException(status_code=400, detail="username must be at least 3 characters")
     if u.lower() in RESERVED_USERNAMES:
         raise HTTPException(status_code=400, detail="username is reserved")
-    if not e.endswith("@gmail.com") or len(e) <= 10:
-        raise HTTPException(status_code=400, detail="only @gmail.com addresses are supported")
+    if not EMAIL_RE.fullmatch(e):
+        raise HTTPException(status_code=400, detail="invalid email address")
     if len(p) < 6:
         raise HTTPException(status_code=400, detail="password must be at least 6 characters")
     if c not in get_valid_invite_codes(db):
@@ -254,11 +309,15 @@ def _validate_registration(db: Session, u: str, e: str, p: str, c: str) -> None:
 
 
 @router.post("/register")
-def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
     u = req.username.strip()
     e = req.email.strip().lower()
     p = req.password
     c = req.invite_code.strip()
+
+    if not rate_limit.hit_and_allow(f"register-ip:{_client_ip(request)}", max(1, settings.register_ip_rate_limit)):
+        security_log.security_event("register_ip_flood", ip=_client_ip(request))
+        raise HTTPException(status_code=429, detail="too many requests, slow down")
 
     key = f"register:{_client_ip(request)}:{u.lower()}"
     if _attempts_exceeded(key):
@@ -291,7 +350,8 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
         "username": user.username,
         "email": user.email,
         "role": _role_of(user),
-        "token": make_token(user.id, user.token_epoch or 0),
+        "must_change_password": _must_change(user),
+        "token": make_token_for(user),
     }
 
 
@@ -301,13 +361,18 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not login_id or not req.password:
         raise HTTPException(status_code=400, detail="identifier and password required")
 
+    if not rate_limit.hit_and_allow(f"login-ip:{_client_ip(request)}", max(1, settings.auth_flood_ip_limit)):
+        security_log.security_event("login_ip_flood", ip=_client_ip(request))
+        raise HTTPException(status_code=429, detail="too many requests, slow down")
+
     key = f"login:{_client_ip(request)}:{login_id.lower()}"
     if _attempts_exceeded(key) or _identifier_exceeded(login_id.lower()):
         security_log.security_event("login_rate_limited", ip=_client_ip(request), identifier=login_id)
         raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
 
     user = crud.get_user_by_identifier(db, login_id)
-    if not user or not verify_password(req.password, user.password_hash):
+    password_ok = _uniform_verify(req.password, user.password_hash if user else None)
+    if not user or not password_ok:
         _record_failure(key)
         _record_identifier_failure(login_id.lower())
         security_log.security_event("login_failed", ip=_client_ip(request), identifier=login_id)
@@ -322,12 +387,15 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
     _clear_failures(key)
     security_log.security_event("login_success", ip=_client_ip(request), username=user.username, user_id=user.id)
+    if _role_of(user) == "admin":
+        security_log.security_event("admin_login", ip=_client_ip(request), user_id=user.id)
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "role": _role_of(user),
-        "token": make_token(user.id, user.token_epoch or 0),
+        "must_change_password": _must_change(user),
+        "token": make_token_for(user),
     }
 
 
@@ -339,6 +407,8 @@ def get_me(request: Request, db: Session = Depends(get_db)):
         "username": user.username,
         "email": user.email,
         "role": _role_of(user),
+        "must_change_password": _must_change(user),
+        "token": make_token_for(user),
     }
 
 
@@ -412,13 +482,21 @@ def change_password(req: ChangePasswordRequest, request: Request, db: Session = 
     user = _bearer_user(request, db)
     if len(req.new_password) < 6:
         raise HTTPException(status_code=400, detail="password must be at least 6 characters")
-    if not verify_password(req.old_password, user.password_hash):
+    if _role_of(user) == "admin" and not _admin_password_ok(req.new_password):
+        raise HTTPException(
+            status_code=400,
+            detail="admin password must be at least 12 characters and contain letters and digits",
+        )
+    if not _uniform_verify(req.old_password, user.password_hash):
         security_log.security_event("change_password_failed", user_id=user.id, username=user.username)
         raise HTTPException(status_code=401, detail="wrong password")
     crud.update_user_password(db, user.id, hash_password(req.new_password))
+    crud.set_must_change_password(db, user.id, False)
     new_epoch = crud.bump_token_epoch(db, user.id)
     security_log.security_event("password_changed", user_id=user.id, username=user.username)
-    return {"changed": True, "token": make_token(user.id, new_epoch)}
+    db.refresh(user)
+    user.token_epoch = new_epoch
+    return {"changed": True, "token": make_token_for(user)}
 
 
 class ActiveRequest(BaseModel):
@@ -426,7 +504,7 @@ class ActiveRequest(BaseModel):
 
 
 @router.patch("/users/{user_id}/active")
-def set_user_active(user_id: str, req: ActiveRequest, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def set_user_active(user_id: str, req: ActiveRequest, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db)):
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
@@ -442,7 +520,7 @@ def set_user_active(user_id: str, req: ActiveRequest, admin_id: str = Depends(re
 
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: str, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_user(user_id: str, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db)):
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
@@ -454,16 +532,76 @@ def delete_user(user_id: str, admin_id: str = Depends(require_admin), db: Sessio
     return {"deleted": user_id, "username": username}
 
 
+class AdminCreateUserRequest(BaseModel):
+    username: str
+    email: str = ""
+    password: str = ""
+    note: str = ""
+
+
+class AdminUnlockRequest(BaseModel):
+    password: str
+
+
+@router.post("/admin-unlock")
+def admin_unlock(req: AdminUnlockRequest, db: Session = Depends(get_db), admin_id: str = Depends(require_admin)):
+    user = crud.get_user_by_id(db, admin_id)
+    if not user or not _uniform_verify(req.password, user.password_hash):
+        security_log.security_event("admin_unlock_failed", admin=admin_id)
+        raise HTTPException(status_code=401, detail="wrong password")
+    _admin_unlocks[admin_id] = time.time()
+    security_log.security_event("admin_unlock", admin=admin_id)
+    return {"unlocked": True, "window_seconds": settings.admin_unlock_window_seconds}
+
+
+@router.post("/users")
+def admin_create_user(req: AdminCreateUserRequest, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
+    u = req.username.strip()
+    if not u or len(u) < 3:
+        raise HTTPException(status_code=400, detail="username must be at least 3 characters")
+    if u.lower() in RESERVED_USERNAMES:
+        raise HTTPException(status_code=400, detail="username is reserved")
+    e = req.email.strip().lower()
+    if e and not EMAIL_RE.fullmatch(e):
+        raise HTTPException(status_code=400, detail="invalid email address")
+    generated = not req.password.strip()
+    p = req.password.strip() or ("hue-" + secrets.token_hex(4))
+    if len(p) < 6:
+        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+    if crud.get_user(db, u):
+        raise HTTPException(status_code=409, detail="username already exists")
+    if e and crud.get_user_by_email(db, e):
+        raise HTTPException(status_code=409, detail="email already registered")
+    try:
+        user = crud.create_user(db, username=u, email=e, password_hash=hash_password(p), must_change_password=True)
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="username or email already exists")
+    security_log.security_event("user_created_by_admin", admin=admin_id, username=u, user_id=user.id, note=req.note.strip())
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": _role_of(user),
+        "temp_password": p,
+        "generated": generated,
+        "must_change_password": True,
+    }
+
+
 @router.post("/users/{user_id}/reset-password")
-def admin_reset_password(user_id: str, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def admin_reset_password(user_id: str, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db)):
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
-    temp = "hue-" + secrets.token_hex(4)
+    if user.username == settings.admin_truong_username:
+        temp = "hue-" + secrets.token_urlsafe(12)
+    else:
+        temp = "hue-" + secrets.token_hex(4)
     crud.reset_user_password(db, user_id, hash_password(temp))
+    crud.set_must_change_password(db, user_id, True)
     crud.bump_token_epoch(db, user_id)
     security_log.security_event("password_reset_by_admin", admin=admin_id, user_id=user_id, username=user.username)
-    return {"id": user_id, "temp_password": temp}
+    return {"id": user_id, "temp_password": temp, "must_change_password": True}
 
 
 @router.post("/revoke-all")

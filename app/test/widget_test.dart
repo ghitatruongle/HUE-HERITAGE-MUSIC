@@ -1,8 +1,12 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hue_heritage_music/api/api_client.dart';
+import 'package:hue_heritage_music/api/endpoints/admin_endpoints.dart';
+import 'package:hue_heritage_music/models/auth_user.dart';
+import 'package:hue_heritage_music/services/admin_reauth.dart';
 import 'package:hue_heritage_music/models/compare_result.dart';
 import 'package:hue_heritage_music/models/lesson.dart';
 import 'package:hue_heritage_music/models/pitch_data.dart';
@@ -135,15 +139,20 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 400,
-            height: 300,
-            child: CompareChart(
-              times: comp.times,
-              sampleF0: comp.sampleF0,
-              warpedF0: comp.warpedF0,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 300,
+              child: CompareChart(
+                times: comp.times,
+                sampleF0: comp.sampleF0,
+                warpedF0: comp.warpedF0,
+              ),
             ),
           ),
         ),
@@ -155,13 +164,18 @@ void main() {
 
   testWidgets('SheetMusicView shows piano roll and disclaimer', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SheetMusicView(
-            notes: [
-              SheetNote(midi: 69, start: 0.0, end: 0.5),
-              SheetNote(midi: 72, start: 0.5, end: 1.0),
-            ],
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SheetMusicView(
+              notes: [
+                SheetNote(midi: 69, start: 0.0, end: 0.5),
+                SheetNote(midi: 72, start: 0.5, end: 1.0),
+              ],
+            ),
           ),
         ),
       ),
@@ -180,6 +194,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<ServerConfig>.value(value: server),
           ChangeNotifierProvider<HistoryService>.value(value: history),
+          ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
         ],
         child: const MaterialApp(
           home: CreationScreen(),
@@ -354,7 +369,7 @@ void main() {
 
     expect(find.text('Đăng nhập'), findsWidgets);
     expect(find.text('Trải nghiệm ngay (Chế độ Khách)'), findsOneWidget);
-    expect(find.textContaining('chưa hỗ trợ đặt lại mật khẩu'), findsOneWidget);
+    expect(find.textContaining('Liên hệ quản trị viên'), findsOneWidget);
   });
 
   test('401 from a guarded endpoint clears the stored token', () async {
@@ -435,6 +450,166 @@ void main() {
     expect(auth.isAdmin, isFalse);
   });
 
+  test('validateSession renews sliding token and syncs profile', () async {
+    final auth = AuthService();
+    await auth.save(token: 'old-token', username: 'user1', email: 'a@gmail.com', role: 'user');
+    final dio = Dio(BaseOptions())
+      ..httpClientAdapter = _JsonAdapter({
+        'id': 'u1',
+        'username': 'user1',
+        'email': 'a@gmail.com',
+        'role': 'admin',
+        'must_change_password': true,
+        'token': 'fresh-token',
+      });
+    await auth.validateSession('http://server:8000', dio: dio);
+    expect(auth.token, 'fresh-token');
+    expect(auth.role, 'admin');
+    expect(auth.isAdmin, isTrue);
+    expect(auth.mustChangePassword, isTrue);
+    expect(auth.isLoggedIn, isTrue);
+    await auth.clearToken();
+  });
+
+  test('validateSession logs out softly on 401 expired token', () async {
+    final auth = AuthService();
+    await auth.save(token: 'expired-token', username: 'user2', email: 'b@gmail.com');
+    final dio = Dio(BaseOptions())..httpClientAdapter = _UnauthorizedAdapter();
+    await auth.validateSession('http://server:8000', dio: dio);
+    expect(auth.isLoggedIn, isFalse);
+    expect(auth.sessionExpiredNotice, isTrue);
+    auth.consumeSessionExpiredNotice();
+    expect(auth.sessionExpiredNotice, isFalse);
+  });
+
+  test('validateSession keeps session when server unreachable', () async {
+    final auth = AuthService();
+    await auth.save(token: 'keep-token', username: 'user3', email: 'c@gmail.com');
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(milliseconds: 200),
+      receiveTimeout: const Duration(milliseconds: 200),
+    ))..httpClientAdapter = _OfflineAdapter();
+    await auth.validateSession('http://server:8000', dio: dio);
+    expect(auth.isLoggedIn, isTrue);
+    expect(auth.token, 'keep-token');
+    await auth.clearToken();
+  });
+
+  test('AdminStats parses nested server payload', () {
+    final stats = AdminStats.fromJson({
+      'users': {'total': 4, 'active': 3},
+      'invites': {'total': 9, 'unused': 2},
+      'storage': {
+        'items_total': 30,
+        'items_bytes': 1048576,
+        'derived_files': 12,
+        'derived_bytes': 2048,
+        'generated_bytes': 4096,
+      },
+      'tasks': {'by_status': {'done': 5, 'error': 1}, 'by_kind': {'transcribe': 6}},
+      'engine_online': true,
+    });
+    expect(stats.usersTotal, 4);
+    expect(stats.usersActive, 3);
+    expect(stats.invitesUnused, 2);
+    expect(stats.itemsBytes, 1048576);
+    expect(stats.derivedFiles, 12);
+    expect(stats.tasksByStatus['done'], 5);
+    expect(stats.tasksByKind['transcribe'], 6);
+    expect(stats.engineOnline, isTrue);
+  });
+
+
+  test('AuthUser parses must_change_password flag', () {
+    final flagged = AuthUser.fromJson({'id': 'u1', 'username': 'a', 'token': 't', 'must_change_password': true});
+    expect(flagged.mustChangePassword, isTrue);
+    final plain = AuthUser.fromJson({'id': 'u2', 'username': 'b', 'token': 't'});
+    expect(plain.mustChangePassword, isFalse);
+    expect(flagged.toJson()['must_change_password'], isTrue);
+  });
+
+  testWidgets('runWithAdminReauth prompts password, unlocks, retries action', (tester) async {
+    final server = ServerConfig();
+    int unlockCalls = 0;
+    int actionCalls = 0;
+    server.api.dio.httpClientAdapter = _StatefulAdminAdapter(
+      onUnlock: () => unlockCalls++,
+      onAction: () => actionCalls++,
+    );
+    final locale = LocaleProvider()..setLocale('vi');
+
+    late BuildContext captured;
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: server),
+          ChangeNotifierProvider<LocaleProvider>.value(value: locale),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              captured = context;
+              return const Scaffold(body: SizedBox());
+            },
+          ),
+        ),
+      ),
+    );
+
+    Future<Response<dynamic>> doAction() => server.api.dio.get('/api/admin/stats');
+    final future = runWithAdminReauth(captured, doAction);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Xác thực quản trị'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'AdminKhoe#2026x');
+    await tester.tap(find.text('Xác nhận'));
+    await tester.pumpAndSettle();
+    final result = await future;
+    expect(result.statusCode, 200);
+    expect(unlockCalls, 1);
+    expect(actionCalls, 2);
+  });
+
+  testWidgets('runWithAdminReauth throws AdminReauthCancelled on cancel', (tester) async {
+    final server = ServerConfig();
+    int actionCalls = 0;
+    server.api.dio.httpClientAdapter = _StatefulAdminAdapter(
+      onUnlock: () {},
+      onAction: () => actionCalls++,
+    );
+    final locale = LocaleProvider()..setLocale('vi');
+
+    late BuildContext captured;
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: server),
+          ChangeNotifierProvider<LocaleProvider>.value(value: locale),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) {
+              captured = context;
+              return const Scaffold(body: SizedBox());
+            },
+          ),
+        ),
+      ),
+    );
+
+    Future<Response<dynamic>> doAction() => server.api.dio.get('/api/admin/stats');
+    final future = runWithAdminReauth(captured, doAction);
+    final expectation = expectLater(future, throwsA(isA<AdminReauthCancelled>()));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Hủy'));
+    await tester.pumpAndSettle();
+    await expectation;
+    expect(actionCalls, 1);
+  });
+
   test('HistoryEntry score roundtrip', () {
     final entry = HistoryEntry(
       id: 'h1',
@@ -471,6 +646,66 @@ void main() {
     );
     expect(find.byType(OverlayPitchChart), findsOneWidget);
   });
+}
+
+class _StatefulAdminAdapter implements HttpClientAdapter {
+  final void Function() onUnlock;
+  final void Function() onAction;
+  bool unlocked = false;
+
+  _StatefulAdminAdapter({required this.onUnlock, required this.onAction});
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    if (options.method == 'POST' && options.path.endsWith('/api/auth/admin-unlock')) {
+      final body = options.data;
+      final pw = body is Map ? (body['password']?.toString() ?? '') : '';
+      onUnlock();
+      if (pw == 'AdminKhoe#2026x') {
+        unlocked = true;
+        return ResponseBody.fromString('{"unlocked": true}', 200, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+      }
+      return ResponseBody.fromString('{"detail": "wrong password"}', 401, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+    }
+    if (options.method == 'GET' && options.path.endsWith('/api/admin/stats')) {
+      onAction();
+      if (!unlocked) {
+        return ResponseBody.fromString('{"detail": "admin reauth required"}', 403, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+      }
+      return ResponseBody.fromString('{}', 200, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+    }
+    return ResponseBody.fromString('{}', 404);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _JsonAdapter implements HttpClientAdapter {
+  final Map<String, dynamic> payload;
+  _JsonAdapter(this.payload);
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    return ResponseBody.fromString(
+      jsonEncode(payload),
+      200,
+      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _OfflineAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    throw DioException.connectionError(requestOptions: options, reason: 'offline in test');
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _UnauthorizedAdapter implements HttpClientAdapter {

@@ -553,6 +553,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       'history' => s.taskHistoryTitle,
       'settings' => s.settingsTitle,
       'auth' => s.authTitle,
+      'admin' => s.navAdmin,
       _ => key,
     };
   }

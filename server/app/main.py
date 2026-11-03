@@ -109,6 +109,65 @@ class HeavyRateLimitMiddleware:
         await self.app(scope, receive, send)
 
 
+class BodyLimitMiddleware:
+    def __init__(self, app, default_limit=2 * 1024 * 1024):
+        self.app = app
+        self.default_limit = default_limit
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method") not in ("POST", "PUT", "PATCH"):
+            await self.app(scope, receive, send)
+            return
+        path = scope.get("path", "")
+        if not path.startswith("/api/"):
+            await self.app(scope, receive, send)
+            return
+        if path.startswith("/api/heritage/upload"):
+            await self._stream_limit(scope, receive, send, 50 * 1024 * 1024 + 2 * 1024 * 1024)
+            return
+        body = b""
+        over = False
+        while True:
+            msg = await receive()
+            if msg["type"] == "http.request":
+                body += msg.get("body", b"")
+                if len(body) > self.default_limit:
+                    over = True
+                if not msg.get("more_body"):
+                    break
+            elif msg["type"] == "http.disconnect":
+                return
+        if over:
+            response = JSONResponse({"detail": "request body too large"}, status_code=413)
+            await response(scope, receive, send)
+            return
+        sent = {"done": False}
+
+        async def replay_receive():
+            if not sent["done"]:
+                sent["done"] = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, replay_receive, send)
+
+    async def _stream_limit(self, scope, receive, send, limit):
+        from fastapi import HTTPException
+
+        total = 0
+
+        async def counting_receive():
+            nonlocal total
+            msg = await receive()
+            if msg["type"] == "http.request":
+                total += len(msg.get("body", b""))
+                if total > limit:
+                    raise HTTPException(status_code=413, detail="file too large")
+            return msg
+
+        await self.app(scope, counting_receive, send)
+
+
 def _validate_secret_key() -> None:
     if not settings.auth_required:
         return
@@ -168,7 +227,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.1-beta",
+        version="0.0.1",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -184,6 +243,7 @@ def create_app() -> FastAPI:
     application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(NoGzipAudioMiddleware)
     application.add_middleware(HeavyRateLimitMiddleware)
+    application.add_middleware(BodyLimitMiddleware)
     if settings.auth_required and settings.allowed_origins.strip() == "*":
         import logging
 
@@ -197,7 +257,7 @@ def create_app() -> FastAPI:
         import anyio.to_thread
 
         limiter = anyio.to_thread.current_default_thread_limiter()
-        limiter.total_tokens = 64
+        limiter.total_tokens = 192
         threading.Thread(target=_warmup_lessons, daemon=True).start()
 
     @application.get("/health")
@@ -205,8 +265,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.1-beta",
-            "stage": "0.0.1-beta",
+            "version": "0.0.1",
+            "stage": "0.0.1",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             from .ai import ace_step_engine
@@ -243,7 +303,6 @@ def create_app() -> FastAPI:
                     "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
                     "Pragma": "no-cache",
                     "Expires": "0",
-                    "Clear-Site-Data": "\"cache\", \"storage\"",
                 },
             )
 
@@ -272,7 +331,6 @@ def create_app() -> FastAPI:
                     "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
                     "Pragma": "no-cache",
                     "Expires": "0",
-                    "Clear-Site-Data": "\"cache\", \"storage\"",
                 },
             )
     else:

@@ -88,6 +88,16 @@ def test_revoke_all_tokens(client):
     assert again.status_code == 200
 
 
+
+def _admin_unlock(client2, admin_token, password="secret123"):
+    r = client2.post(
+        "/api/auth/admin-unlock",
+        json={"password": password},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_admin_disable_and_reset(client):
     _register(client, settings.admin_truong_username)
     client2 = TestClient(create_app())
@@ -95,6 +105,7 @@ def test_admin_disable_and_reset(client):
         "/api/auth/login",
         json={"identifier": settings.admin_truong_username, "password": "secret123"},
     ).json()["token"]
+    _admin_unlock(client2, admin_token)
     victim = _register(client2, "victim1")
     victim_token = victim["token"]
     victim_id = victim["id"]
@@ -143,6 +154,7 @@ def test_cannot_disable_admin_truong(client):
         "/api/auth/login",
         json={"identifier": settings.admin_truong_username, "password": "secret123"},
     ).json()["token"]
+    _admin_unlock(client2, admin_token)
     admin_id = client2.get("/api/auth/me", headers={"Authorization": f"Bearer {admin_token}"}).json()["id"]
     r = client2.patch(
         f"/api/auth/users/{admin_id}/active",
@@ -199,6 +211,7 @@ def test_admin_delete_account_full_flow(client):
         "/api/auth/login",
         json={"identifier": settings.admin_truong_username, "password": "secret123"},
     ).json()["token"]
+    _admin_unlock(client2, admin_token)
     victim = _register(client2, "deleteme1")
     vid = victim["id"]
     vtok = victim["token"]
@@ -226,6 +239,7 @@ def test_cannot_delete_admin_truong(client):
         "/api/auth/login",
         json={"identifier": settings.admin_truong_username, "password": "secret123"},
     ).json()["token"]
+    _admin_unlock(client2, admin_token)
     me = client2.get("/api/auth/me", headers={"Authorization": f"Bearer {admin_token}"}).json()
     r = client2.delete(f"/api/auth/users/{me['id']}", headers={"Authorization": f"Bearer {admin_token}"})
     assert r.status_code == 400

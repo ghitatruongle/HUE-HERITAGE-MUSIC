@@ -1,6 +1,7 @@
 from typing import Optional
 import asyncio
 import re
+import secrets
 import time
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
@@ -67,7 +68,7 @@ async def practice_scale(
         raise HTTPException(status_code=400, detail="wav decode failed")
 
 
-PRACTICE_MIDI_NAME = re.compile(r"^practice_[A-Za-z0-9]{8}_\d+_\d{10}\.mid$")
+PRACTICE_MIDI_NAME = re.compile(r"^practice_[A-Za-z0-9]{8,32}(_\d+_\d{10})?\.mid$")
 
 
 @router.get("/practice-midi/{name}")
@@ -144,7 +145,7 @@ async def practice_section(
 
                 bpm_val = int(item.bpm) if item.bpm and item.bpm > 0 else 60
                 user_midi = midi_service.write_midi(result["notes"], bpm_val)
-                mid_name = f"practice_{lesson_id[:8]}_{section}_{int(time.time())}.mid"
+                mid_name = f"practice_{secrets.token_hex(12)}_{section}_{int(time.time())}.mid"
                 mid_dir = manager.midi_dir()
                 mid_dir.mkdir(parents=True, exist_ok=True)
                 (mid_dir / mid_name).write_bytes(user_midi)

@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
 import '../../api/endpoints/auth_endpoints.dart';
-import 'account_manager_section.dart';
-import 'invite_manager_section.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/auth_service.dart';
 import '../../services/locale_provider.dart';
@@ -73,7 +71,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       final api = AuthEndpoints(dio);
       final auth = context.read<AuthService>();
       final user = await api.login(identifier: identifier, password: password);
-      await auth.save(token: user.token, username: user.username, email: user.email, role: user.role);
+      await auth.save(
+        token: user.token,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      );
       if (mounted) {
         Navigator.of(context).maybePop();
       }
@@ -99,8 +103,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       setState(() => _error = strings.authErrUsernameShort);
       return;
     }
-    if (!email.endsWith('@gmail.com') || email.length <= 10) {
-      setState(() => _error = strings.authErrGmail);
+    if (!RegExp(r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$').hasMatch(email)) {
+      setState(() => _error = strings.authErrEmail);
       return;
     }
     if (password.length < 6) {
@@ -127,7 +131,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         password: password,
         inviteCode: inviteCode,
       );
-      await auth.save(token: user.token, username: user.username, email: user.email, role: user.role);
+      await auth.save(
+        token: user.token,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      );
       if (mounted) {
         Navigator.of(context).maybePop();
       }
@@ -334,13 +344,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               icon: const Icon(Icons.phonelink_erase, size: 16),
               label: Text(strings.logoutEverywhereBtn),
             ),
-            if (auth.isAdmin) ...[
-              const SizedBox(height: 16),
-              const Divider(),
-              const InviteManagerSection(),
-              const SizedBox(height: 16),
-              const AccountManagerSection(),
-            ],
           ],
         ),
       ),

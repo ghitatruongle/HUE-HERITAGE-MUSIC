@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     secret_key: str = INSECURE_DEFAULT_SECRET_KEY
     auth_required: bool = False
     token_ttl_hours: int = 24
+    admin_token_ttl_hours: int = 8
+    admin_unlock_window_seconds: int = 600
+    auth_flood_ip_limit: int = 120
+    register_ip_rate_limit: int = 20
     allowed_origins: str = "*"
     redis_url: str = "redis://127.0.0.1:6379/0"
     use_rq: bool = False

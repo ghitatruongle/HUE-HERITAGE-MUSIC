@@ -107,6 +107,7 @@ def list_users(db: Session):
             "email": u.email,
             "role": u.role or "user",
             "active": (u.active if u.active is not None else 1) == 1,
+            "must_change_password": bool(getattr(u, "must_change_password", 0)),
             "created_at": str(u.created_at),
         }
         for u in rows
@@ -160,9 +161,9 @@ def reset_user_password(db: Session, user_id: str, password_hash: str):
     return user
 
 
-def create_user(db: Session, username: str, password_hash: str, email: str = ""):
+def create_user(db: Session, username: str, password_hash: str, email: str = "", must_change_password: bool = False):
     from sqlalchemy.exc import IntegrityError
-    user = User(username=username, email=email, password_hash=password_hash)
+    user = User(username=username, email=email, password_hash=password_hash, must_change_password=1 if must_change_password else 0)
     db.add(user)
     try:
         db.commit()
@@ -171,6 +172,25 @@ def create_user(db: Session, username: str, password_hash: str, email: str = "")
         raise
     db.refresh(user)
     return user
+
+
+def set_must_change_password(db: Session, user_id: str, flag: bool):
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    user.must_change_password = 1 if flag else 0
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def delete_heritage_item(db: Session, item_id: str):
+    item = db.get(HeritageItem, item_id)
+    if not item:
+        return None
+    db.delete(item)
+    db.commit()
+    return item
 
 
 def update_user_password(db: Session, user_id: str, password_hash: str):

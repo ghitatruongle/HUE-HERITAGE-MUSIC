@@ -74,9 +74,17 @@ Server có các endpoint auth:
 
 Vai trò (role): chỉ có `admin` và `user`. **Admin trưởng duy nhất là tài khoản `ghitatruongle`** — server tự động gán khi khởi động (biến `ADMIN_TRUONG_USERNAME` trong `.env` nếu cần đổi) và tự hạ mọi tài khoản khác về `user`, nên không thể có admin thứ hai xuất hiện. Mọi tài khoản đăng ký qua mã mời/web đều là `user`.
 
+Bảo mật tài khoản admin trưởng (mặc định bật, chỉnh qua `.env`):
+
+- **Mật khẩu admin** phải tối thiểu 12 ký tự, có cả chữ và số (áp khi admin đổi mật khẩu của mình).
+- **Token admin chỉ sống 8 giờ** (`ADMIN_TOKEN_TTL_HOURS`) trong khi user thường 24–72h; sliding session vẫn gia hạn khi đang dùng.
+- **Xác thực lại trước hành động phá hủy**: tạo user, khóa/mở, xóa user, reset mật khẩu, xóa bản ghi lưu trữ đều yêu cầu nhập lại mật khẩu admin (`POST /api/auth/admin-unlock`, hiệu lực 10 phút — `ADMIN_UNLOCK_WINDOW_SECONDS`). App tự hiện hộp thoại khi cần.
+- Mọi đăng nhập của admin được ghi sự kiện riêng `admin_login` vào nhật ký bảo mật.
+- So khớp mật khẩu chống tấn công thời gian: user không tồn tại vẫn chạy đủ PBKDF2 (hash giả) + jitter ngẫu nhiên 2–6ms sau mỗi lần so khớp — thời gian phản hồi không tiết lộ username hay số ký tự đúng.
+
 Mã mời được nạp theo thứ tự ưu tiên:
 
-1. Mã dùng một lần trong CSDL (bảng `invite_codes`) — tạo bằng `python tools/create_invite_code.py <MÃ> --note "ghi chú"`; mỗi mã chỉ đăng ký được 1 tài khoản
+1. Mã dùng một lần trong CSDL (bảng `invite_codes`) — tạo trong app (tab **Quản trị → Mã mời**) hoặc gọi `POST /api/auth/invites` bằng token admin; mỗi mã chỉ đăng ký được 1 tài khoản. Admin còn có thể tạo tài khoản trực tiếp (tab **Quản trị → Người dùng** hoặc `POST /api/auth/users`) không cần mã mời
 2. `server/INVITATION_CODES.json` (gitignored) dạng `{"valid_codes": ["MÃ_1", "MÃ_2"]}` (dùng nhiều lần)
 3. biến `INVITE_CODES` trong `.env` (phân tách bằng dấu phẩy, dùng nhiều lần)
 
@@ -149,6 +157,20 @@ pytest -q
 ```
 
 Từ gốc repo (macOS venv chuẩn): `./.venv-mac312/bin/python -m pytest server/tests -q`.
+
+## Sức chịu tải (đo thật trên Mac M4, 2026-10-28)
+
+Ramp test 1 → 1000 người dùng đồng thời bằng `tools/load_ramp.py` (đọc/xem, think-time 10–50ms):
+
+- Đỉnh thông lượng **~700 req/s ở 25 VU**; nghẽn bắt đầu từ ~50 VU; 1 worker phục vụ ổn **~150–340 req/s** ở mức 100–1000 VU.
+- Ở 700–1000 VU (stress khắc nghiệt) server **không sập, không lỗi 500** — phần vượt ngưỡng bị **xả lịch sự bằng 503** nhờ `--limit-concurrency 512`, health hồi phục ngay sau bão.
+- Đăng nhập song song: ~105 lần/s (PBKDF2 600k chiếm CPU); đăng ký: ~20–25 lần/s.
+- **Không dùng `--workers N > 1` với SQLite**: 2 workers làm throughput GIẢM (659 vs 718 rps) do tranh lock SQLite chéo process.
+- Kịch bản thật (người dùng đọc/xem có nghỉ 2–5s giữa các thao tác) ≈ chỉ 200–500 request đồng thời ở 1000 người online → chạy thoải mái trong cấu hình trên.
+
+Khuyến nghị vận hành LAN: 1 worker + `--limit-concurrency 512` (đã cấu hình sẵn trong `tools/deploy_lan.sh`).
+
+Tối ưu ghi đa người dùng (2026-10-28): SQLite chạy **WAL mode** + `busy_timeout` 30s; các endpoint ghi nặng (upload, đăng ký, tạo user, xóa bản ghi) đi qua **write-slot semaphore 8** — writer xếp hàng trong app thay vì cầm kết nối pool chờ khóa; pool 100 kết nối; threadpool 192. Bộ test chuyên sâu: `tools/attack/deep_multiuser_campaign.py`.
 
 ## Khắc phục sự cố
 

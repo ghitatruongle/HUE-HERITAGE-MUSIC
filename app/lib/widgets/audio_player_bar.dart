@@ -122,7 +122,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = 'Không tải được bản ghi âm. Kiểm tra kết nối với máy chủ AI.');
+        setState(() => _error = context.read<LocaleProvider>().strings.audioLoadFail);
       }
     }
   }

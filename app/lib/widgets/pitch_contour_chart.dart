@@ -1,7 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/pitch_data.dart';
+import '../services/locale_provider.dart';
 
 class PitchContourChart extends StatelessWidget {
   final PitchData data;
@@ -11,7 +13,7 @@ class PitchContourChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (data.times.isEmpty) {
-      return const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('Chưa có dữ liệu')));
+      return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(context.watch<LocaleProvider>().strings.noData)));
     }
     var step = 1;
     if (data.times.length > 500) {

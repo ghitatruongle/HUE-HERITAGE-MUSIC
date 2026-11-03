@@ -10,6 +10,7 @@ import '../../widgets/app_logo.dart';
 import '../../widgets/server_onboarding_dialog.dart';
 import '../../widgets/responsive_layout.dart';
 import '../analysis/analysis_screen.dart';
+import '../admin/admin_screen.dart';
 import '../auth/login_screen.dart';
 import '../creation/creation_screen.dart';
 import '../heritage/heritage_list_screen.dart';
@@ -29,6 +30,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _navIndex = 0;
   bool _onboardingShown = false;
+  bool _mcpDialogShown = false;
 
   void _maybeShowOnboarding(BuildContext context) {
     final server = context.read<ServerConfig>();
@@ -45,9 +47,52 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _maybeShowSessionNotices(BuildContext context) {
+    final auth = context.read<AuthService>();
+    final strings = context.read<LocaleProvider>().strings;
+    if (auth.sessionExpiredNotice) {
+      auth.consumeSessionExpiredNotice();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.sessionExpired)),
+        );
+      });
+    }
+    if (auth.isLoggedIn && auth.mustChangePassword && !_mcpDialogShown) {
+      _mcpDialogShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(strings.mustChangeTitle),
+            content: Text(strings.mustChangeBody),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(strings.mustChangeLater),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+                child: Text(strings.mustChangeNow),
+              ),
+            ],
+          ),
+        );
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     _maybeShowOnboarding(context);
+    _maybeShowSessionNotices(context);
     final destinations = [
       NavigationDestinationItem(
         icon: Icons.home_outlined,
@@ -110,6 +155,18 @@ class _HomeScreenState extends State<HomeScreen> {
         screen: LoginScreen(),
       ),
     ];
+
+    final auth = context.watch<AuthService>();
+    if (auth.isAdmin) {
+      destinations.add(
+        const NavigationDestinationItem(
+          icon: Icons.admin_panel_settings_outlined,
+          selectedIcon: Icons.admin_panel_settings,
+          labelKey: 'admin',
+          screen: AdminScreen(),
+        ),
+      );
+    }
 
     return ResponsiveScaffold(
       destinations: destinations,
