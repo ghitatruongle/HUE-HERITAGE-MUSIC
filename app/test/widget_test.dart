@@ -630,6 +630,25 @@ void main() {
     expect(legacy.detail, '');
   });
 
+  test('CleanupResult.fromJson groups cleanup bytes', () {
+    final result = CleanupResult.fromJson({
+      'freed_bytes': 1536,
+      'details': {
+        'generated': {'files': 1, 'bytes': 1024},
+        'analysis': {'files': 2, 'bytes': 512},
+        'lesson_cache': {'files': 0, 'bytes': 0},
+        'tasks': {'deleted': 3},
+      },
+    });
+    expect(result.freedBytes, 1536);
+    expect(result.tasksDeleted, 3);
+    expect(result.groupBytes, {'generated': 1024, 'analysis': 512});
+
+    final empty = CleanupResult.fromJson({'freed_bytes': 0, 'details': {'tasks': {'deleted': 0}}});
+    expect(empty.groupBytes, isEmpty);
+    expect(empty.tasksDeleted, 0);
+  });
+
   testWidgets('OverlayPitchChart renders two contours', (tester) async {
     final result = PracticeResult.fromJson(const {
       'metrics': {'score': 90, 'pitch_score': 92, 'time_score': 85, 'mean_abs_cents': 20},

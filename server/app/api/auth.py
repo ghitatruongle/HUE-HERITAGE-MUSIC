@@ -79,6 +79,13 @@ def make_token_for(user) -> str:
     return f"{payload}.{sig}"
 
 
+
+def _user_password_ok(pw: str) -> bool:
+    if len(pw) < 8:
+        return False
+    return any(c.isalpha() for c in pw) and any(c.isdigit() for c in pw)
+
+
 def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
@@ -334,8 +341,11 @@ def _validate_registration(db: Session, u: str, e: str, p: str, c: str) -> None:
         raise HTTPException(status_code=400, detail="username is reserved")
     if not EMAIL_RE.fullmatch(e):
         raise HTTPException(status_code=400, detail="invalid email address")
-    if len(p) < 6:
-        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+    if not _user_password_ok(p):
+        raise HTTPException(
+            status_code=400,
+            detail="password must be at least 8 characters and contain letters and digits",
+        )
     if c not in get_valid_invite_codes(db):
         raise HTTPException(status_code=400, detail="invalid invitation code")
     if crud.get_user(db, u):
@@ -408,17 +418,18 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         security_log.security_event("login_ip_flood", ip=_client_ip(request))
         raise HTTPException(status_code=429, detail="too many requests, slow down")
 
-    key = f"login:{_client_ip(request)}:{login_id.lower()}"
-    if _attempts_exceeded(key) or _identifier_exceeded(login_id.lower()):
-        security_log.security_event("login_rate_limited", ip=_client_ip(request), identifier=login_id)
-        raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
-
     user = crud.get_user_by_identifier(db, login_id)
+    ident_key = str(user.id) if user else login_id.lower()
+    key = f"login:{_client_ip(request)}:{ident_key}"
     password_ok = _uniform_verify(req.password, user.password_hash if user else None)
     if not user or not password_ok:
         _record_failure(key)
-        _record_identifier_failure(login_id.lower())
+        _record_identifier_failure(ident_key)
+        locked = _attempts_exceeded(key) or _identifier_exceeded(ident_key)
         security_log.security_event("login_failed", ip=_client_ip(request), identifier=login_id)
+        if locked:
+            security_log.security_event("login_rate_limited", ip=_client_ip(request), identifier=login_id)
+            raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
         raise HTTPException(status_code=401, detail="wrong credentials")
     if getattr(user, "active", 1) == 0:
         security_log.security_event("login_blocked_disabled", ip=_client_ip(request), identifier=login_id)
@@ -529,8 +540,11 @@ class ChangePasswordRequest(BaseModel):
 @router.post("/change-password")
 def change_password(req: ChangePasswordRequest, request: Request, db: Session = Depends(get_db)):
     user = _bearer_user(request, db)
-    if len(req.new_password) < 6:
-        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+    if not _user_password_ok(req.new_password):
+        raise HTTPException(
+            status_code=400,
+            detail="password must be at least 8 characters and contain letters and digits",
+        )
     if _role_of(user) == "admin" and not _admin_password_ok(req.new_password):
         raise HTTPException(
             status_code=400,
@@ -622,8 +636,11 @@ def admin_create_user(req: AdminCreateUserRequest, admin_id: str = Depends(requi
         raise HTTPException(status_code=400, detail="invalid email address")
     generated = not req.password.strip()
     p = req.password.strip() or ("hue-" + secrets.token_hex(4))
-    if len(p) < 6:
-        raise HTTPException(status_code=400, detail="password must be at least 6 characters")
+    if not _user_password_ok(p):
+        raise HTTPException(
+            status_code=400,
+            detail="password must be at least 8 characters and contain letters and digits",
+        )
     if crud.get_user(db, u):
         raise HTTPException(status_code=409, detail="username already exists")
     if e and crud.get_user_by_email(db, e):

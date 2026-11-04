@@ -1,6 +1,8 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
-## 0.0.2-preview (2026-11-03)
+## 0.0.2-alpha1 (2026-11-03)
+
+> Bản 0.0.2-preview nội bộ (chưa phát hành) chốt thành 0.0.2-alpha1.
 
 ### Riêng tư dữ liệu — file test/thử mẫu không còn lộ cho người dùng
 - Thêm chế độ hiển thị từng bản ghi: `Công khai` / `Chỉ admin` (cột `visibility` + `owner_user_id` tự migrate vào DB khi khởi động, bản cũ giữ nguyên công khai)
@@ -23,14 +25,25 @@
 ### Dọn dẹp tự động
 - Tự xóa task đã hoàn tất quá `TASK_RETENTION_DAYS` (mặc định 30 ngày) khi khởi động server — bảng tasks trước đây phình vô hạn
 - Nút "Dọn dẹp dữ liệu thừa" trong tab Kho lưu trữ: xóa bản thu AI đã tạo / practice MIDI / cache bài học quá hạn (`GENERATED_RETENTION_DAYS`, `PRACTICE_MIDI_RETENTION_DAYS`, `LESSON_CACHE_RETENTION_DAYS`), báo dung lượng thu hồi + số task đã xóa, ghi sự kiện bảo mật
+- Mở rộng nút Dọn dẹp: quét toàn bộ cây `storage/analysis` (nhóm cache phân tích, `ANALYSIS_RETENTION_DAYS=30`) trừ cache bài học đã có mốc hạn riêng; app hiển thị dung lượng thu hồi theo từng nhóm
 
 ### Hardening
 - `AUTH_REQUIRED` mặc định **true** ngay trong code — server quên cấu hình không còn mở cửa hoàn toàn
 - `.env.example` bổ sung 4 biến retention + `ENABLE_DOCS` (khớp tên biến thật trong code)
 
+### Bảo mật — vòng rà soát cuối (2026-11-04)
+- **Vá DoS khóa tài khoản admin duy nhất**: kẻ tấn công chỉ cần 5 lần đăng nhập sai là khóa tài khoản admin 15 phút (lặp vô hạn = khóa vĩnh viễn). Thứ tự đăng nhập mới: mật khẩu ĐÚNG luôn được vào và xóa bộ đếm; chỉ mật khẩu SAI khi đang khóa mới nhận 429
+- **Chính sách mật khẩu đồng nhất**: mọi mật khẩu mới (đăng ký, đổi mật khẩu, admin tạo user) tối thiểu 8 ký tự gồm cả chữ và số (admin giữ tối thiểu 12)
+- **Khóa đăng nhập sai hợp nhất**: cùng một tài khoản qua username hay email chung một bộ đếm — hết cảnh ngân sách dò gấp đôi
+- **Thêm Content-Security-Policy** cho toàn bộ response (chống XSS lớp hai, frame-ancestors 'none')
+- **Tự nâng hạn mức file descriptor khi khởi động** — hết cảnh SQLite không mở được DB khi chạy qua launchd dưới tải lớn
+- **Dọn thêm cây `storage/analysis`** theo `ANALYSIS_RETENTION_DAYS` trong nút Dọn dẹp
+- Kho kiểm thử mới: raid SQLi, raid XSS, raid CSRF, raid dò mật khẩu, raid xâm nhập admin, raid kill-chain 8 chuỗi phối hợp, tổng tấn công tổ chức hacker trên nền 10k-15k người dùng — toàn bộ SẠCH
+
 ### Khác
-- Version app `0.0.2+1`, server stage `0.0.2-preview`
-- Kiểm định: pytest 137/137 (13 test hồi quy mới), flutter analyze 0, flutter test 29/29, red-team visibility-IDOR sạch, sweep bảo mật liên tục toàn xanh
+- Version app `0.0.2+1`, server stage `0.0.2-alpha1`
+- Quét liên tục (`continuous_sweep.py`) mở rộng từ 4 bộ → 28 mục: thêm 3 suite tấn công basic/intermediate/advanced (95 + 66 + 81 checks) + 21 tool atk thời beta vào chu kỳ 6 giờ
+- Kiểm định: pytest 154/154 (test hồi quy mới: analysis, SQLi, CSRF, password-hardening), flutter analyze 0, flutter test 30/30, build web release OK, smoke E2E 23/23, quét liên tục 28/28 SẠCH (~400+ kịch bản) + 7 raid chuyên sâu toàn SẠCH, LAN chạy 0.0.2-alpha1
 
 ## 0.0.1 (chính thức) (2026-10-28)
 

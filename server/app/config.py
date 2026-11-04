@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     generated_retention_days: int = 14
     practice_midi_retention_days: int = 7
     lesson_cache_retention_days: int = 30
+    analysis_retention_days: int = 30
     web_dir: Path = BASE_DIR / "app" / "build" / "web"
 
 

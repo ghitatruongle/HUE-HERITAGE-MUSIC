@@ -661,11 +661,28 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
       final dio = context.read<ServerConfig>().api.dio;
       final result = await runWithAdminReauth(context, () => AdminEndpoints(dio).cleanup());
       if (!mounted) return;
+      final groupLabels = <String, String>{
+        'generated': strings.adminCleanupGroupGenerated,
+        'practice_midi': strings.adminCleanupGroupPracticeMidi,
+        'lesson_cache': strings.adminCleanupGroupLessonCache,
+        'analysis': strings.adminCleanupGroupAnalysis,
+      };
+      final breakdown = result.groupBytes.entries
+          .map((e) => '${groupLabels[e.key] ?? e.key}: ${formatBytes(e.value)}')
+          .join(' · ');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '${strings.adminCleanupDonePrefix} ${formatBytes(result.freedBytes)}'
-            ' · ${strings.adminCleanupTasksDeleted(result.tasksDeleted)}',
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${strings.adminCleanupDonePrefix} ${formatBytes(result.freedBytes)}'
+                ' · ${strings.adminCleanupTasksDeleted(result.tasksDeleted)}',
+              ),
+              if (breakdown.isNotEmpty)
+                Text(breakdown, style: Theme.of(context).textTheme.bodySmall),
+            ],
           ),
         ),
       );

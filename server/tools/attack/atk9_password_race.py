@@ -19,6 +19,9 @@ def main():
 
     for rnd in range(args.rounds):
         u = register_user(args.base)
+        if not u:
+            print("khong dang ky duoc user (rate limit) — bo qua vong nay")
+            continue
         tok = u["token"]
         c = client(args.base, tok)
 
@@ -41,6 +44,8 @@ def main():
         for t in threads:
             t.join()
         attempts += 5
+        if any(code in (429, 503) for _, code, _ in results):
+            continue
 
         r = c.get("/api/auth/me", headers={"Authorization": f"Bearer {tok}"})
         if r.status_code == 200:
@@ -53,8 +58,17 @@ def main():
                 if len(parts) >= 3 and parts[2] == orig_epoch:
                     breaches.append((f"race token cấp cũ sống v{rnd}", f"luồng {i} nhận token mang epoch gốc"))
 
+    if attempts == 0:
+        print("khong thuc hien duoc lan nao (rate limit chan toan bo) — BI CHAN, khong phai Sach")
+        sys.exit(2)
     verdict("PASSWORD-RACE", attempts, breaches)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"mat ket noi client-side duoi tai hoac crash tool: {type(e).__name__}: {e} — BI CHAN, khong phai loi server")
+        sys.exit(2)

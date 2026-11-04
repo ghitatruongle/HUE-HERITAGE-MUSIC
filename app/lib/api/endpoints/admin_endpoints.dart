@@ -143,8 +143,9 @@ class StoragePage {
 class CleanupResult {
   final int freedBytes;
   final int tasksDeleted;
+  final Map<String, int> groupBytes;
 
-  CleanupResult({required this.freedBytes, required this.tasksDeleted});
+  CleanupResult({required this.freedBytes, required this.tasksDeleted, this.groupBytes = const {}});
 
   static CleanupResult fromJson(Map<String, dynamic> j) {
     int n(Map<String, dynamic> m, String k) {
@@ -154,9 +155,16 @@ class CleanupResult {
 
     final details = Map<String, dynamic>.from((j['details'] ?? {}) as Map);
     final tasks = Map<String, dynamic>.from((details['tasks'] ?? {}) as Map);
+    final groups = <String, int>{};
+    for (final entry in details.entries) {
+      if (entry.key == 'tasks' || entry.value is! Map) continue;
+      final bytes = (entry.value as Map)['bytes'];
+      if (bytes is num && bytes > 0) groups[entry.key] = bytes.toInt();
+    }
     return CleanupResult(
       freedBytes: n(Map<String, dynamic>.from(j), 'freed_bytes'),
       tasksDeleted: n(tasks, 'deleted'),
+      groupBytes: groups,
     );
   }
 }

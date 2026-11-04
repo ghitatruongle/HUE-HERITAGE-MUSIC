@@ -117,7 +117,7 @@ def phase2(base):
     check("mật khẩu admin mạnh → 200", r.status_code == 200)
 
     r = c.get("/health")
-    check("health cuối giờ vẫn OK", r.status_code == 200 and r.json()["version"] == "0.0.2-preview")
+    check("health cuối giờ vẫn OK", r.status_code == 200 and r.json()["version"] == "0.0.2-alpha1")
     c.close()
 
 

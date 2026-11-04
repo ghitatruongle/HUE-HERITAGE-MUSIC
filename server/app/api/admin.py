@@ -212,14 +212,18 @@ def admin_delete_storage_item(
     return {"deleted": item_id, "title": item.title, "files_removed": removed}
 
 
-def _cleanup_dir(dir_path: Path, retention_days: int) -> dict:
+def _cleanup_dir(dir_path: Path, retention_days: int, exclude_subdirs: set | None = None) -> dict:
     freed = 0
     count = 0
     if retention_days <= 0 or not dir_path.exists():
         return {"files": count, "bytes": freed}
+    skip = exclude_subdirs or set()
     now = time.time()
     for f in dir_path.rglob("*"):
         try:
+            rel = f.relative_to(dir_path)
+            if skip and len(rel.parts) > 1 and rel.parts[0] in skip:
+                continue
             if f.is_file() and now - f.stat().st_mtime > retention_days * 86400:
                 size = f.stat().st_size
                 f.unlink()
@@ -240,6 +244,9 @@ def admin_cleanup(
     details = {
         "generated": _cleanup_dir(storage_root / "generated", settings.generated_retention_days),
         "practice_midi": _cleanup_dir(storage_root / "heritage" / "midi", settings.practice_midi_retention_days),
+        "analysis": _cleanup_dir(
+            storage_root / "analysis", settings.analysis_retention_days, exclude_subdirs={"lessons"}
+        ),
         "lesson_cache": _cleanup_dir(storage_root / "analysis" / "lessons", settings.lesson_cache_retention_days),
     }
     tasks_deleted = crud.prune_old_tasks(db, settings.task_retention_days)

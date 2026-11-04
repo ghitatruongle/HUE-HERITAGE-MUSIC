@@ -546,8 +546,8 @@ class AppStrings {
 
   String get adminCleanupTitle => isVi ? 'Dọn dẹp dữ liệu thừa' : 'Cleanup stale data';
   String get adminCleanupHint => isVi
-      ? 'Xóa bản thu AI đã tạo, practice MIDI, cache bài học quá hạn và tác vụ đã xong quá lâu.'
-      : 'Delete expired AI-generated audio, practice MIDI, lesson caches and old finished tasks.';
+      ? 'Xóa bản thu AI đã tạo, practice MIDI, cache bài học, cache phân tích quá hạn và tác vụ đã xong quá lâu.'
+      : 'Delete expired AI-generated audio, practice MIDI, lesson caches, analysis caches and old finished tasks.';
   String get adminCleanupRun => isVi ? 'Dọn dẹp' : 'Clean up';
   String get adminCleanupConfirm => isVi
       ? 'Chạy dọn dẹp ngay? Các file quá hạn sẽ bị xóa vĩnh viễn.'
@@ -555,6 +555,10 @@ class AppStrings {
   String get adminCleanupDonePrefix => isVi ? 'Đã thu hồi' : 'Reclaimed';
   String adminCleanupTasksDeleted(int n) => isVi ? 'đã xóa $n tác vụ cũ' : 'deleted $n old tasks';
   String get adminCleanupFail => isVi ? 'Dọn dẹp thất bại.' : 'Cleanup failed.';
+  String get adminCleanupGroupGenerated => isVi ? 'Bản thu AI đã tạo' : 'AI-generated audio';
+  String get adminCleanupGroupPracticeMidi => isVi ? 'MIDI luyện tập' : 'Practice MIDI';
+  String get adminCleanupGroupLessonCache => isVi ? 'Cache bài học' : 'Lesson caches';
+  String get adminCleanupGroupAnalysis => isVi ? 'Cache phân tích' : 'Analysis caches';
 
   String get securityTitle => isVi ? 'Sự kiện bảo mật' : 'Security events';
   String get securityEmpty => isVi ? 'Chưa có sự kiện bảo mật nào.' : 'No security events yet.';

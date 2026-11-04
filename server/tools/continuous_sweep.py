@@ -151,23 +151,87 @@ def sweep_security_test(envdir):
     return code
 
 
+ARSENAL_PW = "SweepAdmin#2026"
+
+
 def sweep_tiered(envdir):
     server = Server(envdir / "tiered")
     server.envdir.mkdir(parents=True, exist_ok=True)
     server.start()
-    admin_pw = "SweepAdmin#2026"
-    st = probe_register(server.base, "ghitatruongle", admin_pw)
+    probe_register(server.base, "ghitatruongle", ARSENAL_PW)
     server.restart()
     code = run_tool("attack/atk_tiered_campaign.py",
-                    ["--base", server.base, "--admin-password", admin_pw], "tiered.log", server.env())
+                    ["--base", server.base, "--admin-password", ARSENAL_PW], "tiered.log", server.env())
     server.stop()
     return code
+
+
+def sweep_plain(envdir, name, script, extra_args=None, extra_env=None):
+    server = Server(envdir / name)
+    server.envdir.mkdir(parents=True, exist_ok=True)
+    if extra_env:
+        server._env.update(extra_env)
+    server.start()
+    code = run_tool(f"attack/{script}", ["--base", server.base] + (extra_args or []),
+                    f"{name}.log", server.env())
+    server.stop()
+    return code
+
+
+def sweep_admin_suite(envdir, name, script):
+    server = Server(envdir / name)
+    server.envdir.mkdir(parents=True, exist_ok=True)
+    server._env.update({"REGISTER_FAILURE_IP_LIMIT": "100000"})
+    server.start()
+    probe_register(server.base, "ghitatruongle", ARSENAL_PW)
+    server.restart()
+    code = run_tool(f"attack/{script}", ["--base", server.base, "--admin-password", ARSENAL_PW],
+                    f"{name}.log", server.env())
+    server.stop()
+    return code
+
+
+OLD_ARSENAL = [
+    ("atk6_bruteforce_distributed.py", [], "atk6"),
+    ("atk7_token_format.py", [], "atk7"),
+    ("atk8_header_injection.py", [], "atk8"),
+    ("atk9_password_race.py", [], "atk9"),
+    ("atk10_oversized.py", [], "atk10"),
+    ("atk11_http_methods.py", [], "atk11"),
+    ("atk12_content_type.py", [], "atk12"),
+    ("atk13_unicode_abuse.py", [], "atk13"),
+    ("atk14_enumeration.py", [], "atk14"),
+    ("atk15_static_probe.py", [], "atk15"),
+    ("atk16_param_pollution.py", [], "atk16"),
+    ("atk17_register_abuse.py", [], "atk17"),
+    ("atk18_storage_abuse.py", [], "atk18"),
+    ("atk19_task_flood.py", [], "atk19"),
+    ("atk20_auth_switching.py", [], "atk20"),
+    ("atk_admin_takeover.py", [], "atk_takeover"),
+    ("atk_invite_race.py", [], "atk_invite_race"),
+    ("atk_privilege_escalation.py", [], "atk_priv_esc"),
+    ("atk_sqli_traversal.py", [], "atk_sqli"),
+    ("atk_upload_malware.py", [], "atk_malware"),
+    ("deep_multiuser_campaign.py", ["--legit-users", "12", "--levels", "25,50,100", "--phase", "8"], "deep_multiuser"),
+]
+
+
+def sweep_old_arsenal(envdir):
+    out = []
+    for i, (script, extra, name) in enumerate(OLD_ARSENAL, 1):
+        print(f"   [{i}/{len(OLD_ARSENAL)}] {script}")
+        out.append((name, sweep_plain(envdir, name, script, extra)))
+    return out
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="chỉ sectest + tiered")
     args = ap.parse_args()
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
 
     if LOGDIR.exists():
         shutil.rmtree(LOGDIR, ignore_errors=True)
@@ -178,18 +242,32 @@ def main():
     print(f"SWEEP BẢO MẬT {stamp}")
     results = []
 
-    print("== [1/4] security_test.py (37 kịch bản, auth-off) ==")
+    print("== [1/8] security_test.py (37 kịch bản, auth-off) ==")
     results.append(("security_test 37", sweep_security_test(envdir)))
 
-    print("== [2/4] tiered campaign (44 kịch bản) ==")
+    print("== [2/8] tiered campaign (44 kịch bản) ==")
     results.append(("tiered 44", sweep_tiered(envdir)))
 
     if not args.quick:
-        print("== [3/4] redteam_v2 (31 kịch bản) ==")
+        print("== [3/8] redteam_v2 (31 kịch bản) ==")
         results.append(("redteam_v2 31", sweep_v2(envdir)))
 
-        print("== [4/4] redteam_v3 (45 kịch bản) ==")
+        print("== [4/8] redteam_v3 (45 kịch bản) ==")
         results.append(("redteam_v3 45", sweep_v3(envdir)))
+
+        print("== [5/8] atk_basic_suite (95 checks) ==")
+        results.append(("basic_suite 95", sweep_plain(
+            envdir, "basic_suite", "atk_basic_suite.py", extra_env={"REGISTER_FAILURE_IP_LIMIT": "100000"}
+        )))
+
+        print("== [6/8] atk_intermediate_suite (66 checks) ==")
+        results.append(("intermediate_suite 66", sweep_admin_suite(envdir, "intermediate_suite", "atk_intermediate_suite.py")))
+
+        print("== [7/8] atk_advanced_suite (81 checks) ==")
+        results.append(("advanced_suite 81", sweep_admin_suite(envdir, "advanced_suite", "atk_advanced_suite.py")))
+
+        print("== [8/8] kho vũ khí cũ (21 tool atk beta) ==")
+        results.extend(sweep_old_arsenal(envdir))
 
     ok = all(code == 0 for _, code in results)
     line = f"- {datetime.now().strftime('%Y-%m-%d %H:%M')} — " + " | ".join(

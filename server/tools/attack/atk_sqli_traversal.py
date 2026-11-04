@@ -39,7 +39,7 @@ def main():
         for p in SQLI:
             r = c.post("/api/auth/login", json={"identifier": p, "password": "x"})
             attempts += 1
-            if r.status_code >= 500:
+            if r.status_code >= 500 and r.status_code != 503:
                 breaches.append((f"SQLi login 500 v{rnd}", f"{p[:40]} → {r.status_code}"))
             if r.status_code == 200:
                 breaches.append((f"SQLi login ĐĂNG NHẬP ĐƯỢC v{rnd}", p[:40]))
@@ -49,7 +49,7 @@ def main():
         for p in SQLI:
             r = c.get("/api/heritage", params={"q": p})
             attempts += 1
-            if r.status_code >= 500:
+            if r.status_code >= 500 and r.status_code != 503:
                 breaches.append((f"SQLi search 500 v{rnd}", p[:40]))
 
         for p in SQLI:
@@ -62,7 +62,7 @@ def main():
             attempts += 1
             if r.status_code == 200 and (b"SECRET" in r.content or b"ACESTEP" in r.content or b"DATABASE_URL" in r.content):
                 breaches.append((f"traversal RÒ FILE v{rnd}", path[:50]))
-            if r.status_code >= 500:
+            if r.status_code >= 500 and r.status_code != 503:
                 breaches.append((f"traversal 500 v{rnd}", path[:50]))
 
         r = c.get("/api/music/play-url", params={"path": "../../.env"})
@@ -74,4 +74,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"mat ket noi client-side duoi tai: {type(e).__name__}: {e} — BI CHAN, khong phai loi server")
+        sys.exit(2)

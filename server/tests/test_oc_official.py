@@ -187,7 +187,7 @@ def test_admin_password_policy_enforced(monkeypatch):
         headers=admin_headers,
     )
     assert r.status_code == 400
-    assert "12 characters" in r.json()["detail"]
+    assert "8 characters" in r.json()["detail"]
 
     r = client.post(
         "/api/auth/change-password",
@@ -793,6 +793,199 @@ def test_admin_cleanup_frees_old_files_and_tasks(monkeypatch):
     db = SessionLocal()
     try:
         assert crud.get_task(db, task_id) is None
+    finally:
+        db.close()
+
+
+def test_admin_cleanup_analysis_group_covers_non_lesson_subdirs(monkeypatch):
+    import os
+    import shutil
+
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+
+    analysis_dir = Path(settings.storage_dir) / "analysis"
+    legacy_dir = analysis_dir / f"legacy_{secrets.token_hex(4)}"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    old_other = legacy_dir / f"probe_{secrets.token_hex(4)}.json"
+    old_other.write_bytes(b"y" * 1024)
+    root_other = analysis_dir / f"root_{secrets.token_hex(4)}.json"
+    root_other.write_bytes(b"w" * 256)
+    lessons_dir = analysis_dir / "lessons" / f"probe_{secrets.token_hex(4)}"
+    lessons_dir.mkdir(parents=True, exist_ok=True)
+    old_lesson = lessons_dir / "result.json"
+    old_lesson.write_bytes(b"z" * 512)
+    old_ts = time.time() - 40 * 86400
+    os.utime(old_other, (old_ts, old_ts))
+    os.utime(root_other, (old_ts, old_ts))
+    os.utime(old_lesson, (old_ts, old_ts))
+
+    r = client.post("/api/admin/maintenance/cleanup", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["details"]["analysis"]["files"] == 2
+    assert data["details"]["analysis"]["bytes"] == 1280
+    assert data["details"]["lesson_cache"]["files"] >= 1
+    assert not old_other.exists()
+    assert not root_other.exists()
+    assert not old_lesson.exists()
+    shutil.rmtree(legacy_dir, ignore_errors=True)
+    shutil.rmtree(lessons_dir, ignore_errors=True)
+
+
+def test_admin_cleanup_analysis_retention_zero_disables_group(monkeypatch):
+    import os
+    import shutil
+
+    monkeypatch.setattr(settings, "analysis_retention_days", 0, raising=False)
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+
+    analysis_dir = Path(settings.storage_dir) / "analysis"
+    probe_dir = analysis_dir / f"zero_{secrets.token_hex(4)}"
+    probe_dir.mkdir(parents=True, exist_ok=True)
+    old_file = probe_dir / f"probe_{secrets.token_hex(4)}.json"
+    old_file.write_bytes(b"w" * 512)
+    old_ts = time.time() - 40 * 86400
+    os.utime(old_file, (old_ts, old_ts))
+
+    r = client.post("/api/admin/maintenance/cleanup", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["details"]["analysis"] == {"files": 0, "bytes": 0}
+    assert old_file.exists()
+    shutil.rmtree(probe_dir, ignore_errors=True)
+
+
+def test_sqli_raid_payloads_never_reach_sql(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+
+    login_bypass = [
+        {"identifier": "' OR '1'='1", "password": "' OR '1'='1"},
+        {"identifier": "admin'--", "password": "x"},
+        {"identifier": "' OR 1=1--", "password": "' OR 1=1--"},
+        {"identifier": "x'; DROP TABLE users;--", "password": "x"},
+    ]
+    for body in login_bypass:
+        r = client.post("/api/auth/login", json=body)
+        assert r.status_code in (400, 401, 429), f"{body} -> {r.status_code} {r.text[:80]}"
+        assert "sqlite" not in r.text.lower() and "traceback" not in r.text.lower()
+
+    search_payloads = [
+        "' UNION SELECT null,username,password_hash FROM users--",
+        "x' UNION SELECT id,username,role FROM users--",
+        "' OR 1=randomblob(500000000)--",
+        "' AND 1=CONVERT(int,@@version)--",
+        "%' UNION SELECT null,email,password_hash FROM users--",
+    ]
+    for q in search_payloads:
+        r = client.get("/api/heritage", params={"q": q, "limit": 5})
+        assert r.status_code == 200, f"search q={q[:40]} -> {r.status_code}"
+        body = r.text.lower()
+        for marker in ("sqlite", "sqlalchemy", "operationalerror", "traceback", "select ", "password_hash"):
+            assert marker not in body, f"leak marker '{marker}' trong response q={q[:40]}"
+
+    u = "atk" + secrets.token_hex(3)
+    for name in ("atk'--", "atk'; DROP TABLE users;--", "atk' OR '1'='1"):
+        r = client.post("/api/auth/register", json={
+            "username": name[:40], "email": f"{u}{secrets.token_hex(2)}@gmail.com",
+            "password": "secret123", "invite_code": "CHAOS-CODE",
+        })
+        assert r.status_code in (200, 400, 409, 429), f"register username {name[:30]} -> {r.status_code}"
+        if r.status_code == 200:
+            assert r.json().get("role") == "user", f"role escalation qua username {name[:30]}"
+
+    r = client.get("/api/auth/users", headers=admin_headers)
+    assert r.status_code in (200, 429)
+    if r.status_code == 200:
+        items = r.json().get("items", [])
+        for row in items:
+            assert row.get("role", "user") != "admin" or row.get("username") == "ghitatruongle"
+
+
+def test_csrf_surface_locked(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+
+    u = "csrfuser" + secrets.token_hex(3)
+    r = client.post("/api/auth/register", json={
+        "username": u, "email": f"{u}@gmail.com",
+        "password": "secret123", "invite_code": "TESTINVITE",
+    })
+    assert r.status_code == 200, r.text
+    r = client.post("/api/auth/login", json={"identifier": u, "password": "secret123"})
+    assert r.status_code == 200
+    assert "set-cookie" not in {k.lower() for k in r.headers}, "login không được gắn cookie phiên"
+
+    evil = {"Origin": "https://trang-doc-hai.example", "Referer": "https://trang-doc-hai.example/tan-cong"}
+    for headers in (
+        {**evil, "Content-Type": "application/x-www-form-urlencoded"},
+        {**evil, "Content-Type": "text/plain"},
+        {**evil},
+    ):
+        ct = headers.get("Content-Type", "")
+        body = "title=pwned&x=1" if ct != "application/json" else '{"x": "1"}'
+        kw = {"content": body} if ct else {"json": {"x": "1"}}
+        r = client.post("/api/admin/maintenance/cleanup", headers=headers, **kw)
+        assert r.status_code in (401, 403, 422), f"mutation không token qua form -> {r.status_code}"
+        r = client.post("/api/auth/invites", headers=headers, **kw)
+        assert r.status_code in (401, 403, 422), f"tạo invite không token -> {r.status_code}"
+
+    r = client.get("/api/heritage", headers={"Origin": "https://trang-doc-hai.example"})
+    acao = r.headers.get("access-control-allow-origin", "")
+    assert acao != "https://trang-doc-hai.example", "CORS phản chiếu evil origin"
+
+    r = client.get("/api/heritage", params={"limit": 1})
+    before = r.json().get("total")
+    client.get("/api/heritage", params={"action": "drop", "table": "users", "limit": 1})
+    client.get("/api/auth/users", params={"purge": 1})
+    r = client.get("/api/heritage", params={"limit": 1})
+    assert r.json().get("total") == before, "GET lạ làm đổi trạng thái dữ liệu"
+
+    db = SessionLocal()
+    try:
+        admins = db.query(User).filter(User.role == "admin").all()
+        assert all(u.username == "ghitatruongle" for u in admins), "có admin ro ri xuất hiện"
+    finally:
+        db.close()
+
+
+
+def test_password_hardening_locked(monkeypatch):
+    client, admin_headers = _admin_client(monkeypatch)
+    _admin_unlock(client, admin_headers)
+
+    u = "pwdhard" + secrets.token_hex(3)
+    r = client.post("/api/auth/register", json={
+        "username": u, "email": f"{u}@gmail.com",
+        "password": "secret123", "invite_code": "TESTINVITE",
+    })
+    assert r.status_code == 200, r.text
+    tok = r.json()["token"]
+
+    for weak in ("11111111", "chuacoconso", "12345678", "mat khau"):
+        r = client.post("/api/auth/change-password", json={
+            "old_password": "secret123", "new_password": weak,
+        }, headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 400, f"mat khau yeu '{weak}' van duoc chap nhan: {r.status_code}"
+
+    r = client.post("/api/auth/change-password", json={
+        "old_password": "secret123", "new_password": "ManhVaDu#2026",
+    }, headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 200, r.text
+
+    for i in range(5):
+        r = client.post("/api/auth/login", json={"identifier": u, "password": f"sai-{i}"})
+        assert r.status_code in (401, 429), f"round {i}: {r.status_code}"
+    r = client.post("/api/auth/login", json={"identifier": f"{u}@gmail.com", "password": "sai-email"})
+    assert r.status_code == 429, f"email cung tai khoan phai chung khoa lockout (canonical): {r.status_code}"
+
+    db = SessionLocal()
+    try:
+        admins = db.query(User).filter(User.role == "admin").all()
+        assert len(admins) == 1, f"bat bat bien 'admin chi mot' pha vo: {len(admins)} admin"
+        assert admins[0].username == "ghitatruongle", f"admin khong phai ghitatruongle: {admins[0].username}"
     finally:
         db.close()
 

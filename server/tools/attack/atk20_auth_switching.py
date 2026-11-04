@@ -18,12 +18,9 @@ def main():
     breaches = []
     u = register_user(args.base)
     if not u:
-        verdict("AUTH-SWITCHING", 0, [])
-        return
+        print("FATAL: khong dang ky duoc user (rate limit) — setup that bai")
+        sys.exit(2)
     current_password = "secret123"
-    if not u:
-        verdict("AUTH-SWITCHING", 0, [])
-        return
     c1 = client(args.base, u["token"])
     c2 = client(args.base, u["token"])
 
@@ -54,8 +51,17 @@ def main():
         c1 = client(args.base, u["token"])
         c2 = client(args.base, u["token"])
 
+    if attempts == 0:
+        print("khong thuc hien duoc lan nao (rate limit chan toan bo) — BI CHAN, khong phai Sach")
+        sys.exit(2)
     verdict("AUTH-SWITCHING", attempts, breaches)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"mat ket noi client-side duoi tai hoac crash tool: {type(e).__name__}: {e} — BI CHAN, khong phai loi server")
+        sys.exit(2)

@@ -34,6 +34,20 @@ HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload")
 
 
 class SecurityHeadersMiddleware:
+    CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://www.gstatic.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com; "
+        "worker-src 'self' blob:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+
     def __init__(self, app):
         self.app = app
 
@@ -48,6 +62,7 @@ class SecurityHeadersMiddleware:
                 headers.setdefault("X-Content-Type-Options", "nosniff")
                 headers.setdefault("X-Frame-Options", "DENY")
                 headers.setdefault("Referrer-Policy", "no-referrer")
+                headers.setdefault("Content-Security-Policy", self.CSP)
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
@@ -244,7 +259,20 @@ def _warmup_lessons():
             db.close()
 
 
+def _raise_fd_limit():
+    try:
+        import resource
+
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = 262144 if hard > 262144 else hard
+        if soft < target:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+    except Exception:
+        pass
+
+
 def create_app() -> FastAPI:
+    _raise_fd_limit()
     _validate_secret_key()
     init_db()
     db = SessionLocal()
@@ -256,7 +284,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.2-preview",
+        version="0.0.2-alpha1",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -295,8 +323,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.2-preview",
-            "stage": "0.0.2-preview",
+            "version": "0.0.2-alpha1",
+            "stage": "0.0.2-alpha1",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             from .ai import ace_step_engine
