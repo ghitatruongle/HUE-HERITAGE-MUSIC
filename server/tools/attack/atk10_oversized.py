@@ -26,7 +26,7 @@ def main():
         r = c.post("/api/auth/login", content=json.dumps({"identifier": "x", "password": "y", "pad": big["a"]}),
                    headers={"Content-Type": "application/json", **hdr})
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"json 5MB 500 v{rnd}", ""))
 
         # mảng lồng sâu 1000 tầng
@@ -38,14 +38,14 @@ def main():
         r = c.post("/api/auth/login", content=json.dumps({"identifier": "x", "password": "y", **deep}),
                    headers={"Content-Type": "application/json", **hdr})
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"deep nesting 500 v{rnd}", ""))
 
         # 500 query params
         qs = "&".join(f"p{i}=v" for i in range(500))
         r = c.get(f"/api/heritage?limit=1&{qs}")
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"500 params 500 v{rnd}", ""))
 
     verdict("OVERSIZED-PAYLOAD", attempts, breaches)

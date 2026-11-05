@@ -235,6 +235,23 @@ class DerivedFile {
       );
 }
 
+class LearningStats {
+  final int totalSessions;
+  final int activeUsers;
+  final int sessionsLast7d;
+
+  LearningStats({required this.totalSessions, required this.activeUsers, required this.sessionsLast7d});
+
+  static LearningStats fromJson(Map<String, dynamic> j) {
+    int n(dynamic v) => v is num ? v.toInt() : 0;
+    return LearningStats(
+      totalSessions: n(j['total_sessions']),
+      activeUsers: n(j['active_users']),
+      sessionsLast7d: n(j['sessions_last_7d']),
+    );
+  }
+}
+
 class AdminEndpoints {
   final Dio dio;
 
@@ -243,6 +260,11 @@ class AdminEndpoints {
   Future<AdminStats> stats() async {
     final res = await dio.get('/api/admin/stats');
     return AdminStats.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<LearningStats> learningStats() async {
+    final res = await dio.get('/api/admin/learning/stats');
+    return LearningStats.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
   Future<StoragePage> storage({String q = '', int limit = 100, int offset = 0}) async {

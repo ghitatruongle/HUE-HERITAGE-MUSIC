@@ -18,6 +18,7 @@ import '../../models/lesson.dart';
 import 'scale_practice_card.dart';
 import '../../services/download_helper.dart';
 import '../../services/file_saver.dart';
+import '../../services/local_pitch.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
@@ -31,6 +32,12 @@ class LessonPracticeView extends StatefulWidget {
 
   @override
   State<LessonPracticeView> createState() => _LessonPracticeViewState();
+}
+
+class _TakeRec {
+  final Uint8List bytes;
+  final int no;
+  const _TakeRec(this.bytes, this.no);
 }
 
 class _LessonPracticeViewState extends State<LessonPracticeView> {
@@ -53,7 +60,24 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   int? _practicingSection;
   final Map<int, PracticeResult> _results = {};
   final Map<int, bool> _looping = {};
-  final Map<int, Uint8List> _recordings = {};
+  final Map<int, List<_TakeRec>> _takes = {};
+  final Map<int, int> _selectedTake = {};
+
+  double _speed = 1.0;
+  String? _signedRefUrl;
+  final Map<int, String> _signedSampleUrls = {};
+  final Map<int, bool> _playingSample = {};
+
+  Timer? _vuTimer;
+  Timer? _autoStopTimer;
+  double _vuLevel = -60;
+  bool _heardVoice = false;
+  DateTime? _lastVoiceAt;
+  int _takeCounter = 0;
+  LocalPitchResult? _takePreview;
+
+  List<ProgressEntry> _serverProgress = [];
+  bool _serverProgressAvailable = false;
 
   List<ScaleInfo> _scales = [];
   ScaleInfo? _selectedScale;
@@ -61,6 +85,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   String? _scalePath;
   bool _scaleBusy = false;
   ScalePractice? _scaleResult;
+  int _scaleTranspose = 0;
 
   @override
   void initState() {
@@ -75,6 +100,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
 
   @override
   void dispose() {
+    _vuTimer?.cancel();
+    _autoStopTimer?.cancel();
     _recorder.dispose();
     _samplePlayer.dispose();
     _metronomePlayer.dispose();
@@ -113,21 +140,84 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     }
   }
 
+  Future<void> _stopEverything() async {
+    _vuTimer?.cancel();
+    _autoStopTimer?.cancel();
+    if (_recordingSection != null) {
+      _recordingSection = null;
+      try {
+        await _recorder.stop();
+      } catch (_) {}
+    }
+    if (_scaleRecording) {
+      _scaleRecording = false;
+      try {
+        await _recorder.stop();
+      } catch (_) {}
+    }
+    try {
+      await _samplePlayer.stop();
+    } catch (_) {}
+    _vuLevel = -60;
+    _looping.clear();
+    _playingSample.clear();
+  }
+
   Future<void> _openLesson(Lesson lesson) async {
+    await _stopEverything();
+    if (!mounted) return;
     setState(() {
       _selected = lesson;
       _loadingDetail = true;
-      _detail = null;
       _error = null;
+      _detail = null;
       _results.clear();
       _recordedSection = null;
       _recordPath = null;
+      _recordPaths.clear();
+      _takes.clear();
+      _selectedTake.clear();
+      _signedSampleUrls.clear();
+      _signedRefUrl = null;
+      _takePreview = null;
+      _serverProgress = [];
+      _takeCounter = 0;
     });
     try {
       final dio = context.read<ServerConfig>().api.dio;
-      final detail = await LessonApi(dio).detail(lesson.id);
+      final api = LessonApi(dio);
+      final detail = await api.detail(lesson.id);
+      if (!mounted || _selected?.id != lesson.id) return;
+      try {
+        final res = await dio.get('/api/music/play-url', queryParameters: {'path': '/api/heritage/${lesson.id}/audio'});
+        final data = res.data;
+        if (data is Map && data['url'] is String) {
+          final signed = data['url'] as String;
+          _signedRefUrl = signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
+        }
+      } catch (_) {}
+      for (final s in detail.sections.where((s) => s.hasSample)) {
+        try {
+          final res = await dio.get('/api/music/play-url', queryParameters: {'path': s.sampleUrl});
+          final data = res.data;
+          if (data is Map && data['url'] is String) {
+            final signed = data['url'] as String;
+            _signedSampleUrls[s.index] = signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
+          }
+        } catch (_) {}
+      }
+      List<ProgressEntry> progress = [];
+      bool serverOk = false;
+      try {
+        progress = await api.myProgress(lessonId: lesson.id);
+        serverOk = true;
+      } catch (_) {}
       if (!mounted) return;
-      setState(() => _detail = detail);
+      setState(() {
+        _detail = detail;
+        _serverProgress = progress;
+        _serverProgressAvailable = serverOk;
+      });
     } catch (e) {
       if (mounted) setState(() => _error = ApiClient.describe(e));
     } finally {
@@ -142,19 +232,10 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     try {
       if (looping) {
         await _samplePlayer.stop();
-        if (mounted) setState(() => _looping[section.index] = false);
+        if (mounted) setState(() => _looping.remove(section.index));
         return;
       }
-      final dio = context.read<ServerConfig>().api.dio;
-      var url = '${dio.options.baseUrl}/api/heritage/${detail.id}/audio';
-      try {
-        final res = await dio.get('/api/music/play-url', queryParameters: {'path': '/api/heritage/${detail.id}/audio'});
-        final data = res.data;
-        if (data is Map && data['url'] is String) {
-          final signed = data['url'] as String;
-          url = signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
-        }
-      } catch (_) {}
+      final url = _signedRefUrl ?? '${context.read<ServerConfig>().api.dio.options.baseUrl}/api/heritage/${detail.id}/audio';
       await _samplePlayer.stop();
       await _samplePlayer.setUrl(url);
       await _samplePlayer.setClip(
@@ -162,11 +243,81 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         end: Duration(milliseconds: (section.end * 1000).round()),
       );
       await _samplePlayer.setLoopMode(LoopMode.one);
+      await _samplePlayer.setSpeed(_speed);
       await _samplePlayer.play();
-      if (mounted) setState(() => _looping[section.index] = true);
+      if (mounted) {
+        setState(() {
+          _looping.clear();
+          _playingSample.clear();
+          _looping[section.index] = true;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = ApiClient.describe(e));
     }
+  }
+
+  Future<void> _toggleMasterSample(LessonSection section) async {
+    final url = _signedSampleUrls[section.index];
+    if (url == null || url.isEmpty) return;
+    final playing = _playingSample[section.index] ?? false;
+    try {
+      if (playing) {
+        await _samplePlayer.stop();
+        if (mounted) setState(() => _playingSample.remove(section.index));
+        return;
+      }
+      await _samplePlayer.stop();
+      await _samplePlayer.setUrl(url);
+      await _samplePlayer.setLoopMode(LoopMode.one);
+      await _samplePlayer.setSpeed(_speed);
+      await _samplePlayer.play();
+      if (mounted) {
+        setState(() {
+          _looping.clear();
+          _playingSample.clear();
+          _playingSample[section.index] = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = ApiClient.describe(e));
+    }
+  }
+
+  Future<void> _playRefSegment(double start, double end, LessonSection section) async {
+    final detail = _detail;
+    if (detail == null || end <= start) return;
+    try {
+      final useSample = section.hasSample && (_signedSampleUrls[section.index]?.isNotEmpty == true);
+      final url = useSample
+          ? _signedSampleUrls[section.index]!
+          : (_signedRefUrl ?? '${context.read<ServerConfig>().api.dio.options.baseUrl}/api/heritage/${detail.id}/audio');
+      final base = useSample ? 0.0 : section.start;
+      await _samplePlayer.stop();
+      await _samplePlayer.setUrl(url);
+      await _samplePlayer.setClip(
+        start: Duration(milliseconds: (math.max(0, base + start - 0.25) * 1000).round()),
+        end: Duration(milliseconds: ((base + end) * 1000).round()),
+      );
+      await _samplePlayer.setLoopMode(LoopMode.off);
+      await _samplePlayer.setSpeed(_speed);
+      await _samplePlayer.play();
+      if (mounted) {
+        setState(() {
+          _looping.clear();
+          _playingSample.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = ApiClient.describe(e));
+    }
+  }
+
+  Future<void> _setSpeed(double v) async {
+    setState(() => _speed = v);
+    try {
+      await _samplePlayer.setSpeed(v);
+    } catch (_) {}
   }
 
   String _practicePath() {
@@ -207,8 +358,42 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     return out.toBytes();
   }
 
+  void _startVuPolling() {
+    _vuTimer?.cancel();
+    _heardVoice = false;
+    _lastVoiceAt = null;
+    if (kIsWeb) return;
+    _vuTimer = Timer.periodic(const Duration(milliseconds: 120), (_) async {
+      try {
+        final amp = await _recorder.getAmplitude();
+        _vuLevel = amp.current;
+        if (_vuLevel > -35) {
+          _heardVoice = true;
+          _lastVoiceAt = DateTime.now();
+        } else if (_heardVoice && _lastVoiceAt != null) {
+          final quietFor = DateTime.now().difference(_lastVoiceAt!).inMilliseconds;
+          if (quietFor > 1200 && mounted && _recordingSection != null) {
+            _vuTimer?.cancel();
+            _stopBySilence();
+          }
+        }
+        if (mounted) setState(() {});
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _stopBySilence() async {
+    final section = _detail?.sections.where((s) => s.index == _recordingSection).firstOrNull;
+    if (section != null) {
+      await _toggleRecord(section);
+    }
+  }
+
   Future<void> _toggleRecord(LessonSection section) async {
     if (_recordingSection == section.index) {
+      _vuTimer?.cancel();
+      _autoStopTimer?.cancel();
+      _recordingSection = null;
       final p = await _recorder.stop();
       if (!mounted) return;
       Uint8List? recorded;
@@ -217,20 +402,53 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           recorded = await XFile(p).readAsBytes();
         } catch (_) {}
       }
+      Uint8List? takeBytes = recorded;
+      if (takeBytes == null && p != null && !kIsWeb) {
+        try {
+          takeBytes = await File(p).readAsBytes();
+        } catch (_) {}
+      }
+      LocalPitchResult? preview;
+      if (takeBytes != null) {
+        try {
+          preview = await compute(LocalPitch.analyze, takeBytes);
+        } catch (_) {}
+      }
+      if (!mounted) return;
       setState(() {
-        _recordingSection = null;
         _recordedSection = section.index;
         _recordPath = p;
+        _vuLevel = -60;
         if (p != null) {
           _recordPaths[section.index] = p;
         }
-        if (recorded != null) {
-          _recordings[section.index] = recorded;
-        } else if (p != null) {
-          _recordings.remove(section.index);
+        if (takeBytes != null) {
+          final takes = _takes[section.index] ?? <_TakeRec>[];
+          _takeCounter++;
+          takes.add(_TakeRec(takeBytes, _takeCounter));
+          while (takes.length > 3) {
+            takes.removeAt(0);
+          }
+          _takes[section.index] = takes;
+          _selectedTake[section.index] = takes.length - 1;
         }
+        _takePreview = preview;
       });
       return;
+    }
+    if (_recordingSection != null) {
+      final prev = _detail?.sections.where((s) => s.index == _recordingSection).firstOrNull;
+      if (prev != null) {
+        await _toggleRecord(prev);
+        if (!mounted) return;
+      } else {
+        _vuTimer?.cancel();
+        _autoStopTimer?.cancel();
+        try {
+          await _recorder.stop();
+        } catch (_) {}
+        _recordingSection = null;
+      }
     }
     if (_scaleRecording) {
       setState(() => _error = strings.practiceBusyScale);
@@ -270,20 +488,31 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     setState(() {
       _recordingSection = section.index;
       _error = null;
+      _takePreview = null;
     });
-    final waitSeconds = section.duration + 3.0 + (_countIn ? 4 * 60 / ((_detail?.bpm ?? 60)) : 0.0);
-    Timer(Duration(seconds: waitSeconds.ceil()), () {
+    _startVuPolling();
+    final waitSeconds = section.duration + 8.0 + (_countIn ? 4 * 60 / ((_detail?.bpm ?? 60)) : 0.0);
+    _autoStopTimer?.cancel();
+    _autoStopTimer = Timer(Duration(seconds: waitSeconds.ceil()), () {
       if (mounted && _recordingSection == section.index) {
         _toggleRecord(section);
       }
     });
   }
 
+  _TakeRec? _selectedTakeRec(int sectionIndex) {
+    final takes = _takes[sectionIndex];
+    if (takes == null || takes.isEmpty) return null;
+    final idx = (_selectedTake[sectionIndex] ?? takes.length - 1).clamp(0, takes.length - 1);
+    return takes[idx];
+  }
+
   Future<void> _submitPractice(LessonSection section) async {
-    final path = _recordPaths[section.index];
-    if (path == null || _recordedSection != section.index) return;
     final detail = _detail;
     if (detail == null) return;
+    final bytes = _selectedTakeRec(section.index)?.bytes;
+    final path = _recordPaths[section.index];
+    if (bytes == null && (path == null || _recordedSection != section.index)) return;
     setState(() {
       _practicingSection = section.index;
       _error = null;
@@ -292,11 +521,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       final dio = context.read<ServerConfig>().api.dio;
       final api = LessonApi(dio);
       PracticeResult result;
-      if (kIsWeb) {
-        final bytes = await XFile(path).readAsBytes();
+      if (bytes != null) {
         result = await api.practiceBytes(detail.id, section.index, bytes);
+      } else if (kIsWeb) {
+        final webBytes = await XFile(path!).readAsBytes();
+        result = await api.practiceBytes(detail.id, section.index, webBytes);
       } else {
-        result = await api.practiceFile(detail.id, section.index, path);
+        result = await api.practiceFile(detail.id, section.index, path!);
       }
       if (!mounted) return;
       setState(() => _results[section.index] = result);
@@ -311,6 +542,10 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               detail: detail.id,
             ),
           );
+      try {
+        final progress = await api.myProgress(lessonId: detail.id);
+        if (mounted) setState(() => _serverProgress = progress);
+      } catch (_) {}
     } catch (e) {
       if (mounted) setState(() => _error = ApiClient.describe(e));
     } finally {
@@ -396,7 +631,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       _scaleRecording = true;
       _error = null;
     });
-    Timer(const Duration(seconds: 14), () {
+    Timer(const Duration(seconds: 18), () {
       if (mounted && _scaleRecording) {
         _toggleScaleRecord();
       }
@@ -420,7 +655,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       } else {
         bytes = await File(path).readAsBytes();
       }
-      final result = await api.scalePracticeBytes(scale.id, bytes);
+      final result = await api.scalePracticeBytes(scale.id, bytes, transpose: _scaleTranspose);
       if (!mounted) return;
       setState(() => _scaleResult = result);
       context.read<HistoryService>().add(
@@ -487,6 +722,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         if (_loadingDetail)
           const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
         if (_detail != null) ...[
+          _buildSpeedBar(),
           for (final section in _detail!.sections) _buildSectionCard(section),
           const SizedBox(height: 12),
           _buildProgressCard(),
@@ -507,13 +743,38 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             onSubmit: _submitScalePractice,
             recordPath: _scalePath,
             result: _scaleResult,
+            transpose: _scaleTranspose,
+            onTransposeChanged: (v) => setState(() {
+              _scaleTranspose = v;
+              _scaleResult = null;
+            }),
           ),
         ],
       ],
     );
   }
 
-
+  Widget _buildSpeedBar() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Text(strings.practiceSlowSpeed, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          const SizedBox(width: 8),
+          for (final v in const [0.5, 0.75, 1.0])
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                label: Text('${v}x', style: const TextStyle(fontSize: 11)),
+                selected: _speed == v,
+                onSelected: (_) => _setSpeed(v),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildLessonHeader() {
     final d = _detail;
@@ -550,6 +811,10 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 const SizedBox(width: 8),
                 Text('${section.start.toStringAsFixed(0)}s - ${section.end.toStringAsFixed(0)}s',
                     style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                if (section.hasSample) ...[
+                  const SizedBox(width: 8),
+                  const Icon(Icons.record_voice_over, size: 14, color: Color(0xFFD4AF37)),
+                ],
               ],
             ),
             if (section.lyrics.isNotEmpty)
@@ -574,6 +839,11 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   strings.practiceCountInLabel(_detail?.bpm != null ? "(${_detail!.bpm!.toStringAsFixed(0)} BPM)" : ""),
                   style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
                 ),
+                const SizedBox(width: 10),
+                Text(
+                  strings.practiceSilenceStopHint,
+                  style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant.withAlpha(150)),
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -582,10 +852,17 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               runSpacing: 6,
               children: [
                 OutlinedButton.icon(
-                  icon: Icon((_looping[section.index] ?? false) ? Icons.stop : Icons.headphones, size: 16),
+                  icon: Icon(((_looping[section.index] ?? false)) ? Icons.stop : Icons.headphones, size: 16),
                   label: Text((_looping[section.index] ?? false) ? strings.practiceStopSample : strings.practiceListenLoop),
                   onPressed: () => _toggleSample(section),
                 ),
+                if (section.hasSample)
+                  OutlinedButton.icon(
+                    icon: Icon(_playingSample[section.index] == true ? Icons.stop : Icons.record_voice_over, size: 16),
+                    label: Text(_playingSample[section.index] == true ? strings.practiceStopSample : strings.practiceListenSample),
+                    style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFD4AF37)),
+                    onPressed: () => _toggleMasterSample(section),
+                  ),
                 FilledButton.icon(
                   icon: Icon(_recordingSection == section.index ? Icons.stop : Icons.mic, size: 16),
                   label: Text(_recordingSection == section.index ? strings.practiceStopRecord : strings.practiceRecord),
@@ -599,6 +876,12 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   loading: _practicingSection == section.index,
                   onPressed: recorded && _practicingSection != section.index ? () => _submitPractice(section) : null,
                 ),
+                if (recorded && result != null)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text(strings.practiceRegrade),
+                    onPressed: _practicingSection == section.index ? null : () => _submitPractice(section),
+                  ),
                 if (result?.userMidi.isNotEmpty == true)
                   OutlinedButton.icon(
                     icon: const Icon(Icons.music_note, size: 16),
@@ -607,16 +890,39 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   ),
               ],
             ),
-            if (recorded && _recordings[section.index] != null) ...[
+            if (_recordingSection == section.index && !kIsWeb) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Icon(Icons.replay, size: 14, color: Colors.white54),
+                  const Icon(Icons.fiber_manual_record, color: Colors.red, size: 12),
                   const SizedBox(width: 6),
-                  Text(strings.practiceReplayTake, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  Expanded(
+                    child: LinearProgressIndicator(
+                      value: (( _vuLevel + 60) / 60).clamp(0.0, 1.0),
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text('${_vuLevel.toStringAsFixed(0)} dB', style: const TextStyle(fontSize: 10.5)),
                 ],
               ),
-              AudioPlayerBar(bytes: _recordings[section.index]),
+            ],
+            if (recorded && _takes[section.index]?.isNotEmpty == true) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (var i = 0; i < _takes[section.index]!.length; i++)
+                    ChoiceChip(
+                      label: Text(strings.practiceTakeChip(_takes[section.index]![i].no),
+                          style: const TextStyle(fontSize: 11)),
+                      selected: (_selectedTake[section.index] ?? 0) == i,
+                      onSelected: (_) => setState(() => _selectedTake[section.index] = i),
+                    ),
+                ],
+              ),
+              AudioPlayerBar(bytes: _selectedTakeRec(section.index)?.bytes),
             ] else if (recorded && !kIsWeb && _recordPath != null) ...[
               const SizedBox(height: 8),
               Row(
@@ -628,6 +934,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               ),
               AudioPlayerBar(filePath: _recordPaths[section.index]),
             ],
+            if (_takePreview != null && recorded && result == null) _buildTakePreview(section),
             if (recorded && result == null && _practicingSection != section.index)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -635,7 +942,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               ),
             if (result != null) ...[
               const Divider(height: 20),
-              _buildResultSummary(result),
+              _buildResultSummary(result, section),
               const SizedBox(height: 8),
               OverlayPitchChart(result: result),
               if (result.notes.isNotEmpty) ...[
@@ -645,15 +952,29 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   runSpacing: 4,
                   children: [
                     for (final n in result.notes.take(24))
-                      Chip(
-                        backgroundColor: n.verdict == 'Chuẩn'
-                            ? Colors.green.withAlpha(40)
-                            : n.verdict == 'Lệch nhẹ'
-                                ? Colors.amber.withAlpha(40)
-                                : Colors.red.withAlpha(40),
-                        label: Text(
-                          '${n.errCents > 0 ? '+' : ''}${n.errCents.toStringAsFixed(0)}c',
-                          style: const TextStyle(fontSize: 11),
+                      Tooltip(
+                        message: n.hint.isNotEmpty ? n.hint : n.verdict,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: n.refEnd > n.refStart ? () => _playRefSegment(n.refStart, n.refEnd, section) : null,
+                          child: Chip(
+                            backgroundColor: _verdictColor(n.verdictCode, n.verdict),
+                            label: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (n.verdictCode == 'off' || n.verdictCode == 'octave' || n.verdictCode == 'minor')
+                                  Icon(n.errCents > 0 ? Icons.arrow_upward : Icons.arrow_downward, size: 11, color: Colors.white70),
+                                if (n.verdictCode == 'ok' && n.vibrato) const Icon(Icons.waves, size: 11, color: Colors.white70),
+                                const SizedBox(width: 3),
+                                Text(
+                                  n.verdictCode == 'unclear'
+                                      ? n.verdict
+                                      : '${n.errCents > 0 ? '+' : ''}${n.errCents.toStringAsFixed(0)}c',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -666,20 +987,133 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     );
   }
 
-  Widget _buildResultSummary(PracticeResult result) {
+  Color _verdictColor(String code, String verdict) {
+    switch (code) {
+      case 'ok':
+        return Colors.green.withAlpha(40);
+      case 'minor':
+        return Colors.amber.withAlpha(40);
+      case 'octave':
+        return Colors.deepOrange.withAlpha(60);
+      case 'off':
+        return Colors.red.withAlpha(40);
+      default:
+        return verdict == 'Chuẩn'
+            ? Colors.green.withAlpha(40)
+            : verdict == 'Lệch nhẹ'
+                ? Colors.amber.withAlpha(40)
+                : Colors.red.withAlpha(40);
+    }
+  }
+
+  Widget _buildTakePreview(LessonSection section) {
+    final detail = _detail;
+    final scheme = Theme.of(context).colorScheme;
+    final preview = _takePreview!;
+    final target = <FlSpot>[];
+    if (detail != null) {
+      for (var i = 0; i < detail.contourTimes.length && i < detail.contourF0.length; i++) {
+        final t = detail.contourTimes[i];
+        if (t >= section.start - 0.5 && t <= section.end + 0.5 && detail.contourF0[i] > 0) {
+          target.add(FlSpot(t - section.start, detail.contourF0[i]));
+        }
+      }
+    }
+    final taken = <FlSpot>[];
+    for (final p in preview.points) {
+      if (p.f0 > 0) taken.add(FlSpot(p.t, p.f0));
+    }
+    if (taken.isEmpty) return const SizedBox.shrink();
+    final all = [...taken, ...target];
+    var maxY = all.map((s) => s.y).fold(0.0, math.max);
+    final maxX = all.map((s) => s.x).fold(0.0, math.max);
+    if (maxY <= 0) maxY = 1;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(strings.practiceTakePreview, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 130,
+            child: LineChart(
+              LineChartData(
+                minX: 0,
+                maxX: math.max(1, maxX),
+                minY: 0,
+                maxY: maxY * 1.15,
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: true, border: Border.all(color: Theme.of(context).dividerColor)),
+                titlesData: const FlTitlesData(show: false),
+                lineBarsData: [
+                  if (target.isNotEmpty)
+                    LineChartBarData(
+                      spots: target,
+                      isCurved: false,
+                      barWidth: 2,
+                      color: const Color(0xFFD4AF37),
+                      dotData: const FlDotData(show: false),
+                    ),
+                  LineChartBarData(
+                    spots: taken,
+                    isCurved: false,
+                    barWidth: 1.5,
+                    color: Colors.lightBlueAccent,
+                    dotData: const FlDotData(show: false),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultSummary(PracticeResult result, LessonSection section) {
     final m = result.metrics;
-    return Row(
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _scoreBadge(strings.practiceScoreTotal, m.score, Colors.deepPurple),
-        const SizedBox(width: 8),
-        _scoreBadge(strings.practiceScorePitch, m.pitchScore, const Color(0xFFD4AF37)),
-        const SizedBox(width: 8),
-        _scoreBadge(strings.practiceScoreTime, m.timeScore, Colors.lightBlue),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(strings.practiceAvgError(m.meanAbsCents.toStringAsFixed(0)),
-              style: const TextStyle(fontSize: 12)),
+        Row(
+          children: [
+            _scoreBadge(strings.practiceScoreTotal, m.score, Colors.deepPurple),
+            const SizedBox(width: 8),
+            _scoreBadge(strings.practiceScorePitch, m.pitchScore, const Color(0xFFD4AF37)),
+            const SizedBox(width: 8),
+            _scoreBadge(strings.practiceScoreRhythm, m.rhythmScore, Colors.lightBlue),
+            const SizedBox(width: 8),
+            _scoreBadge(strings.practiceScoreStability, m.stabilityScore, Colors.teal),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(strings.practiceAvgError(m.meanAbsCents.toStringAsFixed(0)), style: const TextStyle(fontSize: 12)),
+                  Text(
+                    result.reference == 'sample' ? strings.practiceRefSample : strings.practiceRefOriginal,
+                    style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
+        if (m.ornament > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              strings.practiceOrnamentValue(m.ornament.toStringAsFixed(0), m.vibratoRate.toStringAsFixed(1)),
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFFD4AF37)),
+            ),
+          ),
+        if (m.summaryHint.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(m.summaryHint, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+          ),
       ],
     );
   }
@@ -694,14 +1128,26 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   }
 
   Widget _buildProgressCard() {
+    final strings = this.strings;
+    final scheme = Theme.of(context).colorScheme;
     final history = _practiceHistory();
-    if (history.isEmpty) {
-      return const SizedBox.shrink();
+    final serverEntries = _serverProgress;
+    List<double> scores;
+    String sourceLabel;
+    if (_serverProgressAvailable && serverEntries.isNotEmpty) {
+      scores = serverEntries.take(10).map((e) => e.score).toList().reversed.toList();
+      sourceLabel = strings.practiceServerProgress;
+    } else {
+      if (history.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      scores = history.take(10).map((e) => e.score ?? 0).toList().reversed.toList();
+      sourceLabel = strings.practiceLocalProgress;
     }
-    final scores = history.take(10).map((e) => e.score ?? 0).toList().reversed.toList();
-    final avg = history.length >= 2
-        ? (history.take(5).map((e) => e.score ?? 0).reduce((a, b) => a + b) / (history.take(5).length)).toStringAsFixed(1)
-        : null;
+    final avgList = _serverProgressAvailable && serverEntries.isNotEmpty
+        ? serverEntries.take(5).map((e) => e.score).toList()
+        : history.take(5).map((e) => e.score ?? 0).toList();
+    final avg = avgList.length >= 2 ? (avgList.reduce((a, b) => a + b) / avgList.length).toStringAsFixed(1) : null;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -712,6 +1158,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             Row(
               children: [
                 Text(strings.practiceProgressTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                Text('($sourceLabel)', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
                 const Spacer(),
                 if (avg != null)
                   Text('${strings.practiceAvg5}: $avg', style: const TextStyle(fontSize: 12, color: Colors.greenAccent)),
@@ -725,30 +1173,56 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   : Text('${strings.practiceLastScore}: ${scores.last.toStringAsFixed(1)}'),
             ),
             const SizedBox(height: 6),
-            for (final e in history.take(6))
-              Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: Row(
-                  children: [
-                    Text(
-                      '${e.at.day.toString().padLeft(2, '0')}/${e.at.month.toString().padLeft(2, '0')} ${e.at.hour.toString().padLeft(2, '0')}:${e.at.minute.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontSize: 11.5, color: Colors.white54),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        e.title,
-                        style: const TextStyle(fontSize: 11.5),
-                        overflow: TextOverflow.ellipsis,
+            if (_serverProgressAvailable && serverEntries.isNotEmpty)
+              for (final e in serverEntries.take(6))
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Row(
+                    children: [
+                      Text(
+                        e.createdAt.length >= 16 ? e.createdAt.substring(0, 16) : e.createdAt,
+                        style: const TextStyle(fontSize: 11.5, color: Colors.white54),
                       ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          strings.practiceHistoryPhrase(_selected?.title ?? '', e.section + 1),
+                          style: const TextStyle(fontSize: 11.5),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        e.score.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 11.5, color: Colors.greenAccent, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                for (final e in history.take(6))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${e.at.day.toString().padLeft(2, '0')}/${e.at.month.toString().padLeft(2, '0')} ${e.at.hour.toString().padLeft(2, '0')}:${e.at.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(fontSize: 11.5, color: Colors.white54),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            e.title,
+                            style: const TextStyle(fontSize: 11.5),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          (e.score ?? 0).toStringAsFixed(1),
+                          style: const TextStyle(fontSize: 11.5, color: Colors.greenAccent, fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ),
-                    Text(
-                      (e.score ?? 0).toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 11.5, color: Colors.greenAccent, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
           ],
         ),
       ),

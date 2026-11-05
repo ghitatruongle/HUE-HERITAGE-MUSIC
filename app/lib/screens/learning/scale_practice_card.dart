@@ -18,6 +18,8 @@ class ScalePracticeCard extends StatelessWidget {
   final VoidCallback onSubmit;
   final String? recordPath;
   final ScalePractice? result;
+  final int transpose;
+  final ValueChanged<int> onTransposeChanged;
 
   const ScalePracticeCard({
     super.key,
@@ -30,7 +32,24 @@ class ScalePracticeCard extends StatelessWidget {
     required this.onSubmit,
     required this.recordPath,
     required this.result,
+    required this.transpose,
+    required this.onTransposeChanged,
   });
+
+  Color _verdictColor(String code) {
+    switch (code) {
+      case 'ok':
+        return Colors.green.withAlpha(40);
+      case 'minor':
+        return Colors.amber.withAlpha(40);
+      case 'octave':
+        return Colors.deepOrange.withAlpha(60);
+      case 'off':
+        return Colors.red.withAlpha(40);
+      default:
+        return Colors.grey.withAlpha(40);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,9 +82,32 @@ class ScalePracticeCard extends StatelessWidget {
             ),
             if (scale != null) ...[
               const SizedBox(height: 8),
-              Text('${strings.practiceScaleNotes}: ${scale.noteNames.join(" - ")}', style: const TextStyle(fontSize: 12)),
+              Row(
+                children: [
+                  Text('${strings.practiceScaleNotes}: ${scale.noteNames.join(" - ")}', style: const TextStyle(fontSize: 12)),
+                  const Spacer(),
+                  Text(strings.practiceTranspose, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                  const SizedBox(width: 6),
+                  DropdownButton<int>(
+                    value: transpose,
+                    underline: const SizedBox.shrink(),
+                    items: [
+                      for (final v in const [-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6])
+                        DropdownMenuItem(value: v, child: Text(strings.practiceTransposeValue(v.toString()), style: const TextStyle(fontSize: 12))),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) onTransposeChanged(v);
+                    },
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
-              AudioPlayerBar(url: LessonApi(dio).scaleReferenceUrl(scale.id), label: strings.practiceScaleSample, dio: dio),
+              AudioPlayerBar(
+                url: LessonApi(dio).scaleReferenceUrl(scale.id, transpose: transpose),
+                label: strings.practiceScaleSample,
+                dio: dio,
+                key: ValueKey('${scale.id}_$transpose'),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -92,6 +134,38 @@ class ScalePracticeCard extends StatelessWidget {
                   strings.practiceScaleResult(result!.score.toStringAsFixed(0), (result!.onScaleShare * 100).toStringAsFixed(0)),
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
+                const SizedBox(height: 6),
+                Text(
+                  '${strings.practiceScorePitch}: ${result!.pitchScore.toStringAsFixed(0)} · ${strings.practiceScoreRhythm}: ${result!.rhythmScore.toStringAsFixed(0)} · ${strings.practiceScoreStability}: ${result!.stabilityScore.toStringAsFixed(0)}',
+                  style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                ),
+                if (result!.summaryHint.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(result!.summaryHint, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  ),
+                const SizedBox(height: 6),
+                if (result!.performance.isNotEmpty) ...[
+                  Text(strings.practiceScalePerfTitle, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final p in result!.performance)
+                        Tooltip(
+                          message: p.hint.isNotEmpty ? p.hint : p.verdict,
+                          child: Chip(
+                            backgroundColor: _verdictColor(p.verdictCode),
+                            label: Text(
+                              '${p.name} ${p.verdictCode == "unclear" ? "" : "${p.errCents > 0 ? "+" : ""}${p.errCents.toStringAsFixed(0)}c"}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,

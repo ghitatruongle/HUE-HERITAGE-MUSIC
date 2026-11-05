@@ -43,6 +43,52 @@ def generated_dir() -> Path:
     return d
 
 
+def lesson_samples_dir(item_sha: str) -> Path:
+    import re
+
+    safe = item_sha or ""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", safe):
+        raise ValueError("bad lesson sample key")
+    d = settings.storage_dir / "heritage" / "lesson_samples" / safe
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def lesson_sample_path(item_sha: str, section: int) -> Path:
+    return lesson_samples_dir(item_sha) / f"{int(section):02d}.wav"
+
+
+def save_lesson_sample(item_sha: str, section: int, data: bytes) -> Path:
+    if not data or len(data) > MAX_ANALYSIS_BYTES:
+        raise ValueError("sample too large")
+    if not audio_magic_ok(".wav", data[:12]):
+        raise ValueError("not a wav file")
+    dest = lesson_sample_path(item_sha, section)
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(dir=lesson_samples_dir(item_sha), suffix=".part")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dest)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return dest
+
+
+def delete_lesson_sample(item_sha: str, section: int) -> bool:
+    path = lesson_sample_path(item_sha, section)
+    if path.exists():
+        path.unlink()
+        return True
+    return False
+
+
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

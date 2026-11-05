@@ -1,5 +1,50 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.2-alpha2 (2026-11-05) — "Học hát cho người dùng"
+
+> Bản nâng cấp lớn của chế độ Học hát: thuật toán so khớp làm lại từ gốc, thu âm mẫu nghệ nhân theo câu, hướng dẫn từng nốt, luyện thang ngũ cung chấm bằng DTW thật.
+
+### Thuật toán so khớp (server)
+- **Hợp nhất lưới thời gian 16kHz**: bản gốc, bản mẫu và bản thu đều được đưa về 16kHz mono trước khi so khớp — hết cảnh hai bên so trên hai độ phân giải frame khác nhau; cache bài học cũ tự nhận và dựng lại
+- **DTW banded + numpy vector hóa**: Sakoe-Chiba band 12% thay vì full-band O(n·m) thuần Python — chấm bản thu 30s từ nhiều giây xuống ~50-300ms, kết quả tối ưu tương đương (đã kiểm chứng 120 ca ngẫu nhiên so với bản chuẩn)
+- **Chấm theo nốt, không phạt luyến láy**: tách nốt cả hai bên (median-smooth 7 frame + lọc mảnh rác ranh giới), ghép cặp nốt giữ thứ tự (sequence alignment, cho phép bỏ nốt thừa/thiếu), so median nốt — rền/vọng đúng nốt không còn bị trừ điểm
+- **Điểm mới 3 thành phần**: Pitch 50% · Nhịp 30% (lệch onset từng cặp nốt qua DTW, phạt nốt thiếu/thừa) · Đều giọng 20% (MAD so với moving-median — rung đẹp không bị tính là nhiễu)
+- **Phát hiện "Sai quãng tám"**: lệch ±1050-1350 cents được báo riêng thay vì gộp chung "Lệch" — lỗi phổ biến nhất của người mới
+- **Verdict code hóa**: trả thêm `verdict_code` (ok/minor/off/octave/unclear) — client tô màu theo code, không còn so chuỗi literal
+- **Fix tracker pitch vỡ trên rền sâu**: ngưỡng chọn đỉnh 0.98×best (đỉnh subharmonic ngang best mới được nhặt) + spike-fix median (lệch >700 cents so với median trượt bị thay) — vibrato ±60c @5.5Hz giờ track chuẩn (trước đây nhảy 158→1032Hz)
+- `/api/music/compare` giữ nguyên các field cũ — màn Phục hồi/Phân tích không bị vỡ
+
+### Thu âm mẫu nghệ nhân theo câu (tính năng mới)
+- `POST/DELETE /api/lessons/{id}/sections/{n}/sample.wav` — chỉ admin trưởng (bắt buộc admin-unlock), magic-byte WAV, ≤15MB; `GET` auth audio (Bearer/signed URL gắn scope visibility)
+- Storage `storage/heritage/lesson_samples/<sha>/<section>.wav` — 1 mẫu active mỗi câu, upload mới thay cái cũ
+- Khi có mẫu, luyện tập **so khớp với giọng mẫu nghệ nhân thay vì bản nhạc gốc** — kết quả báo rõ `reference: sample|original`
+- Lesson detail trả thêm `has_sample` + `sample_url` từng câu
+- AdminScreen thêm tab **"Mẫu học hát"**: chọn bài → từng câu → upload/thay/xóa/nghe thử ngay tại chỗ, kèm thống kê luyện tập (`GET /api/admin/learning/stats`)
+- play-url nhận diện đường sample và ký URL gắn scope visibility (bản ghi "Chỉ admin" không lộ qua URL ký)
+
+### Hướng dẫn từng nốt + UX luyện tập (client)
+- **Chip nốt mới**: mũi tên ↑/↓ + số cents lệch, màu theo verdict_code; giữ nền có sóng rền; **chạm chip → nghe đúng đoạn đó của bản mẫu** (lùi 0.25s)
+- **Hint hành động được từng nốt**: "Cao hơn 45 cents — hát trầm xuống", "Vào trễ 180ms", "Giữ nốt dài hơn", "Rền đẹp — giữ chất này" (tooltip chip)
+- **Tổng quan câu**: 4 badge Tổng/Cao độ/Nhịp/Đều giọng + chỉ số Hoa mỹ (% nốt có rền + rate Hz) + tóm tắt tiếng Việt ("5 nốt chuẩn, 2 nốt lệch cao độ, thiếu 1 nốt so với mẫu")
+- **A-B loop + tốc độ chậm**: chọn 0.5x/0.75x/1.0x cho toàn màn luyện — học câu khó chậm rãi
+- **Bộ thu thông minh**: tự dừng khi im lặng ~1.2s (VU meter trực tiếp khi thu, DBFS realtime) thay vì Timer cứng; vẫn có trần an toàn
+- **Quản lý take**: giữ tối đa 3 take gần nhất mỗi câu, chip chọn take, nghe lại từng take, nút "Chấm lại" chấm lại take đã chọn không cần thu lại
+- **Xem trước giọng trên máy** (không cần server): decode WAV + autocorrelation ngay trên device, vẽ đường pitch của take so với đường mục tiêu của câu (dữ liệu contour bài học vốn có, trước đây lấy về nhưng không vẽ)
+- **Tiến độ trên máy chủ**: bảng `practice_sessions` (user, lesson, section, 4 điểm + metrics JSON) — biểu đồ tiến độ lấy từ server khi đăng nhập (đổi máy không mất), không có server thì fallback lịch sử cục bộ; tag nguồn hiển thị rõ
+
+### Luyện thang ngũ cung làm lại
+- Chấm bằng **DTW thật với reference contour phân tích** thay vì histogram chroma — kiểm soát đúng octave, đúng thứ tự, đúng nhịp từng nốt; sai octave giờ bị trừ điểm thật (trước đây ăn điểm tuyệt đối)
+- Thêm **chọn tone nền (transpose)** −6..+6 nửa cung cho cả bản mẫu (.wav) và chấm điểm
+- Kết quả trả kèm "Từng nốt": tên nốt + lệch cents + verdict code + hint
+
+### Hạ tầng
+- Body limit per-route: `/api/lessons/*`, `/api/music/analyze-pitch`, `/api/music/compare` lên 15MB (khớp ngưỡng endpoint tuyên bố, hết dead code); `/api/lessons/*` POST vào nhóm rate-limit nặng
+- Bảng `practice_sessions` tự migrate khi khởi động (index user+lesson); `GET /api/lessons/my-progress`; `GET /api/admin/learning/stats`
+
+### Kiểm định
+- pytest **168/168** (thêm 14 test hồi quy alpha2: DTW equivalence, chấm điểm tổng thể, vibrato không bị phạt, octave, thiếu nốt, transpose, 16k resample + cache rebuild, sample flow + visibility + signed URL, practice_sessions + my-progress, body limit lớn)
+- flutter analyze **0** · flutter test **36/36** · build web release OK
+
 ## 0.0.2-alpha1 (2026-11-03)
 
 > Bản 0.0.2-preview nội bộ (chưa phát hành) chốt thành 0.0.2-alpha1.

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -16,8 +17,10 @@ import 'package:hue_heritage_music/screens/home/home_screen.dart';
 import 'package:hue_heritage_music/screens/restoration/restoration_screen.dart';
 import 'package:hue_heritage_music/screens/settings/settings_screen.dart';
 import 'package:hue_heritage_music/screens/auth/login_screen.dart';
+import 'package:hue_heritage_music/screens/learning/scale_practice_card.dart';
 import 'package:hue_heritage_music/services/auth_service.dart';
 import 'package:hue_heritage_music/services/history_service.dart';
+import 'package:hue_heritage_music/services/local_pitch.dart';
 import 'package:hue_heritage_music/services/locale_provider.dart';
 import 'package:hue_heritage_music/services/server_config.dart';
 import 'package:hue_heritage_music/services/session_media.dart';
@@ -665,6 +668,247 @@ void main() {
     );
     expect(find.byType(OverlayPitchChart), findsOneWidget);
   });
+
+  test('PracticeResult parses alpha2 metrics and note verdict codes', () {
+    final r = PracticeResult.fromJson(const {
+      'metrics': {
+        'score': 88.5,
+        'pitch_score': 95,
+        'time_score': 80,
+        'rhythm_score': 80,
+        'stability_score': 90,
+        'ornament': 66.7,
+        'vibrato_rate': 5.2,
+        'mean_abs_cents': 18,
+        'matched_notes': 3,
+        'unmatched_notes': 0,
+        'missing_notes': 1,
+        'summary_hint': '3 nốt chuẩn, thiếu 1 nốt so với mẫu',
+      },
+      'sample': {'times': [0.0, 1.0], 'f0': [220.0, 220.0]},
+      'user_warped': {'times': [0.0, 1.0], 'f0': [222.0, 221.0]},
+      'notes': [
+        {
+          'midi': 57,
+          'start': 0.0,
+          'end': 0.9,
+          'err_cents': -35.0,
+          'verdict': 'Lệch nhẹ',
+          'verdict_code': 'minor',
+          'hint': 'Thấp hơn 35 cents — hát cao lên',
+          'onset_err_ms': -60.0,
+          'ref_start': 0.3,
+          'ref_end': 1.2,
+          'vibrato': true,
+        },
+        {
+          'midi': 60,
+          'start': 1.0,
+          'end': 1.8,
+          'err_cents': -1200.0,
+          'verdict': 'Sai quãng tám',
+          'verdict_code': 'octave',
+          'hint': 'Thấp hơn 1200 cents — hát cao lên',
+          'onset_err_ms': 10.0,
+          'ref_start': 1.0,
+          'ref_end': 1.9,
+          'vibrato': false,
+        },
+        {
+          'midi': 62,
+          'start': 2.0,
+          'end': 2.4,
+          'err_cents': 0.0,
+          'verdict': 'Không rõ',
+          'verdict_code': 'unclear',
+          'hint': '',
+          'onset_err_ms': 0.0,
+          'ref_start': 0.0,
+          'ref_end': 0.0,
+          'vibrato': false,
+        },
+      ],
+      'section': {'index': 1},
+      'lesson_title': 'Bai A2',
+      'reference': 'sample',
+      'user_midi': 'practice_abc123_1_1700000000.mid',
+    });
+    expect(r.metrics.rhythmScore, 80);
+    expect(r.metrics.stabilityScore, 90);
+    expect(r.metrics.ornament, 66.7);
+    expect(r.metrics.summaryHint, contains('thiếu 1 nốt'));
+    expect(r.reference, 'sample');
+    expect(r.notes[0].verdictCode, 'minor');
+    expect(r.notes[0].hint, contains('hát cao lên'));
+    expect(r.notes[0].vibrato, isTrue);
+    expect(r.notes[1].verdictCode, 'octave');
+    expect(r.notes[1].verdict, 'Sai quãng tám');
+    expect(r.notes[2].verdictCode, 'unclear');
+    expect(r.notes[2].refStart, 0);
+  });
+
+  test('PracticeResult legacy payload without alpha2 fields still parses', () {
+    final r = PracticeResult.fromJson(const {
+      'metrics': {'score': 90, 'pitch_score': 92, 'time_score': 85, 'mean_abs_cents': 20},
+      'sample': {'times': [0.0], 'f0': [220.0]},
+      'user_warped': {'times': [0.0], 'f0': [225.0]},
+      'notes': [{'midi': 57, 'start': 0.0, 'end': 0.5, 'err_cents': 10.0, 'verdict': 'Chuẩn'}],
+      'section': {'index': 0},
+      'lesson_title': 'Legacy',
+    });
+    expect(r.metrics.rhythmScore, 0);
+    expect(r.metrics.summaryHint, '');
+    expect(r.reference, '');
+    expect(r.notes.first.verdictCode, '');
+    expect(r.notes.first.verdict, 'Chuẩn');
+  });
+
+  test('ScalePractice parses transpose and performance notes', () {
+    final s = ScalePractice.fromJson(const {
+      'score': 97.2,
+      'scale_name': 'Ngũ cung Bắc',
+      'transpose': -3,
+      'pitch_score': 99.9,
+      'rhythm_score': 93.8,
+      'stability_score': 95.8,
+      'on_scale_share': 0.98,
+      'summary_hint': '11 nốt chuẩn',
+      'notes': [
+        {'name': 'Do', 'share': 0.3, 'hit': true},
+        {'name': 'Re', 'share': 0.1, 'hit': false},
+      ],
+      'performance': [
+        {'name': 'Do', 'err_cents': 0.4, 'onset_err_ms': 12.0, 'verdict': 'Chuẩn', 'verdict_code': 'ok', 'hint': ''},
+        {'name': 'Không rõ', 'err_cents': 0.0, 'onset_err_ms': 0.0, 'verdict': 'Không rõ', 'verdict_code': 'unclear', 'hint': ''},
+      ],
+    });
+    expect(s.transpose, -3);
+    expect(s.pitchScore, 99.9);
+    expect(s.performance.length, 2);
+    expect(s.performance.first.verdictCode, 'ok');
+    expect(s.notes.first.hit, isTrue);
+    expect(s.summaryHint, contains('11 nốt'));
+  });
+
+  test('LessonSection parses sample flags', () {
+    final withSample = LessonSection.fromJson(const {
+      'index': 2,
+      'start': 4.0,
+      'end': 9.0,
+      'duration': 5.0,
+      'lyrics': 'Câu ba',
+      'has_sample': true,
+      'sample_url': '/api/lessons/abc/sections/2/sample.wav',
+    });
+    expect(withSample.hasSample, isTrue);
+    expect(withSample.sampleUrl, endsWith('/sample.wav'));
+
+    final legacy = LessonSection.fromJson(const {
+      'index': 0,
+      'start': 0.0,
+      'end': 3.0,
+      'duration': 3.0,
+      'lyrics': '',
+    });
+    expect(legacy.hasSample, isFalse);
+    expect(legacy.sampleUrl, '');
+  });
+
+  test('LocalPitch.analyze tracks synthetic sine take', () {
+    const sr = 16000;
+    final samples = Int16List(sr * 2);
+    for (var i = 0; i < sr; i++) {
+      samples[i] = (8000 * math.sin(2 * math.pi * 220.0 * i / sr)).round();
+    }
+    for (var i = sr; i < sr * 2; i++) {
+      samples[i] = (8000 * math.sin(2 * math.pi * 440.0 * i / sr)).round();
+    }
+    final bytes = _pcm16Wav(samples, sr);
+    final result = LocalPitch.analyze(bytes);
+    expect(result, isNotNull);
+    final firstHalf = result!.points.where((p) => p.t < 0.9 && p.f0 > 0).map((p) => p.f0).toList();
+    final secondHalf = result.points.where((p) => p.t >= 1.1 && p.f0 > 0).map((p) => p.f0).toList();
+    expect(firstHalf, isNotEmpty);
+    expect(secondHalf, isNotEmpty);
+    final avg1 = firstHalf.reduce((a, b) => a + b) / firstHalf.length;
+    final avg2 = secondHalf.reduce((a, b) => a + b) / secondHalf.length;
+    expect(avg1, closeTo(220, 15));
+    expect(avg2, closeTo(440, 25));
+  });
+
+  testWidgets('ScalePracticeCard renders transpose selector and performance chips', (tester) async {
+    final server = ServerConfig();
+    server.api.dio.httpClientAdapter = _JsonAdapter({});
+    final scaleInfo = ScaleInfo(id: 'bac', name: 'Ngũ cung Bắc', noteNames: ['Do', 'Re']);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: server),
+          ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: ScalePracticeCard(
+              scales: [scaleInfo],
+              selected: scaleInfo,
+              onChanged: (_) {},
+              recording: false,
+              onToggleRecord: () {},
+              busy: false,
+              onSubmit: () {},
+              recordPath: null,
+              transpose: -2,
+              onTransposeChanged: (_) {},
+              result: ScalePractice.fromJson(const {
+                'score': 97.2,
+                'scale_name': 'Ngũ cung Bắc',
+                'transpose': 0,
+                'pitch_score': 99.9,
+                'rhythm_score': 93.8,
+                'stability_score': 95.8,
+                'on_scale_share': 0.98,
+                'summary_hint': '11 nốt chuẩn',
+                'notes': [
+                  {'name': 'Do', 'share': 0.3, 'hit': true},
+                ],
+                'performance': [
+                  {'name': 'Do', 'err_cents': 0.4, 'onset_err_ms': 0.0, 'verdict': 'Chuẩn', 'verdict_code': 'ok', 'hint': ''},
+                ],
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Luyện thang ngũ cung'), findsOneWidget);
+    expect(find.text('Lệch -2 nửa cung'), findsOneWidget);
+    expect(find.textContaining('Độ bám thang'), findsOneWidget);
+    expect(find.textContaining('11 nốt'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+}
+
+Uint8List _pcm16Wav(Int16List samples, int sr) {
+  final data = ByteData(44 + samples.length * 2);
+  data.setUint32(0, 0x46464952, Endian.little);
+  data.setUint32(4, 36 + samples.length * 2, Endian.little);
+  data.setUint32(8, 0x45564157, Endian.little);
+  data.setUint32(12, 0x20746D66, Endian.little);
+  data.setUint32(16, 16, Endian.little);
+  data.setUint16(20, 1, Endian.little);
+  data.setUint16(22, 1, Endian.little);
+  data.setUint32(24, sr, Endian.little);
+  data.setUint32(28, sr * 2, Endian.little);
+  data.setUint16(32, 2, Endian.little);
+  data.setUint16(34, 16, Endian.little);
+  data.setUint32(36, 0x61746164, Endian.little);
+  data.setUint32(40, samples.length * 2, Endian.little);
+  for (var i = 0; i < samples.length; i++) {
+    data.setInt16(44 + i * 2, samples[i], Endian.little);
+  }
+  return data.buffer.asUint8List();
 }
 
 class _StatefulAdminAdapter implements HttpClientAdapter {

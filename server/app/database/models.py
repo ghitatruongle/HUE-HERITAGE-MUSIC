@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Boolean, func
+from sqlalchemy import String, Integer, Float, Text, DateTime, ForeignKey, Boolean, func, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from .session import Base
 
@@ -76,6 +76,22 @@ class Task(Base):
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     finished_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+
+class PracticeSession(Base):
+    __tablename__ = "practice_sessions"
+    __table_args__ = (Index("ix_practice_user_lesson", "user_id", "lesson_id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    lesson_id: Mapped[str] = mapped_column(String(64), default="")
+    section: Mapped[int] = mapped_column(Integer, default=0)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    pitch_score: Mapped[float] = mapped_column(Float, default=0.0)
+    rhythm_score: Mapped[float] = mapped_column(Float, default=0.0)
+    stability_score: Mapped[float] = mapped_column(Float, default=0.0)
+    reference: Mapped[str] = mapped_column(String(16), default="original")
+    metrics_json: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class InviteCode(Base):

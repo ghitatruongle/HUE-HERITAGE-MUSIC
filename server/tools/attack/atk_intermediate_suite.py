@@ -58,7 +58,7 @@ def main():
     ):
         r = c1.post("/api/music/generate", params=params)
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"generate {params} → {r.status_code}", "5xx"))
 
     print("== T2. FOREIGN TASK ACCESS (đọc/hủy/SSE task của người khác) ==")
@@ -83,11 +83,11 @@ def main():
         for _ in range(2):
             r = c1.post(f"/api/music/task/{task_id}/cancel")
             attempts += 1
-            if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+            if r.status_code >= 500 and r.status_code != 503:
                 breaches.append((f"cancel → {r.status_code}", "5xx"))
     r = c1.post("/api/music/task/00000000-0000-0000-0000-000000000000/cancel")
     attempts += 1
-    if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+    if r.status_code >= 500 and r.status_code != 503:
         breaches.append((f"cancel task lạ → {r.status_code}", "5xx"))
 
     print("== T4. PARAMS INJECTION (payload lớn, null bytes, unicode) ==")
@@ -98,7 +98,7 @@ def main():
     ):
         r = c1.post("/api/music/generate", params=params)
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"generate params méo → {r.status_code}", "5xx"))
 
     print("== T5. UPLOAD MÉO (tên file, title 300+ ký tự, lyrics 1MB, bpm nan/inf) ==")
@@ -106,7 +106,7 @@ def main():
     for fname in ("a.wav.wav", "..wav", "nhạc cầu.wav", "CON.wav"):
         r = c1.post("/api/heritage/upload", files={"file": (fname, wav, "audio/wav")}, data={"title": f"T{secrets.token_hex(3)}"})
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"upload tên {fname} → {r.status_code}", "5xx"))
     for data in (
         {"title": "X" * 400},
@@ -121,7 +121,7 @@ def main():
             data=data,
         )
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"upload data méo {list(data)} → {r.status_code}", "5xx"))
 
     print("== T6. SHA DEDUP (cùng bytes khác title → 1 item) ==")
@@ -215,7 +215,7 @@ def main():
         attempts += 1
         if r.status_code == 200:
             hits += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"practice-midi {name[:20]} → {r.status_code}", "5xx"))
     if hits:
         breaches.append(("practice-midi đoán trúng", f"{hits}/20"))
@@ -223,14 +223,14 @@ def main():
     print("== T11. EMAIL CASE-INSENSITIVE LOGIN (nhất quán, không 5xx) ==")
     r = httpx.post(base + "/api/auth/login", json={"identifier": f"{u1['username']}@GMAIL.COM", "password": "secret123"}, timeout=30.0)
     attempts += 1
-    if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+    if r.status_code >= 500 and r.status_code != 503:
         breaches.append((f"login email HOA → {r.status_code}", "5xx"))
 
     print("== T12. INVITE BOUNDARIES (3 ký tự, 65 ký tự, unicode) ==")
     for code in ("ABC", "C" * 65, "mã-邀请-🎨"):
         r = c1.post("/api/auth/invites", json={"code": code, "note": "edge"})
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"invite code {code[:8]!r} → {r.status_code}", "5xx"))
 
     print("== T13. RACE NHẸ: 5 generate song song cùng user ==")

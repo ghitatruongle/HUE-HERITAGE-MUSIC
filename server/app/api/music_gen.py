@@ -47,6 +47,8 @@ PLAYABLE_SUFFIXES = (
     ".musicxml",
 )
 
+LESSON_SAMPLE_RE = re.compile(r"^/api/lessons/([A-Za-z0-9-]+)/sections/(\d+)/sample\.wav$")
+
 
 @router.get("/music/play-url")
 def issue_play_url(
@@ -66,9 +68,10 @@ def issue_play_url(
         raise HTTPException(status_code=400, detail="bad path")
     scope = ""
     m = HERITAGE_AUDIO_RE.match(cleaned)
-    if m:
+    sm = LESSON_SAMPLE_RE.match(cleaned)
+    if m or sm:
         viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
-        item = crud.get_item(db, m.group(1))
+        item = crud.get_item(db, m.group(1) if m else sm.group(1))
         if item is None or not crud.can_view_item(item, viewer):
             raise HTTPException(status_code=404, detail="not found")
         scope = f"vis:{getattr(item, 'visibility', None) or 'public'}"

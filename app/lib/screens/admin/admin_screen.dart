@@ -1,12 +1,19 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_client.dart';
 import '../../api/endpoints/admin_endpoints.dart';
 import '../../api/endpoints/auth_endpoints.dart';
+import '../../api/endpoints/lesson_api.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/lesson.dart';
 import '../../services/admin_reauth.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
+import '../../widgets/audio_player_bar.dart';
 import '../auth/account_manager_section.dart';
 import '../auth/invite_manager_section.dart';
 import 'security_section.dart';
@@ -31,7 +38,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -62,6 +69,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 Tab(text: strings.adminTabUsers),
                 Tab(text: strings.adminTabInvites),
                 Tab(text: strings.adminTabStorage),
+                Tab(text: strings.adminTabLearning),
                 Tab(text: strings.adminTabSecurity),
               ],
             ),
@@ -74,6 +82,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 _UsersTab(),
                 _InvitesTab(),
                 _StorageTab(),
+                LearningSamplesTab(),
                 SecuritySection(),
               ],
             ),
@@ -891,6 +900,280 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
           ],
         ),
       ),
+    );
+  }
+}
+
+class LearningSamplesTab extends StatefulWidget {
+  const LearningSamplesTab({super.key});
+
+  @override
+  State<LearningSamplesTab> createState() => _LearningSamplesTabState();
+}
+
+class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticKeepAliveClientMixin {
+  List<Lesson> _lessons = [];
+  Lesson? _selected;
+  LessonDetail? _detail;
+  bool _loading = false;
+  int _busySection = -2;
+  int _sampleRev = 0;
+  String? _error;
+  LearningStats? _stats;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final lessons = await LessonApi(dio).list();
+      LearningStats? stats;
+      try {
+        stats = await AdminEndpoints(dio).learningStats();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _lessons = lessons;
+        _stats = stats;
+      });
+      if (_selected != null) {
+        final still = lessons.where((l) => l.id == _selected!.id).firstOrNull;
+        if (still != null) {
+          await _openLesson(still);
+          return;
+        }
+      }
+      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = ApiClient.describe(e);
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openLesson(Lesson lesson) async {
+    setState(() {
+      _loading = true;
+      _selected = lesson;
+      _detail = null;
+    });
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final detail = await LessonApi(dio).detail(lesson.id);
+      if (!mounted) return;
+      setState(() {
+        _detail = detail;
+        _loading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = ApiClient.describe(e);
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _uploadSample(int section) async {
+    final lesson = _selected;
+    if (lesson == null || _busySection >= 0) return;
+    final strings = context.read<LocaleProvider>().strings;
+    setState(() => _busySection = section);
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        dialogTitle: strings.adminLearningPickWav,
+        type: FileType.custom,
+        allowedExtensions: ['wav'],
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty) {
+        if (mounted) setState(() => _busySection = -2);
+        return;
+      }
+      final file = picked.files.first;
+      final bytes = file.bytes;
+      if (bytes == null && file.path == null) {
+        if (mounted) setState(() => _busySection = -2);
+        return;
+      }
+      final data = bytes ?? await File(file.path!).readAsBytes();
+      if (!mounted) return;
+      final dio = context.read<ServerConfig>().api.dio;
+      final api = LessonApi(dio);
+      final detail = await runWithAdminReauth(
+        context,
+        () => api.uploadSample(lesson.id, section, data, file.name),
+      );
+      if (!mounted) return;
+      if (_selected?.id != lesson.id) {
+        setState(() => _busySection = -2);
+        return;
+      }
+      setState(() {
+        _detail = detail;
+        _busySection = -2;
+        _sampleRev++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${strings.adminLearningUploaded} ${section + 1}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busySection = -2);
+      if (e is AdminReauthCancelled) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.describe(e))),
+      );
+    }
+  }
+
+  Future<void> _deleteSample(int section) async {
+    final lesson = _selected;
+    if (lesson == null || _busySection >= 0) return;
+    final strings = context.read<LocaleProvider>().strings;
+    setState(() => _busySection = section);
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final api = LessonApi(dio);
+      final detail = await runWithAdminReauth(
+        context,
+        () => api.deleteSample(lesson.id, section),
+      );
+      if (!mounted) return;
+      if (_selected?.id != lesson.id) {
+        setState(() => _busySection = -2);
+        return;
+      }
+      setState(() {
+        _detail = detail;
+        _busySection = -2;
+        _sampleRev++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${strings.adminLearningDeleted} ${section + 1}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busySection = -2);
+      if (e is AdminReauthCancelled) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ApiClient.describe(e))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final strings = context.watch<LocaleProvider>().strings;
+    final scheme = Theme.of(context).colorScheme;
+    if (_loading && _lessons.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(strings.adminLearningHint, style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        if (_stats != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            strings.adminLearningStatLine(_stats!.totalSessions, _stats!.activeUsers, _stats!.sessionsLast7d),
+            style: const TextStyle(fontSize: 12, color: AppTheme.emeraldGreen),
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (_error != null)
+          Card(
+            color: scheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
+            ),
+          ),
+        DropdownButtonFormField<Lesson>(
+          initialValue: _selected,
+          decoration: InputDecoration(labelText: strings.adminLearningPickLesson, border: const OutlineInputBorder()),
+          items: [
+            for (final l in _lessons)
+              DropdownMenuItem(value: l, child: Text(l.title, overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (l) {
+            if (l != null) _openLesson(l);
+          },
+        ),
+        if (_loading && _selected != null)
+          const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
+        if (_detail != null)
+          for (final s in _detail!.sections)
+            Card(
+              margin: const EdgeInsets.only(top: 8),
+              child: ListTile(
+                leading: Icon(
+                  s.hasSample ? Icons.record_voice_over : Icons.mic_off,
+                  color: s.hasSample ? AppTheme.emeraldGreen : scheme.onSurfaceVariant,
+                ),
+                title: Text(strings.adminLearningPhrase(s.index + 1)),
+                subtitle: Text(
+                  s.hasSample ? strings.adminLearningHasSample : strings.adminLearningNoSample,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                isThreeLine: false,
+                trailing: _busySection == s.index
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          if (s.hasSample)
+                            IconButton(
+                              tooltip: strings.adminLearningReplace,
+                              icon: const Icon(Icons.upload_file, size: 20),
+                              onPressed: () => _uploadSample(s.index),
+                            )
+                          else
+                            IconButton(
+                              tooltip: strings.adminLearningUpload,
+                              icon: const Icon(Icons.upload, size: 20),
+                              onPressed: () => _uploadSample(s.index),
+                            ),
+                          if (s.hasSample)
+                            IconButton(
+                              tooltip: strings.adminLearningDelete,
+                              icon: const Icon(Icons.delete_outline, size: 20),
+                              onPressed: () => _deleteSample(s.index),
+                            ),
+                        ],
+                      ),
+              ),
+            ),
+        if (_detail != null && _detail!.sections.isNotEmpty)
+          for (final s in _detail!.sections.where((s) => s.hasSample))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: AudioPlayerBar(
+                key: ValueKey('${_detail!.id}_${s.index}_$_sampleRev'),
+                url: s.sampleUrl,
+                label: strings.adminLearningPhrase(s.index + 1),
+                dio: context.read<ServerConfig>().api.dio,
+              ),
+            ),
+      ],
     );
   }
 }

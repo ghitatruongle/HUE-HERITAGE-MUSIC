@@ -68,19 +68,59 @@ class LessonApi {
     return scales;
   }
 
-  String scaleReferenceUrl(String scaleId) {
-    return '${dio.options.baseUrl}/api/lessons/scales/$scaleId/reference.wav';
+  String scaleReferenceUrl(String scaleId, {int transpose = 0}) {
+    final base = '${dio.options.baseUrl}/api/lessons/scales/$scaleId/reference.wav';
+    if (transpose == 0) return base;
+    return '$base?transpose=$transpose';
   }
 
-  Future<ScalePractice> scalePracticeBytes(String scaleId, Uint8List bytes) async {
+  Future<ScalePractice> scalePracticeBytes(String scaleId, Uint8List bytes, {int transpose = 0}) async {
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: 'scale.wav'),
     });
-    final res = await dio.post('/api/lessons/scales/$scaleId/practice', data: form);
+    final res = await dio.post(
+      '/api/lessons/scales/$scaleId/practice',
+      queryParameters: {'transpose': transpose},
+      data: form,
+    );
     final data = res.data;
     if (data is Map) {
       return ScalePractice.fromJson(Map<String, dynamic>.from(data));
     }
     throw DioException(requestOptions: res.requestOptions, error: 'Invalid scale practice response');
+  }
+
+  Future<LessonDetail> uploadSample(String lessonId, int section, Uint8List bytes, String filename) async {
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    await dio.post('/api/lessons/$lessonId/sections/$section/sample.wav', data: form);
+    return detail(lessonId);
+  }
+
+  Future<LessonDetail> deleteSample(String lessonId, int section) async {
+    await dio.delete('/api/lessons/$lessonId/sections/$section/sample.wav');
+    return detail(lessonId);
+  }
+
+  String sampleUrl(String lessonId, int section) {
+    return '${dio.options.baseUrl}/api/lessons/$lessonId/sections/$section/sample.wav';
+  }
+
+  Future<List<ProgressEntry>> myProgress({String lessonId = '', int limit = 100}) async {
+    final res = await dio.get(
+      '/api/lessons/my-progress',
+      queryParameters: {'lesson_id': lessonId, 'limit': limit},
+    );
+    final data = res.data;
+    final items = <ProgressEntry>[];
+    if (data is Map && data['items'] is List) {
+      for (final e in data['items'] as List) {
+        if (e is Map) {
+          items.add(ProgressEntry.fromJson(Map<String, dynamic>.from(e)));
+        }
+      }
+    }
+    return items;
   }
 }

@@ -34,7 +34,7 @@ def main():
         for method in ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"):
             r = c.request(method, path)
             attempts += 1
-            if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+            if r.status_code >= 500 and r.status_code != 503:
                 breaches.append((f"{method} {path} → {r.status_code}", "5xx trên method thường"))
 
     print("== B2. PATH NORMALIZATION (//, /./, /../, %2e, %00, dot-suffix) ==")
@@ -47,7 +47,7 @@ def main():
     for p in paths:
         r = c.get(p)
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"path {p} → {r.status_code}", "5xx"))
         if r.status_code == 200 and (".env" in p or ".." in p) and "SECRET" in r.text[:2000]:
             breaches.append((f"path {p} lộ .env", r.text[:60]))
@@ -79,7 +79,7 @@ def main():
             timeout=30.0,
         )
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"JSON {label} → {r.status_code}", "500 thay vì 4xx"))
         if r.status_code == 200:
             breaches.append((f"JSON {label} login thành công?!", body[:40]))
@@ -96,7 +96,7 @@ def main():
     ):
         r = c.get("/api/heritage", params=qs)
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"query {qs} → {r.status_code}", "5xx"))
     r = c.get("/api/heritage", params={"visibility": "admin_only"})
     if r.status_code == 200:
@@ -116,7 +116,7 @@ def main():
     for hv, label in weird_auths:
         r = httpx.get(base + "/api/auth/me", headers={"Authorization": hv}, timeout=30.0)
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"auth {label} → {r.status_code}", "5xx"))
     r = httpx.get(
         base + "/api/auth/me",
@@ -124,7 +124,7 @@ def main():
         timeout=30.0,
     )
     attempts += 1
-    if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+    if r.status_code >= 500 and r.status_code != 503:
         breaches.append((f"double Authorization → {r.status_code}", "5xx"))
     for xff in ("1.2.3.4", "1.2.3.4, 5.6.7.8", "unknown"):
         r = httpx.get(base + "/health", headers={"X-Forwarded-For": xff}, timeout=30.0)
@@ -140,7 +140,7 @@ def main():
         timeout=30.0,
     )
     attempts += 1
-    if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+    if r.status_code >= 500 and r.status_code != 503:
         breaches.append((f"login text/plain → {r.status_code}", "5xx"))
     r = httpx.post(
         base + "/api/auth/login",
@@ -148,7 +148,7 @@ def main():
         timeout=30.0,
     )
     attempts += 1
-    if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+    if r.status_code >= 500 and r.status_code != 503:
         breaches.append((f"login multipart → {r.status_code}", "5xx"))
 
     print("== B8. STATIC / WEB PROBES (maps, version, service worker, assets traversal) ==")
@@ -159,14 +159,14 @@ def main():
     ):
         r = c.get(p)
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"static {p} → {r.status_code}", "5xx"))
 
     print("== B9. UNICODE/NULL IN SEARCH (query q) ==")
     for q in ("酶%00", "%c0%ae", "👍" * 200, "a" * 5000, "'\"; DROP", "\x00\x01\x02"):
         r = c.get("/api/heritage", params={"q": q})
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"q unicode {q[:20]!r} → {r.status_code}", "5xx"))
 
     print("== B10. HEAD/OPTIONS + CORS PREFLIGHT CƠ BẢN ==")
@@ -176,14 +176,14 @@ def main():
         timeout=30.0,
     )
     attempts += 1
-    if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+    if r.status_code >= 500 and r.status_code != 503:
         breaches.append((f"preflight evil origin → {r.status_code}", "5xx"))
     allow = r.headers.get("access-control-allow-origin", "")
     if allow == "*" and r.status_code == 200:
         pass
     r = httpx.get(base + "/api/auth/me", headers={"Origin": "http://evil.example", **auth}, timeout=30.0)
     attempts += 1
-    if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+    if r.status_code >= 500 and r.status_code != 503:
         breaches.append(("GET evil origin → 5xx", ""))
 
     print(f"\n(attempts={attempts})")

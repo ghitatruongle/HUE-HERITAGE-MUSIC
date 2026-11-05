@@ -29,8 +29,11 @@ AUDIO_SUFFIXES = (
     ".musicxml",
 )
 
-HEAVY_POST_PREFIXES = ("/api/music/",)
+HEAVY_POST_PREFIXES = ("/api/music/", "/api/lessons/")
 HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload")
+LARGE_BODY_PREFIXES = ("/api/lessons/",)
+LARGE_BODY_PATHS = ("/api/music/analyze-pitch", "/api/music/compare")
+LARGE_BODY_LIMIT = 15 * 1024 * 1024
 
 
 class SecurityHeadersMiddleware:
@@ -132,6 +135,13 @@ class BodyLimitMiddleware:
         self.app = app
         self.default_limit = default_limit
 
+    def _limit_for(self, path: str) -> int:
+        if path.startswith("/api/heritage/upload"):
+            return 50 * 1024 * 1024 + 2 * 1024 * 1024
+        if path.startswith(LARGE_BODY_PREFIXES) or path in LARGE_BODY_PATHS:
+            return LARGE_BODY_LIMIT
+        return self.default_limit
+
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope.get("method") not in ("POST", "PUT", "PATCH"):
             await self.app(scope, receive, send)
@@ -140,17 +150,21 @@ class BodyLimitMiddleware:
         if not path.startswith("/api/"):
             await self.app(scope, receive, send)
             return
-        if path.startswith("/api/heritage/upload"):
-            await self._stream_limit(scope, receive, send, 50 * 1024 * 1024 + 2 * 1024 * 1024)
+        limit = self._limit_for(path)
+        if limit > LARGE_BODY_LIMIT:
+            await self._stream_limit(scope, receive, send, limit)
             return
         body = b""
         over = False
         while True:
             msg = await receive()
             if msg["type"] == "http.request":
-                body += msg.get("body", b"")
-                if len(body) > self.default_limit:
-                    over = True
+                chunk = msg.get("body", b"")
+                if not over:
+                    body += chunk
+                    if len(body) > limit:
+                        over = True
+                        body = b""
                 if not msg.get("more_body"):
                     break
             elif msg["type"] == "http.disconnect":
@@ -284,7 +298,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.2-alpha1",
+        version="0.0.2-alpha2",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -323,8 +337,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.2-alpha1",
-            "stage": "0.0.2-alpha1",
+            "version": "0.0.2-alpha2",
+            "stage": "0.0.2-alpha2",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             from .ai import ace_step_engine

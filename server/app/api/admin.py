@@ -259,6 +259,11 @@ def admin_cleanup(
     return {"freed_bytes": freed_bytes, "details": details}
 
 
+@router.get("/learning/stats")
+def admin_learning_stats(admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+    return crud.learning_stats(db)
+
+
 @router.get("/security/events")
 def admin_security_events(
     limit: int = 100,

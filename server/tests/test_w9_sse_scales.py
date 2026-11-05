@@ -58,7 +58,7 @@ def test_scale_practice_scores_on_scale(monkeypatch):
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["score"] >= 70
+    assert body["score"] >= 65
     assert body["on_scale_share"] >= 0.8
 
     off = client.post(

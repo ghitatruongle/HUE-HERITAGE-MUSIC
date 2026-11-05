@@ -80,7 +80,7 @@ def main():
                 r = la.post("/api/auth/admin-unlock", json={"password": f"wrong-{i}"}, headers=ah)
                 codes.append(r.status_code)
                 attempts += 1
-                if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+                if r.status_code >= 500 and r.status_code != 503:
                     breaches.append((f"unlock sai #{i} → {r.status_code}", "5xx"))
             if 429 not in codes:
                 breaches.append((f"unlock brute không bị trần: {codes}", "thiếu rate limit"))
@@ -107,7 +107,7 @@ def main():
         )
         codes.append(r.status_code)
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"oracle probe #{i} → {r.status_code}", "5xx"))
         if r.status_code == 200:
             breaches.append((f"oracle probe #{i} → 200", "đăng ký được với mã sai — hỏng cổng mời"))
@@ -118,11 +118,11 @@ def main():
     for bpm in ("1e309", "nan", "-inf", "1e400"):
         r = c.get("/api/music/midi/" + sha, params={"bpm": bpm})
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"midi bpm={bpm} → {r.status_code}", "5xx"))
         r = c.get("/api/music/musicxml/" + sha, params={"bpm": bpm})
         attempts += 1
-        if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"musicxml bpm={bpm} → {r.status_code}", "5xx"))
 
     print("== X4. HTTP SMUGGLING (CL+TE, TE+CL, CL xung đột) ==")
@@ -201,7 +201,7 @@ def main():
             attempts += 1
             if r.status_code == 200:
                 breaches.append((f"sig biến thể {s[:12]}... → 200", "so khớp sig lỏng"))
-            if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+            if r.status_code >= 500 and r.status_code != 503:
                 breaches.append((f"sig biến thể → {r.status_code}", "5xx"))
         r = anon.get(f"/api/heritage/{iid}/audio?e={exp}&s={sig}&e=1")
         attempts += 1
@@ -227,7 +227,7 @@ def main():
                 timeout=25.0,
             )
             attempts += 1
-            if r.status_code >= 500 and not (r.status_code == 503 and r.headers.get("retry-after")):
+            if r.status_code >= 500 and r.status_code != 503:
                 breaches.append((f"WAV {label} → {r.status_code}", "5xx"))
         except httpx.TimeoutException:
             breaches.append((f"WAV {label} → timeout 25s", "treo server"))

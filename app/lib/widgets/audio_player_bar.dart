@@ -72,20 +72,28 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
     if (dio == null) {
       return null;
     }
-    if (rawUrl.contains('e=') && rawUrl.contains('s=')) {
+    final parsedRaw = Uri.tryParse(rawUrl);
+    if (parsedRaw != null && parsedRaw.queryParameters.containsKey('e') && parsedRaw.queryParameters.containsKey('s')) {
       return null;
     }
     final idx = rawUrl.indexOf('/api/');
     if (idx < 0) {
       return null;
     }
-    final path = rawUrl.substring(idx).split('?').first;
+    final pathAndQuery = rawUrl.substring(idx);
+    final qIdx = pathAndQuery.indexOf('?');
+    final path = qIdx >= 0 ? pathAndQuery.substring(0, qIdx) : pathAndQuery;
+    final query = qIdx >= 0 ? pathAndQuery.substring(qIdx + 1) : '';
     try {
       final res = await dio.get('/api/music/play-url', queryParameters: {'path': path});
       final data = res.data;
       if (data is Map && data['url'] is String && (data['url'] as String).isNotEmpty) {
         final signed = data['url'] as String;
-        return signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
+        var finalUrl = signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
+        if (query.isNotEmpty) {
+          finalUrl = finalUrl.contains('?') ? '$finalUrl&$query' : '$finalUrl?$query';
+        }
+        return finalUrl;
       }
     } catch (_) {}
     return null;

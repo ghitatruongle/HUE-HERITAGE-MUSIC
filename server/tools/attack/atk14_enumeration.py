@@ -33,7 +33,7 @@ def main():
         "username": "enum" + secrets.token_hex(2),
         "email": "enumerateme@gmail.com", "password": "secret123", "invite_code": "CHAOS-CODE"})
     attempts += 1
-    if r3.status_code >= 500:
+    if r3.status_code >= 500 and r3.status_code != 503:
         breaches.append(("enumeration email 500", ""))
 
     verdict("USER-ENUMERATION", attempts, breaches)

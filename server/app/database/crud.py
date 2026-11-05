@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from .models import HeritageItem, AudioFile, User, Task
+from .models import HeritageItem, AudioFile, User, Task, PracticeSession
 
 
 METADATA_FIELDS = [
@@ -365,6 +365,103 @@ def prune_old_tasks(db: Session, days: int = 30) -> int:
         query.delete(synchronize_session=False)
         db.commit()
     return count
+
+
+def create_practice_session(
+    db: Session,
+    user_id: Optional[str],
+    lesson_id: str,
+    section: int,
+    score: float,
+    pitch_score: float,
+    rhythm_score: float,
+    stability_score: float,
+    reference: str = "original",
+    metrics: Optional[dict] = None,
+):
+    row = PracticeSession(
+        user_id=user_id,
+        lesson_id=lesson_id,
+        section=int(section),
+        score=float(score or 0.0),
+        pitch_score=float(pitch_score or 0.0),
+        rhythm_score=float(rhythm_score or 0.0),
+        stability_score=float(stability_score or 0.0),
+        reference=reference or "original",
+        metrics_json=json.dumps(metrics or {}),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_practice_sessions(db: Session, user_id: str, lesson_id: Optional[str] = None, limit: int = 100):
+    query = db.query(PracticeSession).filter(PracticeSession.user_id == user_id)
+    if lesson_id:
+        query = query.filter(PracticeSession.lesson_id == lesson_id)
+    return query.order_by(PracticeSession.created_at.desc(), PracticeSession.id.desc()).limit(max(1, min(int(limit), 500))).all()
+
+
+def practice_session_to_dict(row: PracticeSession) -> dict:
+    return {
+        "id": row.id,
+        "user_id": row.user_id,
+        "lesson_id": row.lesson_id,
+        "section": row.section,
+        "score": row.score,
+        "pitch_score": row.pitch_score,
+        "rhythm_score": row.rhythm_score,
+        "stability_score": row.stability_score,
+        "reference": row.reference,
+        "metrics": _safe_json_loads(row.metrics_json),
+        "created_at": str(row.created_at),
+    }
+
+
+def learning_stats(db: Session, limit: int = 50) -> dict:
+    from datetime import timedelta, timezone
+    from sqlalchemy import func as _func
+
+    total = db.query(PracticeSession).count()
+    active_users = db.query(PracticeSession.user_id).filter(PracticeSession.user_id.isnot(None)).distinct().count()
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+    recent = db.query(PracticeSession).filter(PracticeSession.created_at >= cutoff).count()
+    rows = (
+        db.query(
+            PracticeSession.lesson_id,
+            _func.count(PracticeSession.id),
+            _func.avg(PracticeSession.score),
+        )
+        .group_by(PracticeSession.lesson_id)
+        .order_by(_func.count(PracticeSession.id).desc())
+        .limit(max(1, min(int(limit), 200)))
+        .all()
+    )
+    hardest = (
+        db.query(
+            PracticeSession.lesson_id,
+            _func.avg(PracticeSession.score),
+        )
+        .group_by(PracticeSession.lesson_id)
+        .having(_func.count(PracticeSession.id) >= 3)
+        .order_by(_func.avg(PracticeSession.score).asc())
+        .limit(5)
+        .all()
+    )
+    return {
+        "total_sessions": total,
+        "active_users": active_users,
+        "sessions_last_7d": recent,
+        "by_lesson": [
+            {"lesson_id": lid, "sessions": cnt, "avg_score": round(float(avg or 0.0), 1)}
+            for lid, cnt, avg in rows
+        ],
+        "hardest_lessons": [
+            {"lesson_id": lid, "avg_score": round(float(avg or 0.0), 1)}
+            for lid, avg in hardest
+        ],
+    }
 
 
 def _safe_json_loads(val: str) -> dict:

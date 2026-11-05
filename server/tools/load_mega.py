@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import os
 import random
 import secrets
 import subprocess
@@ -20,6 +21,21 @@ READ_ROUTES = [
     ("/api/music/heritage-tunes", 0.08),
 ]
 TOKEN_ROUTES = {"/api/auth/me", "/api/task"}
+if os.environ.get("HUE_LOAD_MIX") == "alpha2":
+    READ_ROUTES = [
+        ("/health", 0.06),
+        ("/api/heritage", 0.18),
+        ("/api/heritage?q=Hu%E1%BA%BF", 0.06),
+        ("/api/lessons", 0.22),
+        ("/api/lessons/scales", 0.10),
+        ("/api/music/models", 0.08),
+        ("/api/task", 0.08),
+        ("/api/auth/me", 0.10),
+        ("/api/lessons/my-progress", 0.10),
+        ("/api/lessons/scales/bac/reference.wav", 0.10),
+        ("/api/music/heritage-tunes", 0.06),
+    ]
+    TOKEN_ROUTES = {"/api/auth/me", "/api/task", "/api/music/models", "/api/lessons/my-progress", "/api/lessons/scales/bac/reference.wav"}
 WEIGHT_TOTAL = sum(w for _, w in READ_ROUTES)
 TOKEN_FILE_TEMPLATE = "/tmp/hue_mega_tokens_{n}.json"
 
@@ -34,6 +50,15 @@ def weighted_pick():
     return READ_ROUTES[-1][0]
 
 
+def _mini_wav():
+    import io
+    import struct as _st
+
+    data = b"".join(_st.pack("<h", (i * 37) % 9000 - 4500) for i in range(4096))
+    hdr = b"RIFF" + _st.pack("<I", 36 + len(data)) + b"WAVEfmt " + _st.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16) + b"data" + _st.pack("<I", len(data))
+    return hdr + data
+
+
 def percentile(values, p):
     if not values:
         return 0.0
@@ -42,11 +67,22 @@ def percentile(values, p):
     return s[idx]
 
 
-def worker_main(worker_id, base, n_vu, duration, tokens, think_lo, think_hi, stagger, out_q):
+def worker_main(worker_id, base, n_vu, duration, tokens, think_lo, think_hi, stagger, out_q, mix="read", lesson=None):
+    try:
+        import resource
+
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = 131072 if hard > 131072 else hard
+        if soft < target:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+    except Exception:
+        pass
+
     async def run():
         results = []
         limits = httpx.Limits(max_connections=max(n_vu, 50), max_keepalive_connections=max(n_vu, 50))
         async with httpx.AsyncClient(base_url=base, timeout=httpx.Timeout(20.0), limits=limits) as ac:
+            post_body = _mini_wav() if mix in ("write", "chaos") else None
 
             async def vu(index):
                 token = tokens[index % len(tokens)] if tokens else None
@@ -54,13 +90,32 @@ def worker_main(worker_id, base, n_vu, duration, tokens, think_lo, think_hi, sta
                     await asyncio.sleep(random.uniform(0, stagger))
                 deadline = time.perf_counter() + duration
                 while time.perf_counter() < deadline:
+                    method = "GET"
                     path = weighted_pick()
                     headers = {"Authorization": f"Bearer {token}"} if (path in TOKEN_ROUTES and token) else {}
+                    if mix == "write":
+                        method = "POST"
+                        headers = {"Authorization": f"Bearer {token}"} if token else {}
+                    elif mix == "chaos":
+                        dice = random.random()
+                        if dice < 0.35 and lesson and token:
+                            method = "POST"
+                            headers = {"Authorization": f"Bearer {token}"}
+                        elif dice < 0.5:
+                            path = random.choice(sorted(TOKEN_ROUTES))
+                            headers = {}
                     t0 = time.perf_counter()
                     status = 0
                     err = ""
                     try:
-                        r = await ac.get(path, headers=headers)
+                        if method == "POST" and lesson:
+                            lid, sec = lesson
+                            r = await ac.post(f"/api/lessons/{lid}/practice?section={sec}",
+                                              files={"file": ("vu.wav", post_body, "audio/wav")}, headers=headers)
+                        elif method == "POST":
+                            r = await ac.post(path, headers=headers)
+                        else:
+                            r = await ac.get(path, headers=headers)
                         status = r.status_code
                     except Exception as e:
                         status = 0
@@ -74,7 +129,7 @@ def worker_main(worker_id, base, n_vu, duration, tokens, think_lo, think_hi, sta
     asyncio.run(run())
 
 
-def run_phase(n_vu, base, duration, tokens, workers, think_lo, think_hi, stagger, server_pid):
+def run_phase(n_vu, base, duration, tokens, workers, think_lo, think_hi, stagger, server_pid, mix="read", lesson=None):
     per_worker = n_vu // workers
     counts = [per_worker] * workers
     for i in range(n_vu - per_worker * workers):
@@ -85,7 +140,7 @@ def run_phase(n_vu, base, duration, tokens, workers, think_lo, think_hi, stagger
     for w in range(workers):
         if counts[w] <= 0:
             continue
-        p = Process(target=worker_main, args=(w, base, counts[w], duration, tokens, think_lo, think_hi, stagger, out_q))
+        p = Process(target=worker_main, args=(w, base, counts[w], duration, tokens, think_lo, think_hi, stagger, out_q, mix, lesson))
         p.start()
         procs.append(p)
     all_results = []

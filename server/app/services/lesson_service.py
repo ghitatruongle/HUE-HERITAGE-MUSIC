@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import wave
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from ..config import settings
@@ -16,6 +17,7 @@ MAX_SECTIONS = 16
 CONTOUR_HOP = 512
 CONTOUR_MAX_POINTS = 400
 SILENCE_GAP_SECONDS = 0.7
+SECTION_SR = 16000
 
 
 def lessons_dir():
@@ -32,15 +34,38 @@ def _audio_path(item: HeritageItem):
 
 
 def _write_wav16(path, samples, sr):
-    with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sr)
-        frames = bytearray()
-        for s in samples:
-            v = int(max(-1.0, min(1.0, float(s))) * 32767.0)
-            frames += v.to_bytes(2, "little", signed=True)
-        w.writeframes(bytes(frames))
+    import os
+    import tempfile
+
+    samples, sr = pitch_service.resample_16k(samples, sr)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".part")
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        with wave.open(str(tmp), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            frames = bytearray()
+            for s in samples:
+                v = int(max(-1.0, min(1.0, float(s))) * 32767.0)
+                frames += v.to_bytes(2, "little", signed=True)
+            w.writeframes(bytes(frames))
+        tmp.replace(path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _wav_sample_rate(path) -> Optional[int]:
+    try:
+        with wave.open(str(path), "rb") as w:
+            return w.getframerate()
+    except Exception:
+        return None
 
 
 def _frame_rms_voiced(samples, sr):
@@ -136,6 +161,7 @@ def build_lesson(item: HeritageItem) -> dict:
         raise ValueError("lesson audio missing")
     data = audio.read_bytes()
     samples, sr = pitch_service.read_mono_wav(data, max_seconds=300.0)
+    samples, sr = pitch_service.resample_16k(samples, sr)
     sections = _split_sections(samples, sr)
     if not sections:
         raise ValueError("audio too short for lesson")
@@ -149,7 +175,7 @@ def build_lesson(item: HeritageItem) -> dict:
     sec_dir.mkdir(parents=True, exist_ok=True)
     for idx, (a, b) in enumerate(sections):
         wav_path = sec_dir / f"{idx:02d}.wav"
-        if not wav_path.exists():
+        if not wav_path.exists() or _wav_sample_rate(wav_path) != SECTION_SR:
             _write_wav16(wav_path, samples[int(a * sr):int(b * sr)], sr)
         payload_sections.append(
             {
@@ -167,7 +193,22 @@ def build_lesson(item: HeritageItem) -> dict:
         "sections": payload_sections,
         "sample_rate": sr,
     }
-    _lesson_cache_path(item).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    import os
+    import tempfile
+
+    cache_path = _lesson_cache_path(item)
+    fd, tmp_name = tempfile.mkstemp(dir=str(cache_path.parent), suffix=".part")
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(cache_path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
     return payload
 
 
@@ -177,8 +218,11 @@ def get_lesson(item: HeritageItem) -> Optional[dict]:
         try:
             data = json.loads(cached.read_text(encoding="utf-8"))
             sec_dir = lessons_dir() / (item.sha256 or item.id)
-            if all((sec_dir / f"{s['index']:02d}.wav").exists() for s in data.get("sections", [])):
-                return data
+            sections = data.get("sections", [])
+            if sections and all((sec_dir / f"{s['index']:02d}.wav").exists() for s in sections):
+                first = sec_dir / f"{sections[0]['index']:02d}.wav"
+                if _wav_sample_rate(first) == SECTION_SR:
+                    return data
         except Exception:
             pass
     return build_lesson(item)

@@ -125,10 +125,50 @@ class AppStrings {
   String get practiceScoreTotal => isVi ? 'Tổng' : 'Total';
   String get practiceScorePitch => isVi ? 'Cao độ' : 'Pitch';
   String get practiceScoreTime => isVi ? 'Nhịp' : 'Timing';
+  String get practiceScoreRhythm => isVi ? 'Nhịp' : 'Rhythm';
+  String get practiceScoreStability => isVi ? 'Đều giọng' : 'Stability';
+  String get practiceOrnamentLabel => isVi ? 'Hoa mỹ' : 'Ornament';
+  String practiceOrnamentValue(String pct, String rate) => isVi
+      ? 'Rền/vọng: $pct% nốt (~$rate Hz)'
+      : 'Vibrato: $pct% notes (~$rate Hz)';
   String practiceAvgError(String cents) => isVi ? 'Sai số TB: $cents cents' : 'Avg deviation: $cents cents';
   String practiceScaleResult(String score, String onScale) => isVi
       ? 'Độ bám thang: $score/100 (trong thang: $onScale%)'
       : 'Scale adherence: $score/100 (on scale: $onScale%)';
+  String get practiceListenSample => isVi ? 'Nghe mẫu nghệ nhân' : 'Listen to master sample';
+  String get practiceRefSample => isVi ? 'So với giọng mẫu' : 'vs master sample';
+  String get practiceRefOriginal => isVi ? 'So với bản gốc' : 'vs original';
+  String practiceTakeChip(int n) => isVi ? 'Take $n' : 'Take $n';
+  String get practiceTakeBest => isVi ? 'Take tốt nhất' : 'Best take';
+  String get practiceRegrade => isVi ? 'Chấm lại' : 'Re-grade';
+  String get practiceSlowSpeed => isVi ? 'Tốc độ nghe' : 'Playback speed';
+  String get practiceTakePreview => isVi ? 'Xem trước giọng (trên máy) — so với đường mục tiêu' : 'Local pitch preview — vs target contour';
+  String get practiceNoTarget => isVi ? 'Chưa có đường mục tiêu cho câu này' : 'No target contour for this phrase';
+  String get practiceSilenceStopHint => isVi ? 'Tự dừng khi bạn ngắt giọng ~1.2s' : 'Auto-stops ~1.2s after you pause';
+  String get practiceServerProgress => isVi ? 'Tiến độ trên máy chủ' : 'Server-side progress';
+  String get practiceLocalProgress => isVi ? 'Tiến độ trên máy này' : 'On-device progress';
+  String get practiceTranspose => isVi ? 'Tone nền' : 'Backing tone';
+  String practiceTransposeValue(String v) => v == '0' ? (isVi ? 'Giọng chuẩn' : 'Standard') : (isVi ? 'Lệch $v nửa cung' : '$v semitones');
+  String get practiceScalePerfTitle => isVi ? 'Từng nốt' : 'Note by note';
+  String get adminTabLearning => isVi ? 'Mẫu học hát' : 'Learning samples';
+  String get adminLearningHint => isVi
+      ? 'Upload giọng mẫu nghệ nhân cho từng câu — người học sẽ nghe và so khớp với giọng mẫu này.'
+      : 'Upload master-artisan sample takes per phrase — learners hear and match against them.';
+  String get adminLearningPickLesson => isVi ? 'Chọn bài học' : 'Pick lesson';
+  String get adminLearningNoSample => isVi ? 'Chưa có mẫu' : 'No sample';
+  String get adminLearningHasSample => isVi ? 'Đã có mẫu' : 'Sample ready';
+  String get adminLearningUpload => isVi ? 'Upload mẫu' : 'Upload sample';
+  String get adminLearningReplace => isVi ? 'Thay mẫu khác' : 'Replace sample';
+  String get adminLearningDelete => isVi ? 'Xóa mẫu' : 'Delete sample';
+  String get adminLearningUploaded => isVi ? 'Đã lưu mẫu cho câu' : 'Sample saved for phrase';
+  String get adminLearningDeleted => isVi ? 'Đã xóa mẫu câu' : 'Phrase sample deleted';
+  String get adminLearningPickWav => isVi ? 'Chọn file .wav (≤15MB)' : 'Pick a .wav file (≤15MB)';
+  String get adminLearningOnlyWav => isVi ? 'Chỉ nhận file .wav' : 'Only .wav files are accepted';
+  String adminLearningPhrase(int n) => isVi ? 'Câu $n' : 'Phrase $n';
+  String get adminLearningStats => isVi ? 'Thống kê luyện tập' : 'Practice stats';
+  String adminLearningStatLine(int sessions, int users, int recent) => isVi
+      ? '$sessions lượt luyện · $users người tập · $recent lượt 7 ngày qua'
+      : '$sessions sessions · $users learners · $recent in last 7 days';
   String get listenTabTitle => isVi ? 'Thu & phân tích' : 'Record & analyze';
   String get practiceTabTitle => isVi ? 'Luyện tập theo bài' : 'Practice by lesson';
   String get learnRecordBtn => isVi ? 'Thu âm giọng hát' : 'Record your voice';

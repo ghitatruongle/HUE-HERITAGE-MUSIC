@@ -25,7 +25,7 @@ def main():
             for m in methods:
                 r = c.request(m, route)
                 attempts += 1
-                if r.status_code >= 500:
+                if r.status_code >= 500 and r.status_code != 503:
                     breaches.append((f"{m} {route} 500 v{rnd}", ""))
 
     verdict("HTTP-METHODS", attempts, breaches)

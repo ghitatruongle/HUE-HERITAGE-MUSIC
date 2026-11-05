@@ -8,15 +8,110 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..database.session import get_db
 from ..database import crud
 from ..services import lesson_service, compare_service, scale_service
 from ..storage import manager
-from ..audio_access import require_audio_access
-from .auth import require_user, resolve_bearer_user
+from ..audio_access import require_audio_access, verify_path
+from .auth import require_user, resolve_bearer_user, require_admin_fresh
 
 router = APIRouter(prefix="/lessons", tags=["lessons"])
 MAX_BYTES = manager.MAX_ANALYSIS_BYTES
+
+
+def _lesson_audio_guard(request: Request, item, db: Session):
+    user = resolve_bearer_user(request, db)
+    if user is not None:
+        if not crud.can_view_item(item, user):
+            raise HTTPException(status_code=404, detail="not found")
+        return
+    if not settings.auth_required:
+        if (getattr(item, "visibility", None) or "public") != "public":
+            raise HTTPException(status_code=404, detail="not found")
+        return
+    scope = f"vis:{getattr(item, 'visibility', None) or 'public'}"
+    if not verify_path(request.url.path, request.query_params.get("e"), request.query_params.get("s"), scope=scope):
+        raise HTTPException(status_code=401, detail="authentication or signed url required")
+
+
+def _load_item(lesson_id: str):
+    from ..database.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return crud.get_item(db, lesson_id)
+    finally:
+        db.close()
+
+
+def _section_exists(item, section: int) -> bool:
+    try:
+        lesson = lesson_service.get_lesson(item)
+    except ValueError:
+        return False
+    return any(s["index"] == section for s in lesson.get("sections", []))
+
+
+@router.post("/{lesson_id}/sections/{section}/sample.wav")
+async def upload_lesson_sample(
+    lesson_id: str,
+    section: int,
+    file: UploadFile = File(...),
+    admin_id: str = Depends(require_admin_fresh),
+):
+    data = await file.read()
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(data) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="file too large")
+
+    def _validate_and_save():
+        item = _load_item(lesson_id)
+        if not item:
+            return None, "lesson not found", 404
+        if not _section_exists(item, section):
+            return None, "section not found", 404
+        try:
+            manager.save_lesson_sample(item.sha256 or item.id, section, data)
+        except ValueError as e:
+            msg = str(e)
+            if "too large" in msg:
+                return None, "file too large", 413
+            return None, msg, 400
+        return True, None, 200
+
+    _, err, status = await asyncio.to_thread(_validate_and_save)
+    if err:
+        raise HTTPException(status_code=status, detail=err)
+    from .. import security_log
+
+    security_log.security_event("lesson_sample_uploaded", admin=admin_id, lesson=lesson_id, section=section, size=len(data))
+    return {"saved": True, "section": section, "size": len(data)}
+
+
+@router.get("/{lesson_id}/sections/{section}/sample.wav")
+def get_lesson_sample(request: Request, lesson_id: str, section: int, db: Session = Depends(get_db)):
+    item = crud.get_item(db, lesson_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="lesson not found")
+    _lesson_audio_guard(request, item, db)
+    path = manager.lesson_sample_path(item.sha256 or item.id, section)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="sample not found")
+    return FileResponse(path, media_type="audio/wav")
+
+
+@router.delete("/{lesson_id}/sections/{section}/sample.wav")
+def delete_lesson_sample(lesson_id: str, section: int, admin_id: str = Depends(require_admin_fresh)):
+    item = _load_item(lesson_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="lesson not found")
+    removed = manager.delete_lesson_sample(item.sha256 or item.id, section)
+    from .. import security_log
+
+    security_log.security_event("lesson_sample_deleted", admin=admin_id, lesson=lesson_id, section=section, removed=removed)
+    return {"deleted": removed, "section": section}
 
 
 @router.get("")
@@ -39,9 +134,9 @@ def list_scales():
 
 
 @router.get("/scales/{scale_id}/reference.wav")
-def scale_reference(scale_id: str, access=Depends(require_audio_access)):
+def scale_reference(scale_id: str, transpose: int = 0, access=Depends(require_audio_access)):
     try:
-        wav = scale_service.reference_wav(scale_id)
+        wav = scale_service.reference_wav(scale_id, transpose)
     except ValueError:
         raise HTTPException(status_code=404, detail="unknown scale")
     return Response(content=wav, media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
@@ -51,6 +146,7 @@ def scale_reference(scale_id: str, access=Depends(require_audio_access)):
 async def practice_scale(
     scale_id: str,
     file: UploadFile = File(...),
+    transpose: int = 0,
     user_id: Optional[str] = Depends(require_user),
 ):
     data = await file.read()
@@ -59,7 +155,7 @@ async def practice_scale(
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
     try:
-        return await asyncio.to_thread(scale_service.practice_scale, scale_id, data)
+        return await asyncio.to_thread(scale_service.practice_scale, scale_id, data, transpose)
     except ValueError as e:
         msg = str(e)
         if msg == "unknown scale":
@@ -82,6 +178,22 @@ def download_practice_midi(name: str, access=Depends(require_audio_access)):
     return FileResponse(path, media_type="audio/midi")
 
 
+@router.get("/my-progress")
+def my_progress(
+    lesson_id: str = "",
+    limit: int = 100,
+    user_id: Optional[str] = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"items": [], "server_history": False}
+    rows = crud.list_practice_sessions(db, user_id, lesson_id or None, limit=limit)
+    return {
+        "items": [crud.practice_session_to_dict(r) for r in rows],
+        "server_history": True,
+    }
+
+
 @router.get("/{lesson_id}")
 def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db)):
     viewer = resolve_bearer_user(request, db)
@@ -93,6 +205,11 @@ def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     lyrics_text = (item.lyrics_with_ornaments or item.lyrics or "").strip()
+    sha = item.sha256 or item.id
+    for s in lesson.get("sections", []):
+        has_sample = manager.lesson_sample_path(sha, s["index"]).exists()
+        s["has_sample"] = has_sample
+        s["sample_url"] = f"/api/lessons/{lesson_id}/sections/{s['index']}/sample.wav" if has_sample else ""
     lesson.update(
         {
             "lyrics": lyrics_text,
@@ -129,10 +246,17 @@ async def practice_section(
         raise HTTPException(status_code=413, detail="file too large")
 
     def _run():
-        wav_path = lesson_service.section_wav(item, section)
-        if wav_path is None:
-            return None
-        reference = wav_path.read_bytes()
+        sha = item.sha256 or item.id
+        sample_path = manager.lesson_sample_path(sha, section)
+        if sample_path.exists():
+            reference = sample_path.read_bytes()
+            reference_kind = "sample"
+        else:
+            wav_path = lesson_service.section_wav(item, section)
+            if wav_path is None:
+                return None
+            reference = wav_path.read_bytes()
+            reference_kind = "original"
         result = compare_service.compare(reference, data)
         section_info = None
         lesson = lesson_service.get_lesson(item)
@@ -142,6 +266,7 @@ async def practice_section(
         result["section"] = section_info
         result["lesson_id"] = lesson_id
         result["lesson_title"] = item.title
+        result["reference"] = reference_kind
         if result.get("notes"):
             try:
                 from ..services import midi_service
@@ -166,4 +291,34 @@ async def practice_section(
         raise HTTPException(status_code=400, detail="wav decode failed")
     if result is None:
         raise HTTPException(status_code=404, detail="section not found")
+    if user_id and result.get("metrics"):
+        try:
+            from ..database.session import SessionLocal
+
+            m = result["metrics"]
+            db2 = SessionLocal()
+            try:
+                crud.create_practice_session(
+                    db2,
+                    user_id,
+                    lesson_id,
+                    section,
+                    m.get("score", 0.0),
+                    m.get("pitch_score", 0.0),
+                    m.get("rhythm_score", 0.0),
+                    m.get("stability_score", 0.0),
+                    result.get("reference", "original"),
+                    metrics={
+                        "mean_abs_cents": m.get("mean_abs_cents"),
+                        "ornament": m.get("ornament"),
+                        "matched_notes": m.get("matched_notes"),
+                        "unmatched_notes": m.get("unmatched_notes"),
+                        "missing_notes": m.get("missing_notes"),
+                        "summary_hint": m.get("summary_hint"),
+                    },
+                )
+            finally:
+                db2.close()
+        except Exception:
+            pass
     return result

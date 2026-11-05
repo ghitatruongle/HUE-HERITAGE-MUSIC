@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -12,8 +14,8 @@ class OverlayPitchChart extends StatelessWidget {
 
   List<FlSpot> _spots(List<double> times, List<double> f0) {
     if (times.isEmpty || f0.isEmpty) return const [];
-    final n = times.length;
-    final step = n / _maxPoints;
+    final n = math.min(times.length, f0.length);
+    final step = n <= _maxPoints ? 1.0 : n / _maxPoints;
     final spots = <FlSpot>[];
     double k = 0;
     while (k.toInt() < n && spots.length < _maxPoints) {

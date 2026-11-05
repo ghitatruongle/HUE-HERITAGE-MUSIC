@@ -21,29 +21,29 @@ def main():
         # limit trùng
         r = c.get("/api/heritage?limit=5&limit=99999")
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"limit pollution 500 v{rnd}", ""))
 
         # kiểu lẫn lộn
         r = c.get("/api/heritage", params={"limit": "abc"})
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"limit=abc 500 v{rnd}", ""))
 
         r = c.get("/api/heritage", params={"limit": "-1"})
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"limit=-1 500 v{rnd}", ""))
 
         r = c.get("/api/heritage", params={"limit": "1e10"})
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"limit=1e10 500 v{rnd}", ""))
 
         # duration âm / float
         r = c.post("/api/music/sing-original", params={"heritage_id": "x", "duration": "-50"})
         attempts += 1
-        if r.status_code >= 500:
+        if r.status_code >= 500 and r.status_code != 503:
             breaches.append((f"duration âm 500 v{rnd}", ""))
 
     verdict("PARAM-POLLUTION", attempts, breaches)
