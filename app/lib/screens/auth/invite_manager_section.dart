@@ -7,6 +7,7 @@ import '../../core/localization/app_strings.dart';
 import '../../services/clipboard_helper.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
+import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
 
 class InviteManagerSection extends StatefulWidget {
@@ -30,7 +31,10 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
     _reload();
   }
 
+  final QueryEpoch _queryEpoch = QueryEpoch();
+
   Future<void> _reload() async {
+    final epoch = _queryEpoch.next();
     setState(() {
       _loading = true;
       _hasError = false;
@@ -38,7 +42,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await AuthEndpoints(dio).listInvites();
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       setState(() {
         _invites
           ..clear()
@@ -55,10 +59,11 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
   Future<void> _loadMore() async {
     if (_loadingMore || _invites.length >= _total) return;
     setState(() => _loadingMore = true);
+    final epoch = _queryEpoch.value;
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await AuthEndpoints(dio).listInvites(offset: _invites.length);
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       final known = _invites.map((e) => e.id).toSet();
       setState(() {
         for (final inv in page.items) {

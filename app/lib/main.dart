@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home/home_screen.dart';
 import 'services/auth_service.dart';
+import 'services/crash_log.dart';
 import 'services/history_service.dart';
 import 'services/locale_provider.dart';
 import 'services/server_config.dart';
@@ -17,6 +19,14 @@ import 'services/theme_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    unawaited(CrashLog.write(details.exceptionAsString()));
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    unawaited(CrashLog.write('$error\n$stack'));
+    return true;
+  };
   final config = ServerConfig();
   final theme = ThemeProvider();
   final history = HistoryService();
@@ -98,6 +108,7 @@ class OfflineBanner extends StatefulWidget {
 }
 
 class _OfflineBannerState extends State<OfflineBanner> {
+  final Connectivity _connectivity = Connectivity();
   bool _offline = false;
 
   @override
@@ -108,7 +119,7 @@ class _OfflineBannerState extends State<OfflineBanner> {
 
   Future<void> _check() async {
     try {
-      final result = await Connectivity().checkConnectivity();
+      final result = await _connectivity.checkConnectivity();
       if (!mounted) return;
       setState(() {
         _offline = result.contains(ConnectivityResult.none) || result.isEmpty;
@@ -120,7 +131,7 @@ class _OfflineBannerState extends State<OfflineBanner> {
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>();
     return StreamBuilder<List<ConnectivityResult>>(
-      stream: Connectivity().onConnectivityChanged,
+      stream: _connectivity.onConnectivityChanged,
       builder: (context, snapshot) {
         final data = snapshot.data;
         final offline = data != null

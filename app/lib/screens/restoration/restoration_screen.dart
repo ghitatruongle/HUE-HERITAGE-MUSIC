@@ -32,6 +32,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   late TabController _tabController;
   final _searchCtrl = TextEditingController();
   Future<List<HeritageItem>>? _itemsFuture;
+  int _itemsEpoch = 0;
   List<HeritageItem> _allTracks = [];
 
   HeritageItem? _selectedItem;
@@ -56,9 +57,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   }
 
   Future<List<HeritageItem>> _loadItems(String q) async {
+    final epoch = ++_itemsEpoch;
     final dio = context.read<ServerConfig>().api.dio;
     final list = (await HeritageApi(dio).list(q: q, limit: 200)).items;
-    if (mounted) {
+    if (mounted && epoch == _itemsEpoch) {
       setState(() {
         _allTracks = list;
         if (_selectedItem == null && list.isNotEmpty) {
@@ -79,10 +81,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     setState(() => _itemsFuture = _loadItems(_searchCtrl.text));
   }
 
-  void _log(String kind, String title, String status) {
-    context.read<HistoryService>().add(
+  void _log(HistoryService history, String kind, String title, String status) {
+    history.add(
           HistoryEntry(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            id: HistoryService.newId(),
             kind: kind,
             title: title,
             status: status,
@@ -92,31 +94,37 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   }
 
   Future<void> _runDspRestoration(HeritageItem item) async {
+    if (_isRestoring) return;
+    final history = context.read<HistoryService>();
     setState(() {
       _isRestoring = true;
       _restoreError = null;
     });
     final dio = context.read<ServerConfig>().api.dio;
-    _log('restore', item.title, 'running');
+    _log(history, 'restore', item.title, 'running');
     try {
       final res = await RestorationApi(dio).restoreItem(item.id);
-      _log('restore', item.title, 'done');
+      _log(history, 'restore', item.title, 'done');
       if (mounted && _selectedItem?.id == item.id) {
         setState(() {
           _restoreResult = res;
           _isRestoring = false;
         });
-        _sheetRefresh?.call(() {});
+      } else if (mounted) {
+        setState(() => _isRestoring = false);
       }
+      if (mounted) _sheetRefresh?.call(() {});
     } catch (e) {
-      _log('restore', item.title, 'error');
+      _log(history, 'restore', item.title, 'error');
       if (mounted && _selectedItem?.id == item.id) {
         setState(() {
           _restoreError = ApiClient.describe(e);
           _isRestoring = false;
         });
-        _sheetRefresh?.call(() {});
+      } else if (mounted) {
+        setState(() => _isRestoring = false);
       }
+      if (mounted) _sheetRefresh?.call(() {});
     }
   }
 
@@ -130,14 +138,15 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       );
       return;
     }
-    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
+    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: kIsWeb);
     final file = picked?.files.single;
     if (file == null) return;
     final bytes = file.bytes ?? (file.path != null && !kIsWeb ? await File(file.path!).readAsBytes() : null);
     if (bytes == null || !mounted) return;
 
     final dio = config.api.dio;
-    _log('restore-upload', file.name, 'running');
+    final history = context.read<HistoryService>();
+    _log(history, 'restore-upload', file.name, 'running');
 
     BuildContext? dialogCtx;
     showDialog(
@@ -160,9 +169,9 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
     try {
       final res = await RestorationApi(dio).restoreUpload(bytes: bytes, filename: file.name);
-      _log('restore-upload', file.name, 'done');
-      if (!mounted) return;
+      _log(history, 'restore-upload', file.name, 'done');
       if (dialogCtx != null && dialogCtx!.mounted) Navigator.pop(dialogCtx!);
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -204,15 +213,14 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         ),
       );
     } catch (e) {
-      if (mounted) {
-        if (dialogCtx != null && dialogCtx!.mounted) Navigator.pop(dialogCtx!);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
-      }
+      if (dialogCtx != null && dialogCtx!.mounted) Navigator.pop(dialogCtx!);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
     }
   }
 
   Future<void> _pickTargetAudioForComparison() async {
-    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
+    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: kIsWeb);
     final file = picked?.files.single;
     if (file == null) return;
     final bytes = file.bytes ?? (file.path != null && !kIsWeb ? await File(file.path!).readAsBytes() : null);
@@ -228,7 +236,8 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   }
 
   Future<void> _runCrossComparison() async {
-    if (_compareSampleItem == null) return;
+    if (_compareSampleItem == null || _isComparing) return;
+    final history = context.read<HistoryService>();
     final config = context.read<ServerConfig>();
     final dio = config.api.dio;
     final heritageApi = HeritageApi(dio);
@@ -255,7 +264,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       }
 
       final res = await SingApi(dio).compareBytes(sampleBytes, targetBytes);
-      _log('compare-tune', '${_compareSampleItem!.title} vs ${_uploadedTargetName.isNotEmpty ? _uploadedTargetName : _compareTargetItem?.title}', 'done');
+      _log(history, 'compare-tune', '${_compareSampleItem!.title} vs ${_uploadedTargetName.isNotEmpty ? _uploadedTargetName : _compareTargetItem?.title}', 'done');
 
       if (mounted) {
         setState(() {
@@ -264,7 +273,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         });
       }
     } catch (e) {
-      _log('compare-tune', _compareSampleItem!.title, 'error');
+      _log(history, 'compare-tune', _compareSampleItem!.title, 'error');
       if (mounted) {
         setState(() {
           _compareError = ApiClient.describe(e);
@@ -632,14 +641,14 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       child: FilledButton.icon(
                         icon: const Icon(Icons.auto_fix_high, size: 18),
                         label: Text(strings.restorationRunBtn),
-                        onPressed: () => _runDspRestoration(item),
+                        onPressed: _isRestoring ? null : () => _runDspRestoration(item),
                       ),
                     ),
                   ),
                 ],
                 if (_restoreError != null) ...[
                   const SizedBox(height: 8),
-                  Text(_restoreError!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 13)),
+                  ErrorPanel(message: _restoreError!),
                 ],
               ],
             ),
@@ -671,14 +680,15 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           ),
         ],
         const SizedBox(height: 16),
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
           children: [
             FilledButton.icon(
               icon: const Icon(Icons.refresh, size: 18),
               label: Text(strings.restorationRunBtn),
-              onPressed: () => _runDspRestoration(item),
+              onPressed: _isRestoring ? null : () => _runDspRestoration(item),
             ),
-            const SizedBox(width: 12),
             OutlinedButton.icon(
               icon: const Icon(Icons.upload_file, size: 18),
               label: Text(strings.restorationUploadVintageBtn),
@@ -691,7 +701,14 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   }
 
   Widget _showDspModalSheet(HeritageItem item, dynamic strings) {
-    setState(() => _selectedItem = item);
+    setState(() {
+      if (_selectedItem?.id != item.id) {
+        _restoreResult = null;
+        _restoreError = null;
+        _isRestoring = false;
+      }
+      _selectedItem = item;
+    });
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,

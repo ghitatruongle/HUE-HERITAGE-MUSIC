@@ -200,6 +200,21 @@ def test_heritage_tunes_and_sing_endpoints():
     task_new = r_new.json()
     assert task_new["kind"] == "sing_new_lyrics"
 
+    r_body = client.post(
+        "/api/music/sing-new-lyrics",
+        params={"heritage_id": first["id"], "vocal": "Nữ", "duration": 60},
+        json={"new_lyrics": "A í a tình tang ơ hò"},
+    )
+    assert r_body.status_code == 200
+    assert r_body.json()["kind"] == "sing_new_lyrics"
+
+    r_empty_body = client.post(
+        "/api/music/sing-new-lyrics",
+        params={"heritage_id": first["id"], "vocal": "Nữ", "duration": 60},
+        json={"new_lyrics": ""},
+    )
+    assert r_empty_body.status_code == 400
+
     bad = client.post("/api/music/sing-original", params={"heritage_id": ""})
     assert bad.status_code == 400
     not_found = client.post("/api/music/sing-original", params={"heritage_id": "non-existent-id-999"})

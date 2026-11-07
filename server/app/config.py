@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     analysis_retention_days: int = 30
     reference_segmentation: str = "v2"
     web_dir: Path = BASE_DIR / "app" / "build" / "web"
+    uvicorn_limit_concurrency: int = 512
+    db_pool_size: int = 64
+    db_max_overflow: int = 160
 
 
 settings = Settings()

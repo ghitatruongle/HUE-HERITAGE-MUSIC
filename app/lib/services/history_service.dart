@@ -46,6 +46,9 @@ class HistoryEntry {
 class HistoryService extends ChangeNotifier {
   static const String _key = 'task_history';
   static const int _maxEntries = 200;
+  static int _idSeq = 0;
+
+  static String newId() => '${DateTime.now().microsecondsSinceEpoch}_${_idSeq++}';
   List<HistoryEntry> _entries = [];
 
   List<HistoryEntry> get entries => List.unmodifiable(_entries);

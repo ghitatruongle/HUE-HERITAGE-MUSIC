@@ -30,10 +30,15 @@ def _get_logger() -> logging.Logger:
     return _logger
 
 
+def _clean(value) -> str:
+    text = str(value)
+    return text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+
+
 def security_event(event: str, **fields) -> None:
-    parts = [event]
+    parts = [_clean(event)]
     for key, value in fields.items():
-        parts.append(f"{key}={value}")
+        parts.append(f"{_clean(key)}={_clean(value)}")
     _get_logger().info("\t".join(parts))
 
 

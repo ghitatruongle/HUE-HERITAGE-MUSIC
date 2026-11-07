@@ -23,6 +23,11 @@ class AppTheme {
   static const Color primaryPurpleGlow = Color(0xFF9F75FF);
   static const Color deepPurple = Color(0xFF3B1D66);
   static const Color imperialGold = Color(0xFFD4AF37);
+  static const Color imperialGoldInk = Color(0xFF8A6A00);
+
+  static Color goldReadable(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark ? imperialGold : imperialGoldInk;
+  }
   static const Color amberGold = Color(0xFFF59E0B);
   static const Color emeraldGreen = Color(0xFF0D5C52);
 
@@ -44,6 +49,34 @@ class AppTheme {
   static const Color lightBorder = Color(0xFFE2DCED);
   static const Color lightTextPrimary = Color(0xFF181126);
   static const Color lightTextSecondary = Color(0xFF5D6572);
+
+  static const List<Color> featureAccentsLight = [
+    Color(0xFF00796B),
+    Color(0xFF00695C),
+    primaryPurple,
+    Color(0xFF2A5FA5),
+    Color(0xFF8F6C00),
+    Color(0xFFAD3B6F),
+    Color(0xFF5D4037),
+    Color(0xFF546E7A),
+  ];
+
+  static const List<Color> featureAccentsDark = [
+    Color(0xFF4DD0C4),
+    Color(0xFF26A69A),
+    primaryPurpleGlow,
+    Color(0xFF7FA8E8),
+    imperialGold,
+    Color(0xFFE57BB0),
+    Color(0xFFA98274),
+    Color(0xFF90A4AE),
+  ];
+
+  static Color featureAccent(BuildContext context, int index) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final list = isDark ? featureAccentsDark : featureAccentsLight;
+    return list[index.clamp(0, list.length - 1)];
+  }
 
   static const List<Color> brandGradientColors = [
     Color(0xFF2A1545),

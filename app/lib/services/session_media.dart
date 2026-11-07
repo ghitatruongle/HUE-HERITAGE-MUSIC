@@ -9,4 +9,13 @@ class SessionMedia extends ChangeNotifier {
     recordingBytes = bytes;
     notifyListeners();
   }
+
+  void clearRecording() {
+    if (recordingPath == null && recordingBytes == null) {
+      return;
+    }
+    recordingPath = null;
+    recordingBytes = null;
+    notifyListeners();
+  }
 }

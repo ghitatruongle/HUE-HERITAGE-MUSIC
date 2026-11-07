@@ -12,8 +12,8 @@ class Base(DeclarativeBase):
 engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False, "timeout": 30},
-    pool_size=64,
-    max_overflow=160,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
     pool_timeout=60,
 )
 

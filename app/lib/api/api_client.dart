@@ -11,11 +11,14 @@ class ApiError {
 class ApiClient {
   final Dio dio;
 
+  static Options get dspOptions => Options(receiveTimeout: AppConstants.dspTimeout, sendTimeout: AppConstants.dspTimeout);
+
   ApiClient({String? baseUrl})
       : dio = Dio(BaseOptions(
           baseUrl: baseUrl ?? '',
           connectTimeout: AppConstants.apiTimeout,
-          receiveTimeout: AppConstants.dspTimeout,
+          receiveTimeout: AppConstants.apiTimeout,
+          sendTimeout: AppConstants.uploadTimeout,
         )) {
     dio.interceptors.add(_AuthInterceptor());
     dio.interceptors.add(_RetryInterceptor(dio));
@@ -50,7 +53,9 @@ class ApiClient {
   static String _sanitize(String raw) {
     return raw
         .replaceAll(RegExp(r'https?://\S+'), '…')
-        .replaceAll(RegExp(r'\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b'), '…');
+        .replaceAll(RegExp(r'\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b'), '…')
+        .replaceAll(RegExp(r'/(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,6}'), '…')
+        .replaceAll(RegExp(r'\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:local|lan|internal)\b'), '…');
   }
 }
 
@@ -72,6 +77,7 @@ class _RetryInterceptor extends Interceptor {
     final attempt = (err.requestOptions.extra['__retry'] ?? 0) as int;
     if (retryable && attempt < _maxAttempts - 1) {
       err.requestOptions.extra['__retry'] = attempt + 1;
+      err.requestOptions.headers.remove('Authorization');
       await Future<void>.delayed(Duration(milliseconds: 400 * (attempt + 1)));
       try {
         final response = await _dio.fetch(err.requestOptions);
@@ -100,9 +106,7 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final path = err.requestOptions.uri.path;
-    final isAuthAttempt = path.endsWith('/auth/login') ||
-        path.endsWith('/auth/register') ||
-        path.endsWith('/auth/me');
+    final isAuthAttempt = path.contains('/auth/');
     if (err.response?.statusCode == 401 && !isAuthAttempt) {
       AuthService.instance?.clearToken();
     }

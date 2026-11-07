@@ -35,7 +35,7 @@ class TaskResultCard extends StatelessWidget {
         color: scheme.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: task.status == 'done' ? AppTheme.imperialGold : scheme.outline,
+          color: task.status == 'done' ? AppTheme.goldReadable(context) : scheme.outline,
         ),
       ),
       child: Column(
@@ -95,11 +95,11 @@ class TaskResultCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.verified_rounded, size: 16, color: AppTheme.imperialGold),
+                Icon(Icons.verified_rounded, size: 16, color: AppTheme.goldReadable(context)),
                 const SizedBox(width: 6),
                 Text(
                   strings.taskAiGenerated,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.imperialGold),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.goldReadable(context)),
                 ),
               ],
             ),

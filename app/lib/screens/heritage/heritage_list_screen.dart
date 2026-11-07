@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_client.dart';
 import '../../api/endpoints/heritage_api.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/heritage_item.dart';
 import '../../services/locale_provider.dart';
+import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/empty_state.dart';
@@ -33,7 +35,10 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
     _reload();
   }
 
+  final QueryEpoch _queryEpoch = QueryEpoch();
+
   Future<void> _reload() async {
+    final epoch = _queryEpoch.next();
     setState(() {
       _loading = true;
       _hasError = false;
@@ -41,7 +46,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await HeritageApi(dio).list(q: _searchCtrl.text.trim());
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       setState(() {
         _items
           ..clear()
@@ -58,13 +63,14 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
   Future<void> _loadMore() async {
     if (_loadingMore || _items.length >= _total) return;
     setState(() => _loadingMore = true);
+    final epoch = _queryEpoch.value;
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await HeritageApi(dio).list(
         q: _searchCtrl.text.trim(),
         offset: _items.length,
       );
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       final known = _items.map((e) => e.id).toSet();
       setState(() {
         for (final it in page.items) {
@@ -72,7 +78,12 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         }
         _total = page.total;
       });
-    } catch (_) {
+    } catch (e) {
+      if (mounted && _queryEpoch.isCurrent(epoch)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.describe(e))),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }

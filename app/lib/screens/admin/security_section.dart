@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../api/endpoints/admin_endpoints.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
+import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
@@ -41,7 +42,10 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
     super.dispose();
   }
 
+  final QueryEpoch _queryEpoch = QueryEpoch();
+
   Future<void> _reload() async {
+    final epoch = _queryEpoch.next();
     setState(() {
       _loading = true;
       _hasError = false;
@@ -53,7 +57,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
         api.securityEvents(limit: 60, event: _eventFilter, q: _searchCtrl.text.trim()),
         api.securitySummary(),
       ]);
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       final page = results[0] as SecurityEventsPage;
       final summary = results[1] as SecuritySummary;
       setState(() {
@@ -74,6 +78,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
   Future<void> _loadMore() async {
     if (_loadingMore || _events.length >= _total) return;
     setState(() => _loadingMore = true);
+    final epoch = _queryEpoch.value;
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await AdminEndpoints(dio).securityEvents(
@@ -82,7 +87,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
         event: _eventFilter,
         q: _searchCtrl.text.trim(),
       );
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       setState(() {
         _events.addAll(page.events);
         _total = page.total;

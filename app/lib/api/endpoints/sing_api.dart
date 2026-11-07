@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:cross_file/cross_file.dart';
 import 'package:dio/dio.dart';
 
+import '../../api/api_client.dart';
+
 import '../../models/compare_result.dart';
 import '../../models/pitch_data.dart';
 
@@ -29,6 +31,7 @@ class SingApi {
     final res = await dio.post(
       '/api/music/analyze-pitch',
       data: form,
+      options: ApiClient.dspOptions,
       onSendProgress: onProgress,
     );
     final data = res.data;
@@ -43,7 +46,7 @@ class SingApi {
       'sample': MultipartFile.fromBytes(sampleBytes, filename: 'sample.wav'),
       'user': MultipartFile.fromBytes(userBytes, filename: 'user.wav'),
     });
-    final res = await dio.post('/api/music/compare', data: form);
+    final res = await dio.post('/api/music/compare', data: form, options: ApiClient.dspOptions);
     final data = res.data;
     if (data is Map) {
       return CompareResult.fromJson(Map<String, dynamic>.from(data));

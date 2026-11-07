@@ -78,6 +78,36 @@ void main() {
     expect(dark.textTheme.bodyMedium!.fontSize, light.textTheme.bodyMedium!.fontSize);
   });
 
+  test('Chip verdict: chữ onSurface đọc được trên nền status alpha-40 ở cả 2 theme', () {
+    final dark = AppTheme.darkTheme;
+    final light = AppTheme.lightTheme;
+    for (final theme in [dark, light]) {
+      final bg = theme.scaffoldBackgroundColor;
+      for (final c in [AppTheme.statusSuccess, AppTheme.statusWarning, AppTheme.statusDanger, AppTheme.statusInfo]) {
+        final chipBg = Color.alphaBlend(c.withAlpha(40), bg);
+        expectAA(theme.colorScheme.onSurface, chipBg, 3.0, '${theme.brightness} verdict ${c.toARGB32()}');
+      }
+    }
+  });
+
+  test('ChartPalette: màu user đọc được trên nền 2 theme (ngưỡng 3.0)', () {
+    expectAA(const Color(0xFF7DD3FC), AppTheme.darkTheme.scaffoldBackgroundColor, 3.0, 'dark user chart');
+    expectAA(const Color(0xFF2563EB), AppTheme.lightTheme.scaffoldBackgroundColor, 3.0, 'light user chart');
+    expectAA(AppTheme.imperialGold, AppTheme.darkTheme.scaffoldBackgroundColor, 3.0, 'dark reference gold');
+    expectAA(AppTheme.imperialGoldInk, AppTheme.lightTheme.scaffoldBackgroundColor, 3.0, 'light reference gold');
+  });
+
+  test('8 màu feature home đọc được trên nền blend 14% ở cả 2 theme (≥3.0)', () {
+    for (var i = 0; i < AppTheme.featureAccentsLight.length; i++) {
+      final light = AppTheme.featureAccentsLight[i];
+      final dark = AppTheme.featureAccentsDark[i];
+      final lightBlend = Color.alphaBlend(light.withValues(alpha: 0.14), AppTheme.lightTheme.scaffoldBackgroundColor);
+      final darkBlend = Color.alphaBlend(dark.withValues(alpha: 0.14), AppTheme.darkTheme.scaffoldBackgroundColor);
+      expectAA(light, lightBlend, 3.0, 'light feature#$i ${light.toARGB32()}');
+      expectAA(dark, darkBlend, 3.0, 'dark feature#$i ${dark.toARGB32()}');
+    }
+  });
+
   test('SnackBar floating + Chip + Dialog theme tồn tại ở cả 2 theme', () {
     final dark = AppTheme.darkTheme;
     final light = AppTheme.lightTheme;

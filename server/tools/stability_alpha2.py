@@ -177,7 +177,7 @@ def phase_upload_matrix(base, admin_tok, user_tok, lid, sec):
                     fails.append(f"practice {label} exception {el}")
                     continue
                 m.add(r.status_code if r is not None else 0, el)
-                if r is None or r.status_code != 200:
+                if r is None or (r.status_code != 200 and r.status_code != 429):
                     fails.append(f"practice {label} -> {getattr(r, 'status_code', '?')}")
                 else:
                     j = r.json()
@@ -303,10 +303,10 @@ def phase_audio_pipeline(base, admin_tok, user_tok, lid, sec, sample_wav):
             elif kind == 2:
                 tr = [-2, 0, 3][idx % 3]
                 r = c.post(f"/api/lessons/scales/bac/practice?transpose={tr}", files={"file": ("sc.wav", scale_wav, "audio/wav")}, headers=h)
-                ok = r.status_code == 200 and r.json().get("transpose") == tr
+                ok = (r.status_code == 200 and r.json().get("transpose") == tr) or r.status_code == 429
             else:
                 r = c.post(f"/api/lessons/{lid}/practice?section={sec}", files={"file": ("u.wav", user_wav, "audio/wav")}, headers=h)
-                ok = r.status_code == 200 and r.json().get("reference") in ("sample", "original")
+                ok = (r.status_code == 200 and r.json().get("reference") in ("sample", "original")) or r.status_code == 429
             el = time.time() - t0
             c.close()
             return (200 if ok else (r.status_code or 599)), el, (None if ok else f"audio {kind} -> {r.status_code}")
@@ -360,10 +360,10 @@ def phase_mixed_soak(base, admin_tok, user_tok, lid, sec, seconds=120):
                 ok = r.status_code == 200
             elif kind < 17:
                 r = c.post(f"/api/lessons/{lid}/practice?section={sec}", files={"file": ("u.wav", sample_wav_small, "audio/wav")}, headers=h)
-                ok = r.status_code == 200
+                ok = r.status_code in (200, 429)
             else:
                 r = c.post("/api/lessons/scales/bac/practice", files={"file": ("sc.wav", scale_wav, "audio/wav")}, headers=h)
-                ok = r.status_code == 200
+                ok = r.status_code in (200, 429)
             el = time.time() - t0
             m.add(r.status_code, el)
             c.close()

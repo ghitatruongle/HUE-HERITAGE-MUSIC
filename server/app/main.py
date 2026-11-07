@@ -211,6 +211,10 @@ class SheddingMiddleware:
             await self.app(scope, receive, send)
             return
         if self.in_flight >= self.max_in_flight:
+            if self.in_flight == self.max_in_flight:
+                logging.getLogger(__name__).warning(
+                    "shed reject: in_flight=%s max=%s path=%s", self.in_flight, self.max_in_flight, scope.get("path")
+                )
             response = JSONResponse(
                 {"detail": "server busy, retry shortly"},
                 status_code=503,
@@ -298,7 +302,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.2-beta1",
+        version="0.0.2-beta2",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -337,8 +341,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.2-beta1",
-            "stage": "0.0.2-beta1",
+            "version": "0.0.2-beta2",
+            "stage": "0.0.2-beta2",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio

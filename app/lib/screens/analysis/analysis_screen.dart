@@ -35,7 +35,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Future<void> _pickAndAnalyze() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.audio,
-      withData: true,
+      withData: kIsWeb,
     );
     final file = result?.files.single;
     if (file == null) return;
@@ -59,9 +59,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _pitch = null;
       _instruments = null;
       _instrumentsFailed = false;
-      _wave = WaveformData.fromWavBytes(bytes);
+      _wave = null;
       _source = name;
     });
+    WaveformData? wave;
+    try {
+      wave = await compute(parseWaveformData, bytes);
+    } catch (_) {}
+    if (!mounted) return;
     try {
       final pitch = await SingApi(config.api.dio).analyzePitchBytes(bytes);
       InstrumentResult? instruments;
@@ -77,10 +82,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _pitch = pitch;
         _instruments = instruments;
         _instrumentsFailed = instrumentsFailed;
+        _wave = wave;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = ApiClient.describe(e));
+      setState(() {
+        _wave = wave;
+        _source = name;
+        _error = ApiClient.describe(e);
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }

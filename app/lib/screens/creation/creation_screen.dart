@@ -284,13 +284,16 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         }
       } catch (_) {}
     }
+    if (!mounted) return;
     await _pollTask(id, isTab1: isTab1, durationSeconds: durationSeconds);
   }
 
   Future<void> _pollTask(String id, {required bool isTab1, required int durationSeconds}) async {
-    setState(() => _polling = true);
+    if (!mounted) return;
     final dio = context.read<ServerConfig>().api.dio;
     final history = context.read<HistoryService>();
+    final pollLost = context.read<LocaleProvider>().strings.creationPollLost;
+    setState(() => _polling = true);
     final deadline = DateTime.now().add(Duration(seconds: 150 + durationSeconds * 3));
     var consecutiveFailures = 0;
 
@@ -317,8 +320,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         consecutiveFailures++;
         if (consecutiveFailures >= 5) {
           if (mounted) {
+            final msg = pollLost(consecutiveFailures);
             setState(() {
-              final msg = context.read<LocaleProvider>().strings.creationPollLost(consecutiveFailures);
               if (isTab1) {
                 _errorTab1 = msg;
               } else {
@@ -395,8 +398,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: const Border(
-          bottom: BorderSide(color: Color(0x33D4AF37), width: 1),
+        border: Border(
+          bottom: BorderSide(color: AppTheme.imperialGold.withValues(alpha: 0.2), width: 1),
         ),
       ),
       child: Row(
@@ -605,7 +608,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0x33D4AF37)),
+        border: Border.all(color: AppTheme.imperialGold.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

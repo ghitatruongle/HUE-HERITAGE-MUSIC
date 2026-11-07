@@ -6,6 +6,10 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
 import '../services/locale_provider.dart';
 
+WaveformData parseWaveformData(Uint8List bytes) {
+  return WaveformData.fromWavBytes(bytes);
+}
+
 class WaveformData {
   final List<double> peaks;
 

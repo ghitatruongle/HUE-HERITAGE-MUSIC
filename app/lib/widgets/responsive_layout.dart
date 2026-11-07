@@ -393,7 +393,9 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
         Expanded(
           child: ContentMaxWidth(
             maxWidth: 1360,
-            child: widget.destinations[widget.selectedIndex].screen,
+            child: widget
+                .destinations[widget.selectedIndex.clamp(0, widget.destinations.length - 1)]
+                .screen,
           ),
         ),
       ],
@@ -408,7 +410,9 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
   ) {
     return ContentMaxWidth(
       maxWidth: 1360,
-      child: widget.destinations[widget.selectedIndex].screen,
+      child: widget
+          .destinations[widget.selectedIndex.clamp(0, widget.destinations.length - 1)]
+          .screen,
     );
   }
 
@@ -500,40 +504,39 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       );
     }
 
-    final topIndices = [0, 1, 3, 6];
+    final preferred = [0, 1, 3, 6];
+    final topIndices = [
+      for (final i in preferred)
+        if (i < widget.destinations.length) i,
+    ];
+    final fallback = [
+      for (var i = 0; i < widget.destinations.length; i++)
+        if (!topIndices.contains(i)) i,
+    ];
+    while (topIndices.length < 4 && fallback.isNotEmpty) {
+      topIndices.add(fallback.removeAt(0));
+    }
+    topIndices.sort();
+    final moreIndex = topIndices.length;
     final activeInTop = topIndices.indexOf(widget.selectedIndex);
-    final currentIndex = activeInTop != -1 ? activeInTop : 4;
+    final currentIndex = activeInTop != -1 ? activeInTop : moreIndex;
 
     return NavigationBar(
-      selectedIndex: currentIndex,
+      selectedIndex: currentIndex.clamp(0, moreIndex),
       onDestinationSelected: (index) {
-        if (index == 4) {
+        if (index >= moreIndex) {
           _showAllDestinationsSheet(context, locale);
         } else {
           widget.onDestinationSelected(topIndices[index]);
         }
       },
       destinations: [
-        NavigationDestination(
-          icon: Icon(widget.destinations[0].icon),
-          selectedIcon: Icon(widget.destinations[0].selectedIcon),
-          label: _resolveNavLabel(widget.destinations[0].labelKey, locale),
-        ),
-        NavigationDestination(
-          icon: Icon(widget.destinations[1].icon),
-          selectedIcon: Icon(widget.destinations[1].selectedIcon),
-          label: _resolveNavLabel(widget.destinations[1].labelKey, locale),
-        ),
-        NavigationDestination(
-          icon: Icon(widget.destinations[3].icon),
-          selectedIcon: Icon(widget.destinations[3].selectedIcon),
-          label: _resolveNavLabel(widget.destinations[3].labelKey, locale),
-        ),
-        NavigationDestination(
-          icon: Icon(widget.destinations[6].icon),
-          selectedIcon: Icon(widget.destinations[6].selectedIcon),
-          label: _resolveNavLabel(widget.destinations[6].labelKey, locale),
-        ),
+        for (final i in topIndices)
+          NavigationDestination(
+            icon: Icon(widget.destinations[i].icon),
+            selectedIcon: Icon(widget.destinations[i].selectedIcon),
+            label: _resolveNavLabel(widget.destinations[i].labelKey, locale),
+          ),
         NavigationDestination(
           icon: const Icon(Icons.grid_view_outlined),
           selectedIcon: const Icon(Icons.grid_view_rounded),

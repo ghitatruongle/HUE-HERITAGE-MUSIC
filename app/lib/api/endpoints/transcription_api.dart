@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:cross_file/cross_file.dart';
 import 'package:dio/dio.dart';
 
+import '../../api/api_client.dart';
+
 import '../../models/transcribe_result.dart';
 
 class TranscriptionApi {
@@ -34,6 +36,7 @@ class TranscriptionApi {
     final res = await dio.post(
       '/api/music/transcribe',
       data: form,
+      options: ApiClient.dspOptions,
       onSendProgress: onProgress,
     );
     final data = res.data;

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../../api/api_client.dart';
+
 import '../../models/heritage_item.dart';
 import '../../models/music_task.dart';
 
@@ -57,7 +59,7 @@ class MusicApi {
       'strength': strength,
       'duration': duration,
       'seed': seed,
-    });
+    }, options: ApiClient.dspOptions);
     final data = res.data;
     if (data is Map) {
       return MusicTask.fromJson(Map<String, dynamic>.from(data));
@@ -76,17 +78,21 @@ class MusicApi {
     int duration = 60,
     int seed = 0,
   }) async {
-    final res = await dio.post('/api/music/sing-new-lyrics', queryParameters: {
-      'heritage_id': heritageId,
-      'new_lyrics': newLyrics,
-      'vocal': vocal,
-      'tempo': tempo,
-      'mood': mood,
-      'lora': lora,
-      'strength': strength,
-      'duration': duration,
-      'seed': seed,
-    });
+    final res = await dio.post(
+      '/api/music/sing-new-lyrics',
+      queryParameters: {
+        'heritage_id': heritageId,
+        'vocal': vocal,
+        'tempo': tempo,
+        'mood': mood,
+        'lora': lora,
+        'strength': strength,
+        'duration': duration,
+        'seed': seed,
+      },
+      data: {'new_lyrics': newLyrics},
+      options: ApiClient.dspOptions,
+    );
     final data = res.data;
     if (data is Map) {
       return MusicTask.fromJson(Map<String, dynamic>.from(data));
@@ -124,8 +130,8 @@ class MusicApi {
     final stream = res.data?.stream;
     if (stream == null) return;
     var buffer = '';
-    await for (final chunk in stream) {
-      buffer += utf8.decode(chunk);
+    await for (final piece in utf8.decoder.bind(stream)) {
+      buffer += piece;
       while (true) {
         final idx = buffer.indexOf('\n\n');
         if (idx < 0) break;

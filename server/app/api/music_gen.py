@@ -7,7 +7,8 @@ import threading
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from pydantic import BaseModel
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -206,6 +207,10 @@ def sing_original(
     )
 
 
+class SingNewLyricsBody(BaseModel):
+    new_lyrics: str = ""
+
+
 @router.post("/music/sing-new-lyrics")
 def sing_new_lyrics(
     request: Request,
@@ -218,9 +223,12 @@ def sing_new_lyrics(
     strength: float = 0.8,
     duration: int = 60,
     seed: int = 0,
+    body: Optional[SingNewLyricsBody] = Body(default=None),
     db: Session = Depends(get_db),
     user_id: Optional[str] = Depends(require_user),
 ):
+    if body is not None and body.new_lyrics.strip():
+        new_lyrics = body.new_lyrics
     if not heritage_id.strip() or not new_lyrics.strip():
         raise HTTPException(status_code=400, detail="missing heritage_id or new_lyrics")
     _validate_generation(duration, strength)

@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import '../../api/api_client.dart';
+
 import '../../models/lesson.dart';
 
 class LessonApi {
@@ -41,6 +43,7 @@ class LessonApi {
       '/api/lessons/$lessonId/practice',
       queryParameters: {'section': section},
       data: form,
+      options: ApiClient.dspOptions,
       onSendProgress: onProgress,
     );
     final data = res.data;
@@ -82,6 +85,7 @@ class LessonApi {
       '/api/lessons/scales/$scaleId/practice',
       queryParameters: {'transpose': transpose},
       data: form,
+      options: ApiClient.dspOptions,
     );
     final data = res.data;
     if (data is Map) {
@@ -94,7 +98,7 @@ class LessonApi {
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
-    await dio.post('/api/lessons/$lessonId/sections/$section/sample.wav', data: form);
+    await dio.post('/api/lessons/$lessonId/sections/$section/sample.wav', data: form, options: ApiClient.dspOptions);
     return detail(lessonId);
   }
 

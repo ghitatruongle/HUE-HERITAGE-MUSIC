@@ -170,8 +170,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ResponsiveScaffold(
       destinations: destinations,
-      selectedIndex: _navIndex,
-      onDestinationSelected: (idx) => setState(() => _navIndex = idx),
+      selectedIndex: _navIndex.clamp(0, destinations.length - 1),
+      onDestinationSelected: (idx) => setState(() => _navIndex = idx.clamp(0, destinations.length - 1)),
     );
   }
 }
@@ -190,56 +190,56 @@ class _HomeContent extends StatelessWidget {
     final features = [
       _Feature(
         icon: Icons.library_music,
-        color: const Color(0xFF00796B),
+        color: AppTheme.featureAccent(context, 0),
         title: strings.featHeritageTitle,
         subtitle: strings.featHeritageDesc,
         tabIndex: 1,
       ),
       _Feature(
         icon: Icons.healing,
-        color: const Color(0xFF00695C),
+        color: AppTheme.featureAccent(context, 1),
         title: strings.featRestorationTitle,
         subtitle: strings.featRestorationDesc,
         tabIndex: 2,
       ),
       _Feature(
         icon: Icons.mic,
-        color: AppTheme.primaryPurple,
+        color: AppTheme.featureAccent(context, 2),
         title: strings.featLearningTitle,
         subtitle: strings.featLearningDesc,
         tabIndex: 3,
       ),
       _Feature(
         icon: Icons.query_stats,
-        color: const Color(0xFF2A5FA5),
+        color: AppTheme.featureAccent(context, 3),
         title: strings.featAnalysisTitle,
         subtitle: strings.featAnalysisDesc,
         tabIndex: 4,
       ),
       _Feature(
         icon: Icons.music_note,
-        color: const Color(0xFF8F6C00),
+        color: AppTheme.featureAccent(context, 4),
         title: strings.featTranscriptionTitle,
         subtitle: strings.featTranscriptionDesc,
         tabIndex: 5,
       ),
       _Feature(
         icon: Icons.auto_awesome,
-        color: const Color(0xFFAD3B6F),
+        color: AppTheme.featureAccent(context, 5),
         title: strings.featCreationTitle,
         subtitle: strings.featCreationDesc,
         tabIndex: 6,
       ),
       _Feature(
         icon: Icons.history,
-        color: const Color(0xFF5D4037),
+        color: AppTheme.featureAccent(context, 6),
         title: strings.featHistoryTitle,
         subtitle: strings.featHistoryDesc,
         tabIndex: 7,
       ),
       _Feature(
         icon: Icons.settings_outlined,
-        color: const Color(0xFF546E7A),
+        color: AppTheme.featureAccent(context, 7),
         title: strings.settingsTitle,
         subtitle: strings.featSettingsSubtitle,
         tabIndex: 8,

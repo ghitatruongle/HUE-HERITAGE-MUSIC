@@ -334,9 +334,14 @@ def _role_of(user) -> str:
     return user.role or "user"
 
 
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
+
+
 def _validate_registration(db: Session, u: str, e: str, p: str, c: str) -> None:
-    if not u or len(u) < 3:
-        raise HTTPException(status_code=400, detail="username must be at least 3 characters")
+    if not u or len(u) < 3 or len(u) > 32:
+        raise HTTPException(status_code=400, detail="username must be 3-32 characters")
+    if not USERNAME_RE.fullmatch(u):
+        raise HTTPException(status_code=400, detail="username may only contain letters, digits, dot, underscore, hyphen")
     if u.lower() in RESERVED_USERNAMES:
         raise HTTPException(status_code=400, detail="username is reserved")
     if not EMAIL_RE.fullmatch(e):
@@ -632,8 +637,10 @@ def admin_unlock(req: AdminUnlockRequest, request: Request, db: Session = Depend
 @router.post("/users")
 def admin_create_user(req: AdminCreateUserRequest, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
     u = req.username.strip()
-    if not u or len(u) < 3:
-        raise HTTPException(status_code=400, detail="username must be at least 3 characters")
+    if not u or len(u) < 3 or len(u) > 32:
+        raise HTTPException(status_code=400, detail="username must be 3-32 characters")
+    if not USERNAME_RE.fullmatch(u):
+        raise HTTPException(status_code=400, detail="username may only contain letters, digits, dot, underscore, hyphen")
     if u.lower() in RESERVED_USERNAMES:
         raise HTTPException(status_code=400, detail="username is reserved")
     e = req.email.strip().lower()

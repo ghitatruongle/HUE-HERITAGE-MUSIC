@@ -18,7 +18,12 @@ if launchctl print gui/$(id -u)/com.ghita.hueheritagemusic.server > /dev/null 2>
 else
   cd server
   mkdir -p /tmp/hue_logs
-  nohup ../.venv-mac312/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers --limit-concurrency 512 > /tmp/hue_logs/lan_server.log 2>&1 & disown
+  if [ -f .env ]; then
+    set -a
+    . ./.env
+    set +a
+  fi
+  nohup ../.venv-mac312/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers --limit-concurrency "${UVICORN_LIMIT_CONCURRENCY:-512}" > /tmp/hue_logs/lan_server.log 2>&1 & disown
   sleep 4
   cd ..
 fi

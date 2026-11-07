@@ -1,5 +1,43 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.2-beta2 (2026-11-07) — "Ổn định toàn diện app + giao diện"
+
+> Bản beta với trọng tâm độ ổn định: 15 track vá theo kết quả nghiên cứu sâu 2 vòng + audit 32 file (37 phát hiện), giữ nguyên trọn vẹn tính năng của beta1.
+
+### Phiên đăng nhập & mạng
+- Gõ sai mật khẩu admin-unlock/đổi mật khẩu không còn bị đá khỏi phiên (401 từ /api/auth/* không xóa token)
+- Timeout phân lớp: request thường 30s, xử lý DSP/upload 15 phút đặt đúng chỗ, upload có sendTimeout 2 phút — hết cảnh GET nhỏ treo 15 phút
+- Retry tự lấy token mới nhất trước khi thử lại; thông báo lỗi che hostname/đường dẫn máy
+- Stream sự kiện tác vụ decode UTF-8 an toàn — tiếng Việt cắt giữa ký tự không còn làm chết stream
+- Lời bài hát gửi qua JSON body thay vì query string
+
+### Thu âm & luyện tập
+- Khóa thu âm 1 luồng duy nhất (mutex + epoch): bấm đúp, tự dừng theo im lặng, auto-stop timer, đổi câu, đổi bài không còn chen nhau ghi rác
+- Lỗi micro giữa chừng thoát sạch trạng thái thay vì kẹt nút "Đang thu"
+- Rời màn hình khi đang thu: micro được nhả đúng (stop trước dispose) — hết cảnh màn khác không thu được
+- 3 nút nghe (vòng lặp / người mẫu / đoạn tham chiếu) có generation guard — bấm nhanh hết lệch đèn play/stop
+
+### Chống treo/kẹt màn hình
+- Dialog "Đang xử lý" Phục hồi tự đóng cả khi rời tab giữa lúc upload — hết cảnh treo toàn app phải khởi động lại
+- Xem trước giọng, phân tích, chuyển tab tác vụ: đầy đủ mounted guard — hết crash setState-sau-dispose
+- Tải thêm ở 4 màn danh sách (Thư viện/Bảo mật/Tài khoản/Mời) có epoch guard — kết quả tìm kiếm cũ không còn trộn vào list mới; lỗi tải thêm hiện thông báo
+
+### Hiệu năng & bộ nhớ
+- Giải mã sóng âm chuyển sang isolate riêng (compute) + memoize — hết cảnh quét lại file lớn mỗi tick tiến độ
+- Bản thu tạm được xóa sau khi dùng; file tải về trên mobile được dọn sau khi chia sẻ
+- ID lịch sử duy nhất tuyệt đối (chống trùng trên web) — cập nhật trạng thái không còn sửa nhầm dòng
+
+### Giao diện
+- Sửa tràn màn hình chắc chắn trên điện thoại: hàng BPM+engine Phân tích, nút bottom-sheet Phục hồi
+- Thanh điều hướng tự tính slot an toàn theo số tab — hết bom nổ chậm khi giảm số tab
+- Vàng kim hiện 2 sắc: sáng nền tối, đậm nền sáng — chart/badge/chip đạt chuẩn tương phản cả 2 theme (test WCAG mở rộng +8 case)
+- Thống nhất ErrorPanel cho Học hát/Luyện tập/Phân tích/Phục hồi
+
+### Hạ tầng & nền
+- Lưới bắt lỗi toàn cục: lỗi async lọt được ghi log xoay 5 file trong thư mục tài liệu app thay vì crash trắng vô vết
+- Không còn nạp phiên đăng nhập 2 lần lúc khởi động; Connectivity dùng 1 instance
+- Giới hạn 2 request chấm điểm đồng thời mỗi user (429 khi vượt) — 1 user không nuốt sạch threadpool DSP
+
 ## 0.0.2-beta1 (2026-11-06) — "Học hát hoàn thiện + Nâng cấp giao diện"
 
 > Bản beta chốt chất lượng: nghiên cứu B (tách nốt phía bản mẫu làm lại 2 giai đoạn), sửa tận cùng lỗi signed-URL hết hạn, và nâng cấp UI theo hệ design token thống nhất.

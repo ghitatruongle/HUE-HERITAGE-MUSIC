@@ -17,6 +17,7 @@ import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
 import '../../widgets/sheet_music_view.dart';
 import '../../widgets/waveform_view.dart';
+import '../../widgets/error_panel.dart';
 
 class TranscriptionScreen extends StatefulWidget {
   const TranscriptionScreen({super.key});
@@ -30,6 +31,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   String _engine = 'basic_pitch';
   String _sourceLabel = '';
   Uint8List? _pickedBytes;
+  WaveformData? _waveform;
   bool _busy = false;
   TranscribeResult? _result;
   String? _error;
@@ -44,27 +46,32 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       bytes = await File(file.path!).readAsBytes();
     }
     if (bytes == null) return;
+    await _applyPicked(bytes, file.name);
+  }
+
+  Future<void> _applyPicked(Uint8List bytes, String label) async {
+    WaveformData? wave;
+    try {
+      wave = await compute(parseWaveformData, bytes);
+    } catch (_) {}
+    if (!mounted) return;
     setState(() {
       _pickedBytes = bytes;
-      _sourceLabel = file.name;
+      _waveform = wave;
+      _sourceLabel = label;
       _result = null;
       _error = null;
     });
   }
 
-  void _useRecording() {
+  Future<void> _useRecording() async {
     final strings = context.read<LocaleProvider>().strings;
     final media = context.read<SessionMedia>();
     if (media.recordingBytes == null) {
       setState(() => _error = strings.transcribeNoTake);
       return;
     }
-    setState(() {
-      _pickedBytes = media.recordingBytes;
-      _sourceLabel = strings.transcribeRecordedSource;
-      _result = null;
-      _error = null;
-    });
+    await _applyPicked(media.recordingBytes!, strings.transcribeRecordedSource);
   }
 
   Future<void> _run() async {
@@ -87,6 +94,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final history = context.read<HistoryService>();
+      final media = context.read<SessionMedia>();
       final data = await TranscriptionApi(dio).transcribeBytes(
         _pickedBytes!,
         bpm: bpm,
@@ -97,9 +105,10 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
           }
         },
       );
+      media.clearRecording();
       history.add(
             HistoryEntry(
-              id: data.sha,
+              id: HistoryService.newId(),
               kind: 'transcribe',
               title: strings.transcribeHistoryTitle(_sourceLabel, data.notes.length),
               status: 'done',
@@ -178,6 +187,9 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       await api.download(midi ? api.midiUrl(r.sha, bpm: r.bpm) : api.xmlUrl(r.sha, bpm: r.bpm), savePath);
       if (Platform.isAndroid || Platform.isIOS) {
         await shareDownloadedFile(savePath, name);
+        try {
+          await File(savePath).delete();
+        } catch (_) {}
         savedNote = strings.transcribeShareDialog(name);
       }
       if (mounted) {
@@ -201,7 +213,6 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
-    final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -234,13 +245,16 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                 if (_sourceLabel.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text('${strings.transcribeSource}: $_sourceLabel', style: Theme.of(context).textTheme.bodySmall),
-                  if (_pickedBytes != null) ...[
+                  if (_waveform != null) ...[
                     const SizedBox(height: 8),
-                    WaveformView(data: WaveformData.fromWavBytes(_pickedBytes!)),
+                    WaveformView(data: _waveform!),
                   ],
                 ],
                 const SizedBox(height: 12),
-                Row(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     SizedBox(
                       width: 110,
@@ -254,9 +268,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
                     Text('${strings.transcribeEngine}:'),
-                    const SizedBox(width: 8),
                     SegmentedButton<String>(
                       segments: const [
                         ButtonSegment(value: 'basic_pitch', label: Text('Basic Pitch')),
@@ -283,14 +295,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
         ],
         if (_error != null) ...[
           const SizedBox(height: 12),
-          Card(
-            color: scheme.errorContainer,
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
-            ),
-          ),
+          ErrorPanel(message: _error!),
         ],
         if (_result != null) ...[
           const SizedBox(height: 16),

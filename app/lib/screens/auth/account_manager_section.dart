@@ -7,6 +7,7 @@ import '../../services/admin_reauth.dart';
 import '../../services/clipboard_helper.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
+import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
 
 class AccountManagerSection extends StatefulWidget {
@@ -29,7 +30,10 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
     _reload();
   }
 
+  final QueryEpoch _queryEpoch = QueryEpoch();
+
   Future<void> _reload() async {
+    final epoch = _queryEpoch.next();
     setState(() {
       _loading = true;
       _hasError = false;
@@ -37,7 +41,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await AuthEndpoints(dio).listAccounts();
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       setState(() {
         _accounts
           ..clear()
@@ -54,10 +58,11 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
   Future<void> _loadMore() async {
     if (_loadingMore || _accounts.length >= _total) return;
     setState(() => _loadingMore = true);
+    final epoch = _queryEpoch.value;
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await AuthEndpoints(dio).listAccounts(offset: _accounts.length);
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       final known = _accounts.map((e) => e.id).toSet();
       setState(() {
         for (final acc in page.items) {

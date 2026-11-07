@@ -155,6 +155,7 @@ async def practice_scale(
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
+    _practice_slot_acquire(user_id)
     try:
         return await asyncio.to_thread(scale_service.practice_scale, scale_id, data, transpose)
     except ValueError as e:
@@ -164,9 +165,32 @@ async def practice_scale(
         if "empty contour" in msg:
             raise HTTPException(status_code=400, detail="empty pitch contour (silence or unvoiced audio)")
         raise HTTPException(status_code=400, detail="wav decode failed")
+    finally:
+        _practice_slot_release(user_id)
 
 
 PRACTICE_MIDI_NAME = re.compile(r"^practice_[A-Za-z0-9]{8,32}(_\d+_\d{10})?\.mid$")
+PRACTICE_MAX_INFLIGHT_PER_USER = 2
+_PRACTICE_INFLIGHT: dict = {}
+
+
+def _practice_slot_acquire(user_id: Optional[str]) -> None:
+    if not user_id:
+        return
+    current = _PRACTICE_INFLIGHT.get(user_id, 0)
+    if current >= PRACTICE_MAX_INFLIGHT_PER_USER:
+        raise HTTPException(status_code=429, detail="too many concurrent practice requests")
+    _PRACTICE_INFLIGHT[user_id] = current + 1
+
+
+def _practice_slot_release(user_id: Optional[str]) -> None:
+    if not user_id:
+        return
+    remaining = _PRACTICE_INFLIGHT.get(user_id, 0) - 1
+    if remaining <= 0:
+        _PRACTICE_INFLIGHT.pop(user_id, None)
+    else:
+        _PRACTICE_INFLIGHT[user_id] = remaining
 
 
 @router.get("/practice-midi/{name}")
@@ -283,6 +307,7 @@ async def practice_section(
                 logging.getLogger(__name__).warning("practice midi save failed", exc_info=True)
         return result
 
+    _practice_slot_acquire(user_id)
     try:
         result = await asyncio.to_thread(_run)
     except ValueError as e:
@@ -290,6 +315,8 @@ async def practice_section(
         if "empty contour" in msg:
             raise HTTPException(status_code=400, detail="empty pitch contour (silence or unvoiced audio)")
         raise HTTPException(status_code=400, detail="wav decode failed")
+    finally:
+        _practice_slot_release(user_id)
     if result is None:
         raise HTTPException(status_code=404, detail="section not found")
     if user_id and result.get("metrics"):

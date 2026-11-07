@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import '../../api/api_client.dart';
+
 import '../../models/instrument_result.dart';
 
 class InstrumentApi {
@@ -13,7 +15,7 @@ class InstrumentApi {
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
-    final res = await dio.post('/api/music/instruments', data: form);
+    final res = await dio.post('/api/music/instruments', data: form, options: ApiClient.dspOptions);
     final data = res.data;
     if (data is Map) {
       return InstrumentResult.fromJson(Map<String, dynamic>.from(data));

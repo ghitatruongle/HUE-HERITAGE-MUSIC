@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -999,7 +1000,7 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
         dialogTitle: strings.adminLearningPickWav,
         type: FileType.custom,
         allowedExtensions: ['wav'],
-        withData: true,
+        withData: kIsWeb,
       );
       if (picked == null || picked.files.isEmpty) {
         if (mounted) setState(() => _busySection = -2);

@@ -39,7 +39,6 @@ class AuthService extends ChangeNotifier {
   AuthService() {
     _instance = this;
     _currentToken = _token;
-    load();
   }
 
   static String? get currentToken => _currentToken;
@@ -100,6 +99,7 @@ class AuthService extends ChangeNotifier {
       email = null;
       role = 'user';
       mcp = '0';
+      _secureStorageBroken = true;
     }
     if (seq != _stateSeq) {
       return;

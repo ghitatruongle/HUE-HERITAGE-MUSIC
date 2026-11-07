@@ -17,6 +17,7 @@ import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
 import '../../widgets/pitch_contour_chart.dart';
+import '../../widgets/error_panel.dart';
 import 'lesson_practice_view.dart';
 
 class LearningScreen extends StatefulWidget {
@@ -47,7 +48,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   void dispose() {
     _tabController.dispose();
     if (_recording) {
-      _recorder.stop().then<void>((_) => _recorder.dispose());
+      _recorder.stop().catchError((_) => null).whenComplete(() => _recorder.dispose());
     } else {
       _recorder.dispose();
     }
@@ -56,12 +57,6 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
 
   String _tmpPath() {
     return '${Directory.systemTemp.path}/hue_learn.wav';
-  }
-
-  void _log(String kind, String title, String status) {
-    context.read<HistoryService>().add(
-          HistoryEntry(id: DateTime.now().microsecondsSinceEpoch.toString(), kind: kind, title: title, status: status, at: DateTime.now()),
-        );
   }
 
   Future<void> _toggle() async {
@@ -126,6 +121,8 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
     if (path == null) {
       return;
     }
+    final history = context.read<HistoryService>();
+    final analyzeTitle = strings.learnAnalyzeBtn;
     setState(() {
       _busy = true;
       _error = null;
@@ -153,10 +150,14 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
               },
             );
       if (!mounted) return;
-      _log('analyze-pitch', strings.learnAnalyzeBtn, 'done');
+      history.add(
+            HistoryEntry(id: HistoryService.newId(), kind: 'analyze-pitch', title: analyzeTitle, status: 'done', at: DateTime.now()),
+          );
       setState(() => _result = data);
     } catch (e) {
-      _log('analyze-pitch', strings.learnAnalyzeBtn, 'error');
+      history.add(
+            HistoryEntry(id: HistoryService.newId(), kind: 'analyze-pitch', title: analyzeTitle, status: 'error', at: DateTime.now()),
+          );
       if (mounted) {
         setState(() => _error = ApiClient.describe(e));
       }
@@ -237,20 +238,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
           onPressed: _filePath == null ? null : _analyze,
         ),
         const SizedBox(height: 8),
-        if (_error != null)
-          Card(
-            color: scheme.errorContainer,
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
-                  Expanded(child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer))),
-                  TextButton(onPressed: _retry, child: Text(strings.learnRetry)),
-                ],
-              ),
-            ),
-          ),
+        if (_error != null) ErrorPanel(message: _error!, onRetry: _busy ? null : _retry),
         if (_busy) LinearProgressIndicator(value: _progress > 0 ? _progress : null),
         if (_result != null) ...[
           const SizedBox(height: 12),
