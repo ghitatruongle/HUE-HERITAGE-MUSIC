@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../widgets/status_colors.dart' as sc;
 import '../../models/music_task.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
@@ -25,13 +26,16 @@ class TaskResultCard extends StatelessWidget {
     final server = context.read<ServerConfig>();
     final fullUrl = '${server.baseUrl}${task.audioUrl}';
 
+    final scheme = Theme.of(context).colorScheme;
+    final statusColor = sc.statusColor(context, task.status);
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: task.status == 'done' ? AppTheme.imperialGold : AppTheme.darkBorder,
+          color: task.status == 'done' ? AppTheme.imperialGold : scheme.outline,
         ),
       ),
       child: Column(
@@ -44,21 +48,13 @@ class TaskResultCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: task.status == 'done'
-                      ? Colors.green.withAlpha(40)
-                      : task.status == 'blocked' || task.status == 'cancelled'
-                          ? Colors.amber.withAlpha(40)
-                          : Colors.blue.withAlpha(40),
+                  color: statusColor.withAlpha(40),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   task.status,
                   style: TextStyle(
-                    color: task.status == 'done'
-                        ? Colors.greenAccent
-                        : task.status == 'blocked' || task.status == 'cancelled'
-                            ? Colors.amberAccent
-                            : Colors.lightBlueAccent,
+                    color: statusColor,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -77,8 +73,8 @@ class TaskResultCard extends StatelessWidget {
                     minimumSize: Size.zero,
                     visualDensity: VisualDensity.compact,
                   ),
-                  icon: const Icon(Icons.close_rounded, size: 14, color: Colors.white70),
-                  label: Text(strings.cancelBtn, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                  icon: Icon(Icons.close_rounded, size: 14, color: scheme.onSurfaceVariant),
+                  label: Text(strings.cancelBtn, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
                   onPressed: () => onCancel(task.id),
                 ),
               ],
@@ -86,13 +82,13 @@ class TaskResultCard extends StatelessWidget {
           ),
           if (task.reason.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(strings.taskNotice(task.reason), style: const TextStyle(fontSize: 12.5, color: Colors.white70)),
+            Text(strings.taskNotice(task.reason), style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
           ],
           if (task.status == 'blocked') ...[
             const SizedBox(height: 8),
             Text(
               strings.taskBlockedNote,
-              style: const TextStyle(fontSize: 12, color: Colors.white60),
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
           ],
           if (task.status == 'done' && task.audioUrl.isNotEmpty) ...[

@@ -5,6 +5,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/auth_endpoints.dart';
 import '../../services/admin_reauth.dart';
 import '../../services/clipboard_helper.dart';
+import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 
@@ -85,7 +86,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
       children: [
         Row(
           children: [
-            const Icon(Icons.manage_accounts, size: 18, color: Colors.amber),
+            const Icon(Icons.manage_accounts, size: 18, color: AppTheme.statusWarning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -101,21 +102,23 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(strings.accountManagerHint, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(strings.accountManagerHint, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 10),
         if (_loading && _accounts.isEmpty)
           const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
         else if (_hasError && _accounts.isEmpty)
           Text(
             strings.authInviteLoadFail,
-            style: const TextStyle(fontSize: 12, color: Colors.red),
+            style: const TextStyle(fontSize: 12, color: AppTheme.statusDanger),
           )
         else ...[
           for (final acc in _accounts)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Row(
+                  children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,17 +128,17 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                             Text(acc.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             const SizedBox(width: 6),
                             if (acc.role == 'admin')
-                              const Icon(Icons.admin_panel_settings, size: 13, color: Colors.amber)
+                              const Icon(Icons.admin_panel_settings, size: 13, color: AppTheme.statusWarning)
                             else
-                              const Icon(Icons.person, size: 13, color: Colors.blueGrey),
+                              const Icon(Icons.person, size: 13, color: AppTheme.statusInfo),
                             if (!acc.active) ...[
                               const SizedBox(width: 6),
-                              const Icon(Icons.block, size: 13, color: Colors.red),
+                              const Icon(Icons.block, size: 13, color: AppTheme.statusDanger),
                             ],
                           ],
                         ),
                         if (acc.email.isNotEmpty)
-                          Text(acc.email, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+                          Text(acc.email, style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -145,7 +148,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                     onPressed: () => _resetAccountPassword(acc),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.person_remove, size: 16, color: Colors.red),
+                    icon: const Icon(Icons.person_remove, size: 16, color: AppTheme.statusDanger),
                     tooltip: strings.accountDeleteTitle,
                     onPressed: acc.role == 'admin' ? null : () => _deleteAccount(acc),
                   ),
@@ -153,7 +156,8 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                     value: acc.active,
                     onChanged: acc.role == 'admin' ? null : (v) => _toggleAccountActive(acc, v),
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
           if (_accounts.length < _total)
@@ -188,9 +192,9 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.statusDanger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('OK'),
+            child: Text(strings.commonOk),
           ),
         ],
       ),
@@ -252,7 +256,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         content: Text('${strings.accountResetConfirm}: ${acc.username}?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
         ],
       ),
     );

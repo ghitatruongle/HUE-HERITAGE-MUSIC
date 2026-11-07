@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     practice_midi_retention_days: int = 7
     lesson_cache_retention_days: int = 30
     analysis_retention_days: int = 30
+    reference_segmentation: str = "v2"
     web_dir: Path = BASE_DIR / "app" / "build" / "web"
 
 

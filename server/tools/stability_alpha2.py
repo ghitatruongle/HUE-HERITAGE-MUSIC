@@ -113,13 +113,11 @@ def register_login(base, username, password="Stab#2026a"):
 
 def phase_setup(base, server, admin_pass):
     print("== P0 SETUP: admin + user + bài học + mẫu nghệ nhân ==")
-    admin_pass = secrets.token_hex(12)
     admin_tok = register_login(base, "ghitatruongle", admin_pass)
     check("đăng ký/login admin", bool(admin_tok))
     user_tok = register_login(base, "stab_user1")
     check("đăng ký/login user thường", bool(user_tok))
     server.restart()
-    admin_pass = secrets.token_hex(12)
     admin_tok = register_login(base, "ghitatruongle", admin_pass)
     check("admin được thăng chức sau restart", bool(admin_tok))
     c = worker_client(base)
@@ -502,7 +500,7 @@ def phase_restart_resilience(base, server, admin_tok, lid, sec, sample_wav, admi
     print(f"  hồi phục sau kill -9: {recover_s:.1f}s")
     check("hồi phục < 20s", recover_s < 20, f"{recover_s:.1f}s")
 
-    tok = register_login(server.base, "ghitatruongle", ADMIN_PASS)
+    tok = register_login(server.base, "ghitatruongle", admin_pass)
     check("re-login sau restart", bool(tok))
     c = worker_client(server.base)
     h2 = {"Authorization": f"Bearer {tok}"}

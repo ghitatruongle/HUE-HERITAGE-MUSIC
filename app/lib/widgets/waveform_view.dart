@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/theme/app_theme.dart';
 import '../services/locale_provider.dart';
 
 class WaveformData {
@@ -57,7 +58,7 @@ class WaveformView extends StatelessWidget {
   final WaveformData data;
   final Color color;
 
-  const WaveformView({super.key, required this.data, this.color = const Color(0xFF5B3B8C)});
+  const WaveformView({super.key, required this.data, this.color = AppTheme.primaryPurple});
 
   @override
   Widget build(BuildContext context) {

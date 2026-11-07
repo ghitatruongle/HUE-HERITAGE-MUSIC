@@ -1,5 +1,7 @@
 // Onboarding desktop: lần chạy đầu chưa có máy chủ → hiện hộp Kết nối máy chủ.
 import 'package:flutter/material.dart';
+
+import '../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../services/locale_provider.dart';
@@ -71,7 +73,7 @@ class _ServerOnboardingDialogState extends State<ServerOnboardingDialog> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            Text(_error!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 12)),
           ],
         ],
       ),

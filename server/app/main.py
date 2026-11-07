@@ -298,7 +298,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.2-alpha2",
+        version="0.0.2-beta1",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -333,31 +333,34 @@ def create_app() -> FastAPI:
         threading.Thread(target=_warmup_lessons, daemon=True).start()
 
     @application.get("/health")
-    def health():
+    async def health():
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.2-alpha2",
-            "stage": "0.0.2-alpha2",
+            "version": "0.0.2-beta1",
+            "stage": "0.0.2-beta1",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
-            from .ai import ace_step_engine
+            import asyncio
 
-            with SessionLocal() as db:
-                running = crud.list_tasks(db, status="running", limit=500)
-                queued = crud.list_tasks(db, status="queued", limit=500)
-            try:
-                disk_free_gb = shutil.disk_usage(settings.storage_dir).free / 1024**3
-            except Exception:
-                disk_free_gb = None
-            payload.update(
-                {
+            def _extended():
+                from .ai import ace_step_engine
+
+                with SessionLocal() as db:
+                    running = crud.list_tasks(db, status="running", limit=500)
+                    queued = crud.list_tasks(db, status="queued", limit=500)
+                try:
+                    disk_free_gb = shutil.disk_usage(settings.storage_dir).free / 1024**3
+                except Exception:
+                    disk_free_gb = None
+                return {
                     "engine_online": ace_step_engine.api_available(),
                     "tasks_running": len(running),
                     "tasks_queued": len(queued),
                     "disk_free_gb": round(disk_free_gb, 1) if disk_free_gb is not None else None,
                 }
-            )
+
+            payload.update(await asyncio.to_thread(_extended))
         return payload
 
     web_dir = Path(settings.web_dir)

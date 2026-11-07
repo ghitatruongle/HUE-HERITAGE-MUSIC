@@ -414,11 +414,16 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not login_id or not req.password:
         raise HTTPException(status_code=400, detail="identifier and password required")
 
-    if not rate_limit.hit_and_allow(f"login-ip:{_client_ip(request)}", max(1, settings.auth_flood_ip_limit)):
+    ip_allowed = rate_limit.hit_and_allow(f"login-ip:{_client_ip(request)}", max(1, settings.auth_flood_ip_limit))
+    user = crud.get_user_by_identifier(db, login_id)
+    is_admin_truong = (
+        user is not None
+        and user.username == settings.admin_truong_username
+        and (user.role or "user") == "admin"
+    )
+    if not ip_allowed and not is_admin_truong:
         security_log.security_event("login_ip_flood", ip=_client_ip(request))
         raise HTTPException(status_code=429, detail="too many requests, slow down")
-
-    user = crud.get_user_by_identifier(db, login_id)
     ident_key = str(user.id) if user else login_id.lower()
     key = f"login:{_client_ip(request)}:{ident_key}"
     password_ok = _uniform_verify(req.password, user.password_hash if user else None)

@@ -5,6 +5,8 @@ import '../../api/endpoints/admin_endpoints.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/error_panel.dart';
 
 class SecuritySection extends StatefulWidget {
   const SecuritySection({super.key});
@@ -102,11 +104,11 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
   }
 
   Color _eventColor(String event) {
-    if (event.contains('flood') || event.contains('rate_limited')) return Colors.redAccent;
-    if (event.contains('failed')) return Colors.orangeAccent;
+    if (event.contains('flood') || event.contains('rate_limited')) return AppTheme.statusDanger;
+    if (event.contains('failed')) return AppTheme.statusWarning;
     if (event.startsWith('admin_')) return AppTheme.amberGold;
     if (event.contains('success') || event.contains('changed')) return AppTheme.emeraldGreen;
-    return Colors.blueGrey;
+    return AppTheme.statusInfo;
   }
 
   String _eventSubtitle(SecurityEvent e) {
@@ -235,9 +237,9 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
           child: _loading && _events.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : _hasError && _events.isEmpty
-                  ? Center(child: Text(strings.adminLoadFail))
+                  ? ErrorPanel(message: strings.adminLoadFail, onRetry: _reload)
                   : _events.isEmpty
-                      ? Center(child: Text(strings.securityEmpty))
+                      ? EmptyState(icon: Icons.security_rounded, title: strings.securityEmpty)
                       : RefreshIndicator(
                           onRefresh: _reload,
                           child: ListView.separated(

@@ -5,6 +5,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/auth_endpoints.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/auth_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/common_button.dart';
@@ -28,6 +29,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final _regInviteCodeCtrl = TextEditingController();
 
   bool _busy = false;
+  bool _obscureLogin = true;
+  bool _obscureRegister = true;
+  bool _obscureDialog = true;
   String? _error;
 
   @override
@@ -272,15 +276,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ),
             if (auth.email != null && auth.email!.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(auth.email!, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
+              Text(auth.email!, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
             ],
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: auth.isAdmin ? Colors.amber.shade50 : Colors.blue.shade50,
+                color: auth.isAdmin
+                    ? AppTheme.statusWarning.withAlpha(40)
+                    : AppTheme.statusInfo.withAlpha(40),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: auth.isAdmin ? Colors.amber.shade300 : Colors.blue.shade300),
+                border: Border.all(color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -288,13 +294,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   Icon(
                     auth.isAdmin ? Icons.admin_panel_settings : Icons.person,
                     size: 14,
-                    color: auth.isAdmin ? Colors.amber.shade800 : Colors.blue.shade700,
+                    color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     auth.isAdmin ? strings.authRoleAdmin : strings.authRoleUser,
                     style: TextStyle(
-                      color: auth.isAdmin ? Colors.amber.shade900 : Colors.blue.shade700,
+                      color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -306,11 +312,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: AppTheme.statusSuccess.withAlpha(40),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green.shade300),
+                border: Border.all(color: AppTheme.statusSuccess),
               ),
-              child: Text(strings.authLoggedInChip, style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
+              child: Text(strings.authLoggedInChip, style: const TextStyle(color: AppTheme.statusSuccess, fontSize: 12, fontWeight: FontWeight.w600)),
             ),
             const SizedBox(height: 24),
             Row(
@@ -351,26 +357,29 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Future<void> _openChangePassword() async {
+    setState(() => _obscureDialog = true);
     final strings = context.read<LocaleProvider>().strings;
     final oldCtrl = TextEditingController();
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         title: Text(strings.changePasswordBtn),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(controller: oldCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordOld)),
-            TextField(controller: newCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordNew)),
+            TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(icon: Icon(_obscureDialog ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
             TextField(controller: confirmCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordConfirm)),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
         ],
+      ),
       ),
     );
     if (!mounted || confirmed != true) return;
@@ -414,7 +423,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         content: Text(strings.logoutEverywhereConfirm),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
         ],
       ),
     );
@@ -447,11 +456,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         const SizedBox(height: 16),
         TextField(
           controller: _loginPasswordCtrl,
-          obscureText: true,
+          obscureText: _obscureLogin,
           decoration: InputDecoration(
             labelText: strings.authPasswordLabel,
             border: const OutlineInputBorder(),
             prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureLogin ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+              tooltip: strings.authTogglePassword,
+              onPressed: () => setState(() => _obscureLogin = !_obscureLogin),
+            ),
           ),
           enabled: !_busy,
           onSubmitted: (_) => _submitLogin(),
@@ -466,7 +480,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ),
           child: Row(
             children: [
-              const Icon(Icons.info_outline, size: 16, color: Colors.amber),
+              const Icon(Icons.info_outline, size: 16, color: AppTheme.statusWarning),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -489,7 +503,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(strings.authOrDivider, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              child: Text(strings.authOrDivider, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
             ),
             const Expanded(child: Divider()),
           ],
@@ -508,7 +522,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         Text(
           strings.authGuestNote,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
+          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -542,11 +556,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         const SizedBox(height: 12),
         TextField(
           controller: _regPasswordCtrl,
-          obscureText: true,
+          obscureText: _obscureRegister,
           decoration: InputDecoration(
             labelText: strings.authPasswordMinLabel,
             border: const OutlineInputBorder(),
             prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureRegister ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+              tooltip: strings.authTogglePassword,
+              onPressed: () => setState(() => _obscureRegister = !_obscureRegister),
+            ),
           ),
           enabled: !_busy,
         ),
@@ -571,7 +590,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         Text(
           strings.authRegisterFootnote,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
+          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ],
     );

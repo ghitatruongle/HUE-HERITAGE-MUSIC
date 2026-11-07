@@ -1,5 +1,42 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.2-beta1 (2026-11-06) — "Học hát hoàn thiện + Nâng cấp giao diện"
+
+> Bản beta chốt chất lượng: nghiên cứu B (tách nốt phía bản mẫu làm lại 2 giai đoạn), sửa tận cùng lỗi signed-URL hết hạn, và nâng cấp UI theo hệ design token thống nhất.
+
+### Thuật toán chấm điểm (server)
+- Tách nốt phía bản mẫu 2 giai đoạn (B1): đường nốt trung tâm median-nặng riêng cho bản mẫu + ngưỡng delta — nốt mẫu phủ trọn thời gian có giọng kể cả bản nhạc cụ và bản thu cổ
+- Merge mảnh vụn phía bản mẫu (B2): nốt quá ngắn hoặc cách đứt quãng nhỏ được ghép lại — hết cảnh phạt oan "thiếu nốt" khi mẫu vỡ vụn
+- Bộ đánh giá chuẩn hóa (B5): bộ câu hand-label đo precision/recall onset theo chuẩn MIREX; cờ `REFERENCE_SEGMENTATION=v2` cho phép rollback 1 dòng
+
+### Cứu kết nối phát nhạc (client)
+- Signed URL hết hạn 6h không còn "chết" bài luyện: phát lỗi tự re-sign lại 1 lần rồi phát tiếp
+- Nút nghe mẫu nghệ nhân báo lỗi rõ + retry thay vì im lặng không phản hồi
+
+### Nâng cấp giao diện
+- Hệ design token trong `AppTheme`: border + 4 màu trạng thái chuẩn (thành công/cảnh báo/lỗi/info) + gradient thương hiệu #2A1545 một nguồn duy nhất
+- TextTheme + component themes: TabBar, Chip, Dialog, SnackBar (floating), Tooltip, ListTile — hết cảnh mỗi màn tự bày kiểu chữ
+- Sửa màn Sáng tạo tối om trong light mode; sửa tương phản nút vàng chữ trắng light mode; widget dùng chung hết dark-only
+- Widget kit chung: ErrorPanel có nút thử lại, EmptyState có icon + nút hành động — áp vào Thư viện/Phục hồi/Quản trị/Học hát/Phân tích
+- AudioPlayerBar v2: loading không nhảy layout, tooltip, trạng thái buffering, API bản compact cho màn nhỏ
+- Chart kit thống nhất: 1 bảng màu cho cả app (vàng = bản mẫu, xanh = giọng bạn) thay 3 bộ màu riêng lẻ
+- Màn Học hát polish: nhịp thu âm nhấp nháy, VU meter theo theme, switch đúng kích thước chạm, badge điểm thành card
+- Login polish: chip vai trò theo theme, nút hiện/ẩn mật khẩu trên cả 3 ô nhập
+- A11y + i18n sweep: đủ tooltip, touch target ≥ 40px, chuẩn hóa toàn bộ chuỗi lọt tiếng Anh
+
+### Polish luyện tập
+- Xem trước giọng trên máy ẩn ở web (hết khựng 1-3s khi chấm take trên trình duyệt)
+- Đếm nhập viết lại: hủy được, lỗi metronome hiển thị thay vì nuốt lặng lẽ
+- Chip verdict render từ `verdict_code` — hết so chuỗi literal tiếng Việt
+- Gỡ mâu thuẫn trần thời lượng: câu dài tới 35s được chấm đủ thay vì cụt 30s
+- Lưu tiến độ/MIDI lỗi được ghi log thay vì nuốt im lặng
+
+### Hạ tầng
+- `/health` thành endpoint async: giám sát luôn trả lời kể cả khi server quá tải (không xếp hàng threadpool)
+- Admin trưởng luôn đăng nhập được dưới flood đăng nhập (miễn trừ IP-flood-bucket cho admin trưởng — mọi khóa khác giữ nguyên)
+- Version app khớp server `0.0.2-beta1` (alpha2 trước đây bị lệch app=alpha1)
+- `.env.example` đủ biến cấu hình (`ADMIN_TRUONG_USERNAME`, `STORAGE_DIR`, `MODELS_DIR`, `DATASETS_DIR`, `WEB_DIR`) + ghi rõ default
+
 ## 0.0.2-alpha2 (2026-11-05) — "Học hát cho người dùng"
 
 > Bản nâng cấp lớn của chế độ Học hát: thuật toán so khớp làm lại từ gốc, thu âm mẫu nghệ nhân theo câu, hướng dẫn từng nốt, luyện thang ngũ cung chấm bằng DTW thật.

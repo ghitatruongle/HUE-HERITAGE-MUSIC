@@ -27,6 +27,13 @@ class CreationScreen extends StatefulWidget {
 }
 
 class _CreationScreenState extends State<CreationScreen> with SingleTickerProviderStateMixin {
+
+  Color get _surface => Theme.of(context).colorScheme.surface;
+  Color get _surfaceVariant => Theme.of(context).colorScheme.surfaceContainerHighest;
+  Color get _outline => Theme.of(context).colorScheme.outline;
+  Color get _onSurface => Theme.of(context).colorScheme.onSurface;
+  Color get _onSurfaceVariant => Theme.of(context).colorScheme.onSurfaceVariant;
+
   late TabController _tabController;
 
   List<HeritageItem> _tunes = [];
@@ -440,13 +447,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   Widget _buildTabBar(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
     return Container(
-      color: AppTheme.darkSurfaceVariant,
+      color: _surfaceVariant,
       child: TabBar(
         controller: _tabController,
         indicatorColor: AppTheme.imperialGold,
         indicatorWeight: 3,
         labelColor: AppTheme.imperialGold,
-        unselectedLabelColor: Colors.white60,
+        unselectedLabelColor: _onSurfaceVariant,
         labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
         tabs: [
           Tab(
@@ -519,7 +526,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           ),
           if (_errorTab2 != null) ...[
             const SizedBox(height: 8),
-            Text(_errorTab2!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+            Text(_errorTab2!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 13)),
           ],
           if (_taskTab2 != null) ...[
             const SizedBox(height: 14),
@@ -535,9 +542,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: _surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,7 +555,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               const SizedBox(width: 6),
               Text(
                 strings.creationPickTuneLabel,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _onSurface),
               ),
             ],
           ),
@@ -562,7 +569,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.darkBorder),
+                borderSide: BorderSide(color: _outline),
               ),
             ),
             items: [
@@ -596,7 +603,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: _surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0x33D4AF37)),
       ),
@@ -626,28 +633,28 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.white10,
+                    color: _surfaceVariant,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     '${item.bpm!.toStringAsFixed(0)} BPM',
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    style: TextStyle(color: _onSurfaceVariant, fontSize: 11),
                   ),
                 ),
               const Spacer(),
               Text(
                 item.artist.isNotEmpty ? item.artist : strings.creationFolkArtist,
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                style: TextStyle(color: _onSurfaceVariant, fontSize: 12),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
             item.title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: _onSurface,
             ),
           ),
           const SizedBox(height: 8),
@@ -688,9 +695,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurfaceVariant,
+        color: _surfaceVariant,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -700,10 +707,10 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             children: [
               Text(
                 strings.creationLyricsTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: _onSurface,
                 ),
               ),
               if (hasOrnaments)
@@ -714,17 +721,17 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                     decoration: BoxDecoration(
                       color: _showOrnaments
                           ? AppTheme.primaryPurple.withAlpha(120)
-                          : Colors.white10,
+                          : _surfaceVariant,
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
                         color: _showOrnaments
                             ? AppTheme.primaryPurpleLight
-                            : Colors.white24,
+                            : _outline,
                       ),
                     ),
                     child: Text(
                       _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
-                      style: const TextStyle(fontSize: 11, color: Colors.white),
+                      style: TextStyle(fontSize: 11, color: _onSurface),
                     ),
                   ),
                 ),
@@ -735,7 +742,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.darkBg,
+              color: _surfaceVariant,
               borderRadius: BorderRadius.circular(8),
             ),
             child: SelectableText(
@@ -760,9 +767,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: _surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -793,6 +800,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             AudioPlayerBar(
               key: Key(audioUrl),
               url: audioUrl,
+              dio: server.api.dio,
               label: strings.creationOriginalTrack(item.title),
             ),
           ],
@@ -806,16 +814,16 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: _surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             strings.creationAiRecreateTitle,
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.white),
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: _onSurface),
           ),
           const SizedBox(height: 10),
           Row(
@@ -843,7 +851,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _dropdownField('LoRA strength', _strengthTab1.toStringAsFixed(1), ['0.4', '0.6', '0.8', '1.0'], (v) {
+                child: _dropdownField(strings.creationLoraStrength, _strengthTab1.toStringAsFixed(1), ['0.4', '0.6', '0.8', '1.0'], (v) {
                   setState(() => _strengthTab1 = double.parse(v));
                 }),
               ),
@@ -877,7 +885,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           ),
           if (_errorTab1 != null) ...[
             const SizedBox(height: 8),
-            Text(_errorTab1!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+            Text(_errorTab1!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 13)),
           ],
         ],
       ),
@@ -919,7 +927,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           const SizedBox(height: 4),
           Text(
             strings.creationLockedMelodyDesc,
-            style: const TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+            style: TextStyle(fontSize: 12, color: _onSurfaceVariant, height: 1.4),
           ),
         ],
       ),
@@ -931,9 +939,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurfaceVariant,
+        color: _surfaceVariant,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -944,7 +952,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               const SizedBox(width: 6),
               Text(
                 strings.creationRhymeGuideTitle,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _onSurface),
               ),
             ],
           ),
@@ -958,7 +966,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           const SizedBox(height: 10),
           Text(
             strings.creationSampleVerseTitle,
-            style: const TextStyle(fontSize: 11.5, color: Colors.white60),
+            style: TextStyle(fontSize: 11.5, color: _onSurfaceVariant),
           ),
           const SizedBox(height: 6),
           Wrap(
@@ -1002,7 +1010,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             const SizedBox(width: 5),
             Text(
               label,
-              style: const TextStyle(fontSize: 11.5, color: Colors.white),
+              style: TextStyle(fontSize: 11.5, color: _onSurface),
             ),
           ],
         ),
@@ -1015,9 +1023,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: _surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1027,11 +1035,11 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             children: [
               Text(
                 strings.creationComposeTitle,
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.white),
+                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: _onSurface),
               ),
               Text(
                 strings.creationWordCount(_customLyricsCtrl.text.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length),
-                style: const TextStyle(fontSize: 11, color: Colors.white54),
+                style: TextStyle(fontSize: 11, color: _onSurfaceVariant),
               ),
             ],
           ),
@@ -1043,12 +1051,12 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             style: const TextStyle(fontSize: 13.5, height: 1.5),
             decoration: InputDecoration(
               hintText: strings.creationLyricsHint,
-              hintStyle: const TextStyle(color: Colors.white30, fontSize: 12.5),
+              hintStyle: TextStyle(color: _onSurfaceVariant, fontSize: 12.5),
               filled: true,
-              fillColor: AppTheme.darkBg,
+              fillColor: _surfaceVariant,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppTheme.darkBorder),
+                borderSide: BorderSide(color: _outline),
               ),
             ),
           ),
@@ -1062,9 +1070,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: _surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.darkBorder),
+        border: Border.all(color: _outline),
       ),
       child: Column(
         children: [
@@ -1103,7 +1111,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Row(
             children: [
               Expanded(
-                child: _dropdownField('LoRA strength', _strengthTab2.toStringAsFixed(1), ['0.4', '0.6', '0.8', '1.0'], (v) {
+                child: _dropdownField(strings.creationLoraStrength, _strengthTab2.toStringAsFixed(1), ['0.4', '0.6', '0.8', '1.0'], (v) {
                   setState(() => _strengthTab2 = double.parse(v));
                 }),
               ),
@@ -1140,11 +1148,11 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: accentColor ?? Colors.white54),
+        Icon(icon, size: 15, color: accentColor ?? _onSurfaceVariant),
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white70),
+          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _onSurfaceVariant),
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -1152,7 +1160,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             value,
             style: TextStyle(
               fontSize: 12.5,
-              color: accentColor ?? Colors.white,
+              color: accentColor ?? _onSurface,
               fontWeight: accentColor != null ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -1193,17 +1201,17 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.music_off_rounded, size: 48, color: Colors.white38),
+            Icon(Icons.music_off_rounded, size: 48, color: _onSurfaceVariant),
             const SizedBox(height: 12),
             Text(
               strings.creationEmptyTunesTitle,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _onSurface),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               strings.creationEmptyTunesDesc,
-              style: const TextStyle(fontSize: 12.5, color: Colors.white60, height: 1.4),
+              style: TextStyle(fontSize: 12.5, color: _onSurfaceVariant, height: 1.4),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),

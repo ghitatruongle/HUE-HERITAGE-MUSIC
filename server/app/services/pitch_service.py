@@ -92,7 +92,6 @@ def _decode_via_librosa(data: bytes, max_seconds: Optional[float] = MAX_SECONDS)
     sr = None
     try:
         import soundfile as sf
-        import numpy as np
         bio = io.BytesIO(data)
         data_arr, sr = sf.read(bio, dtype="float32")
         if data_arr.ndim > 1:
@@ -101,16 +100,16 @@ def _decode_via_librosa(data: bytes, max_seconds: Optional[float] = MAX_SECONDS)
     except Exception:
         try:
             import librosa
-            import numpy as np
             bio = io.BytesIO(data)
             arr, sr = librosa.load(bio, sr=None, mono=True)
             samples = arr
         except Exception:
             raise ValueError("wav decode failed")
 
+    if np is None:
+        raise ValueError("wav decode failed")
     if sr is None or sr <= 0 or samples is None or len(samples) == 0:
         raise ValueError("bad wav header")
-    import numpy as np
     arr = np.asarray(samples, dtype=np.float64)
     if max_seconds is not None and max_seconds > 0:
         limit = int(sr * max_seconds)

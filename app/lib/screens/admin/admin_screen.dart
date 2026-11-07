@@ -172,13 +172,13 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
           child: ListTile(
             leading: Icon(
               s.engineOnline ? Icons.dns : Icons.dns_outlined,
-              color: s.engineOnline ? AppTheme.emeraldGreen : Colors.redAccent,
+              color: s.engineOnline ? AppTheme.emeraldGreen : AppTheme.statusDanger,
             ),
             title: Text(
               s.engineOnline ? strings.adminEngineOnline : strings.adminEngineOffline,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: s.engineOnline ? AppTheme.emeraldGreen : Colors.redAccent,
+                color: s.engineOnline ? AppTheme.emeraldGreen : AppTheme.statusDanger,
               ),
             ),
             subtitle: s.engineOnline ? null : Text(strings.adminEngineOfflineHint),
@@ -592,7 +592,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
             child: Text(strings.adminCancel),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.statusDanger),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(strings.adminDelete),
           ),
@@ -855,11 +855,11 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                 if (!entry.originalExists)
                   Tooltip(
                     message: strings.adminStorageOriginalMissing,
-                    child: const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                    child: const Icon(Icons.warning_amber_rounded, color: AppTheme.statusWarning, size: 20),
                   ),
                 IconButton(
                   tooltip: strings.adminDelete,
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  icon: const Icon(Icons.delete_outline, color: AppTheme.statusDanger),
                   onPressed: () => _confirmDelete(entry),
                 ),
               ],

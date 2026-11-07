@@ -7,6 +7,8 @@ import '../../models/heritage_item.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/error_panel.dart';
 import '../../widgets/common_button.dart';
 
 class HeritageListScreen extends StatefulWidget {
@@ -114,8 +116,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
   }
 
   Widget _buildMasterDetail(BuildContext context, dynamic strings) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? const Color(0xFF2E2B48) : const Color(0xFFE4DFEE);
+    final borderColor = Theme.of(context).colorScheme.outline;
 
     return Row(
       children: [
@@ -228,10 +229,10 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_hasError && _items.isEmpty) {
-      return Center(child: Text('${strings.errorPrefix}: ${strings.loadFailGeneric}'));
+      return ErrorPanel(message: '${strings.errorPrefix}: ${strings.loadFailGeneric}', onRetry: _reload);
     }
     if (_items.isEmpty) {
-      return Center(child: Text(strings.noRecordings));
+      return EmptyState(icon: Icons.library_music_rounded, title: strings.noRecordings, ctaLabel: strings.learnRetry, onCta: _reload);
     }
     final hasMore = _items.length < _total;
     return ListView.builder(
@@ -367,11 +368,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2C164D), Color(0xFF45226E)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              gradient: AppTheme.brandGradient,
             ),
             child: Row(
               children: [
@@ -495,7 +492,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(
-                        width: 150,
+                        width: MediaQuery.of(context).size.width > 500 ? 150 : 110,
                         child: Text('SHA-256', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                       ),
                       Expanded(

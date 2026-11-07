@@ -78,7 +78,7 @@ async def health_patient(base, tries=6, gap=3.0):
     return False, ms
 
 
-async def run_config(config, tokens, stage_seconds, stagger, cooldown):
+async def run_config(config, tokens, stage_seconds, stagger, cooldown, stages=(10000, 15000, 20000)):
     print(f"\n{'#' * 8} CẤU HÌNH SERVER: {config} {'#' * 8}")
     if config == "production":
         envdir = LOGDIR / "prod"
@@ -92,7 +92,7 @@ async def run_config(config, tokens, stage_seconds, stagger, cooldown):
     verdicts = []
     rss_peak = 0.0
     try:
-        for stage in (10000, 15000, 20000):
+        for stage in stages:
             print(f"\n== {config} — GIAI ĐOẠN {stage} VU, {stage_seconds:.0f}s ==")
             row = run_phase(stage, base, stage_seconds, tokens, 16, 0.3, 1.5, stagger, pid)
             print_row(row, f"{stage} VU")
@@ -134,6 +134,7 @@ async def main():
     ap.add_argument("--stagger", type=float, default=10.0)
     ap.add_argument("--cooldown", type=float, default=8.0)
     ap.add_argument("--configs", default="production,bare")
+    ap.add_argument("--stages", default="10000,15000,20000")
     args = ap.parse_args()
     try:
         sys.stdout.reconfigure(line_buffering=True)
@@ -141,7 +142,7 @@ async def main():
         pass
 
     stamp = time.strftime("%Y-%m-%d %H:%M")
-    print(f"MEGA LOAD ALPHA2 10k→20k VU — {stamp} — configs: {args.configs}")
+    print(f"MEGA LOAD BETA1 {args.stages} VU — {stamp} — configs: {args.configs} — users: {args.users}")
     LOGDIR.mkdir(parents=True, exist_ok=True)
 
     setup_server = None
@@ -162,9 +163,10 @@ async def main():
         sys.exit(1)
     print(f"chuẩn bị {len(tokens)} user thật cho {args.users}+ VU chia bù")
 
+    stages = tuple(int(x) for x in args.stages.split(",") if x.strip())
     all_verdicts = []
     for config in [c.strip() for c in args.configs.split(",") if c.strip()]:
-        vs = await run_config(config, tokens, args.stage_seconds, args.stagger, args.cooldown)
+        vs = await run_config(config, tokens, args.stage_seconds, args.stagger, args.cooldown, stages)
         all_verdicts.extend(vs)
 
     print("\n" + "=" * 60)

@@ -51,10 +51,10 @@ class HistoryService extends ChangeNotifier {
   List<HistoryEntry> get entries => List.unmodifiable(_entries);
 
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
-    if (raw == null) return;
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw == null) return;
       final list = jsonDecode(raw) as List;
       _entries = list
           .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>))
@@ -95,8 +95,10 @@ class HistoryService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, jsonEncode(_entries.map((e) => e.toJson()).toList()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, jsonEncode(_entries.map((e) => e.toJson()).toList()));
+    } catch (_) {}
     notifyListeners();
   }
 }

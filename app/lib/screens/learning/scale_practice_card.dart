@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../models/lesson.dart';
 import '../../api/endpoints/lesson_api.dart';
 import '../../services/locale_provider.dart';
@@ -36,18 +37,18 @@ class ScalePracticeCard extends StatelessWidget {
     required this.onTransposeChanged,
   });
 
-  Color _verdictColor(String code) {
+  Color _verdictColor(String code, BuildContext context) {
     switch (code) {
       case 'ok':
-        return Colors.green.withAlpha(40);
+        return AppTheme.statusSuccess.withAlpha(40);
       case 'minor':
-        return Colors.amber.withAlpha(40);
+        return AppTheme.statusWarning.withAlpha(40);
       case 'octave':
-        return Colors.deepOrange.withAlpha(60);
+        return AppTheme.statusWarning.withAlpha(70);
       case 'off':
-        return Colors.red.withAlpha(40);
+        return AppTheme.statusDanger.withAlpha(40);
       default:
-        return Colors.grey.withAlpha(40);
+        return Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40);
     }
   }
 
@@ -88,7 +89,9 @@ class ScalePracticeCard extends StatelessWidget {
                   const Spacer(),
                   Text(strings.practiceTranspose, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
                   const SizedBox(width: 6),
-                  DropdownButton<int>(
+                  Tooltip(
+                    message: strings.practiceTranspose,
+                    child: DropdownButton<int>(
                     value: transpose,
                     underline: const SizedBox.shrink(),
                     items: [
@@ -98,6 +101,7 @@ class ScalePracticeCard extends StatelessWidget {
                     onChanged: (v) {
                       if (v != null) onTransposeChanged(v);
                     },
+                  ),
                   ),
                 ],
               ),
@@ -117,7 +121,7 @@ class ScalePracticeCard extends StatelessWidget {
                     icon: Icon(recording ? Icons.stop : Icons.mic, size: 16),
                     label: Text(recording ? strings.practiceStopRecord : strings.practiceScaleRecord),
                     style: FilledButton.styleFrom(
-                      backgroundColor: recording ? Colors.red : null,
+                      backgroundColor: recording ? AppTheme.statusDanger : null,
                     ),
                     onPressed: onToggleRecord,
                   ),
@@ -156,7 +160,7 @@ class ScalePracticeCard extends StatelessWidget {
                         Tooltip(
                           message: p.hint.isNotEmpty ? p.hint : p.verdict,
                           child: Chip(
-                            backgroundColor: _verdictColor(p.verdictCode),
+                            backgroundColor: _verdictColor(p.verdictCode, context),
                             label: Text(
                               '${p.name} ${p.verdictCode == "unclear" ? "" : "${p.errCents > 0 ? "+" : ""}${p.errCents.toStringAsFixed(0)}c"}',
                               style: const TextStyle(fontSize: 11),
@@ -173,7 +177,7 @@ class ScalePracticeCard extends StatelessWidget {
                   children: [
                     for (final n in result!.notes)
                       Chip(
-                        backgroundColor: n.hit ? Colors.green.withAlpha(40) : Colors.red.withAlpha(40),
+                        backgroundColor: n.hit ? AppTheme.statusSuccess.withAlpha(40) : AppTheme.statusDanger.withAlpha(40),
                         label: Text('${n.name} (${(n.share * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 11)),
                       ),
                   ],

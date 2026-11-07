@@ -1,5 +1,6 @@
 from typing import Optional
 import asyncio
+import logging
 import re
 import secrets
 import time
@@ -279,7 +280,7 @@ async def practice_section(
                 (mid_dir / mid_name).write_bytes(user_midi)
                 result["user_midi"] = mid_name
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("practice midi save failed", exc_info=True)
         return result
 
     try:
@@ -320,5 +321,5 @@ async def practice_section(
             finally:
                 db2.close()
         except Exception:
-            pass
+            logging.getLogger(__name__).warning("practice session save failed", exc_info=True)
     return result

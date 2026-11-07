@@ -250,7 +250,7 @@ def lesson_summary(item: HeritageItem) -> Optional[dict]:
     }
 
 
-def section_wav(item: HeritageItem, section_index: int) -> Optional[object]:
+def section_wav(item: HeritageItem, section_index: int) -> Optional[Path]:
     lesson = get_lesson(item)
     for s in lesson.get("sections", []):
         if s["index"] == section_index:

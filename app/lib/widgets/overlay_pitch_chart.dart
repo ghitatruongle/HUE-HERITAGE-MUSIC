@@ -1,3 +1,4 @@
+import 'chart_palette.dart';
 import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
@@ -47,6 +48,7 @@ class OverlayPitchChart extends StatelessWidget {
     if (maxX <= minX) maxX = minX + 1;
     if (maxY <= 0) maxY = 1;
     final theme = Theme.of(context);
+    final palette = ChartPalette.of(context);
     return SizedBox(
       height: 220,
       child: LineChart(
@@ -70,14 +72,14 @@ class OverlayPitchChart extends StatelessWidget {
               spots: ref,
               isCurved: false,
               barWidth: 2,
-              color: const Color(0xFFD4AF37),
+              color: palette.reference,
               dotData: const FlDotData(show: false),
             ),
             LineChartBarData(
               spots: user,
               isCurved: false,
               barWidth: 2,
-              color: Colors.lightBlueAccent,
+              color: palette.user,
               dashArray: [6, 3],
               dotData: const FlDotData(show: false),
             ),

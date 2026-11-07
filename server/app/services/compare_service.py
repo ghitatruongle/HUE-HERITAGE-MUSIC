@@ -1,10 +1,18 @@
 import math
 
 from ..audio_dsp import dtw_aligner
+from ..config import settings
 from . import pitch_service, amt_service
 
 MAX_POINTS = 300
-MAX_COMPARE_SECONDS = 30.0
+MAX_COMPARE_SECONDS = 35.0
+REF_SMOOTH_WINDOW = 17
+REF_DELTA_CENTS = 80.0
+REF_MIN_DUR = 0.12
+REF_MERGE_GAP = 0.09
+REF_MERGE_CENTS = 120.0
+REF_ABSORB_DUR = 0.08
+REF_ABSORB_CENTS = 200.0
 WEIGHT_PITCH = 0.5
 WEIGHT_RHYTHM = 0.3
 WEIGHT_STABILITY = 0.2
@@ -206,6 +214,95 @@ def _filter_transition_notes(notes, min_dur=0.15, near_cents=250.0):
     return out
 
 
+def _flush_delta_note(notes, times, frames, start, end_i, step):
+    voiced = [v for v in frames if v > 0]
+    if not voiced or end_i <= start:
+        return
+    dur = times[end_i - 1] + step - times[start]
+    if dur < REF_MIN_DUR - 0.001:
+        return
+    m = amt_service.median(voiced)
+    notes.append({
+        "midi": amt_service.freq_to_midi(m),
+        "freq": round(m, 1),
+        "start": round(times[start], 3),
+        "end": round(times[end_i - 1] + step, 3),
+        "velocity": amt_service.VELOCITY,
+    })
+
+
+def _delta_segment(times, f0):
+    notes = []
+    step = times[1] - times[0] if len(times) > 1 else 0.0
+    start = -1
+    frames = []
+    prev_cents = None
+    for i, f in enumerate(f0):
+        if f <= 0:
+            if start >= 0:
+                _flush_delta_note(notes, times, frames, start, i, step)
+                start = -1
+                frames = []
+                prev_cents = None
+            continue
+        c = 1200 * math.log2(f / 440.0)
+        if start < 0:
+            start = i
+            frames = [f]
+        elif prev_cents is not None and abs(c - prev_cents) > REF_DELTA_CENTS:
+            _flush_delta_note(notes, times, frames, start, i, step)
+            start = i
+            frames = [f]
+        else:
+            frames.append(f)
+        prev_cents = c
+    if start >= 0:
+        _flush_delta_note(notes, times, frames, start, len(f0), step)
+    return notes
+
+
+def _merge_fragments(notes):
+    if len(notes) < 2:
+        return notes
+    out = []
+    for nt in notes:
+        if out:
+            a = out[-1]
+            gap = nt["start"] - a["end"]
+            delta = amt_service.cents_diff(nt["freq"], a["freq"])
+            dur_a = a["end"] - a["start"]
+            dur_b = nt["end"] - nt["start"]
+            if gap < REF_MERGE_GAP and delta < REF_MERGE_CENTS:
+                a["end"] = nt["end"]
+                w = max(1e-6, dur_a + dur_b)
+                m = (a["freq"] * dur_a + nt["freq"] * dur_b) / w
+                a["freq"] = round(m, 1)
+                a["midi"] = amt_service.freq_to_midi(m)
+                continue
+            if dur_b < REF_ABSORB_DUR and gap < REF_MERGE_GAP and delta < REF_ABSORB_CENTS:
+                a["end"] = nt["end"]
+                continue
+            if dur_a < REF_ABSORB_DUR and gap < REF_MERGE_GAP and delta < REF_ABSORB_CENTS:
+                out[-1] = {
+                    "midi": nt["midi"],
+                    "freq": nt["freq"],
+                    "start": a["start"],
+                    "end": nt["end"],
+                    "velocity": nt["velocity"],
+                }
+                continue
+        out.append(nt)
+    return out
+
+
+def _reference_notes(times, smooth7, f0_raw):
+    if (settings.reference_segmentation or "").strip().lower() != "v2":
+        return _filter_transition_notes(amt_service.segment_notes(times, smooth7))
+    heavy = pitch_service.smooth_series(f0_raw, REF_SMOOTH_WINDOW)
+    notes = _delta_segment(times, heavy)
+    return _merge_fragments(notes)
+
+
 def _match_note_sequences(ref_notes, user_notes):
     n = len(ref_notes)
     m = len(user_notes)
@@ -277,7 +374,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
     med_cents = round(sorted(errs)[len(errs) // 2], 1)
     mean_off = round(sum(offs) / len(offs), 3)
 
-    ref_notes = _filter_transition_notes(amt_service.segment_notes(s_times, s_smooth))
+    ref_notes = _reference_notes(s_times, s_smooth, s_f0)
     user_notes = _filter_transition_notes(amt_service.segment_notes(u_times, u_smooth))
 
     ref_step = (s_times[1] - s_times[0]) if len(s_times) > 1 else 0.016

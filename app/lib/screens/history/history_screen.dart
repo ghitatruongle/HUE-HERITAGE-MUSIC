@@ -175,14 +175,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _localTile(BuildContext context, HistoryEntry e, LocaleProvider locale) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? const Color(0xFF2E2B48) : const Color(0xFFE4DFEE),
+          color: Theme.of(context).colorScheme.outline,
         ),
       ),
       child: ListTile(
@@ -211,7 +210,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 const Text(' • ', style: TextStyle(fontSize: 11)),
                 Text(
                   locale.strings.historyScore(e.score!.toStringAsFixed(1)),
-                  style: const TextStyle(fontSize: 11, color: Colors.greenAccent, fontWeight: FontWeight.w600),
+                  style: const TextStyle(fontSize: 11, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
                 ),
               ],
             ],
@@ -224,10 +223,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _statusChip(String status, LocaleProvider locale) {
     final color = switch (status) {
-      'done' => AppTheme.emeraldGreen,
-      'error' => Colors.redAccent,
-      'running' => Colors.blueAccent,
-      _ => Colors.grey,
+      'done' => AppTheme.statusSuccess,
+      'error' => AppTheme.statusDanger,
+      'running' => AppTheme.statusInfo,
+      _ => Theme.of(context).colorScheme.onSurfaceVariant,
     };
     final label = switch (status) {
       'done' => locale.strings.historyStatusDone,

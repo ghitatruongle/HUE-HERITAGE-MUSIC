@@ -5,6 +5,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/auth_endpoints.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/clipboard_helper.dart';
+import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 
@@ -79,7 +80,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
       children: [
         Row(
           children: [
-            const Icon(Icons.vpn_key_outlined, size: 18, color: Colors.amber),
+            const Icon(Icons.vpn_key_outlined, size: 18, color: AppTheme.statusWarning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -97,7 +98,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
         const SizedBox(height: 4),
         Text(
           strings.authInviteManageHint,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
         if (_loading && _invites.isEmpty)
@@ -105,7 +106,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
         else if (_hasError && _invites.isEmpty)
           Text(
             strings.authInviteLoadFail,
-            style: const TextStyle(fontSize: 12, color: Colors.red),
+            style: const TextStyle(fontSize: 12, color: AppTheme.statusDanger),
           )
         else ...[
           if (_invites.isEmpty)
@@ -116,8 +117,10 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
           for (final inv in _invites)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Row(
+                  children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,20 +135,20 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
                             Icon(
                               inv.used ? Icons.check_circle : Icons.schedule,
                               size: 14,
-                              color: inv.used ? Colors.green : Colors.amber,
+                              color: inv.used ? AppTheme.statusSuccess : AppTheme.statusWarning,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               inv.used ? strings.authInviteUsed : strings.authInviteAvailable,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: inv.used ? Colors.green : Colors.amber.shade800,
+                                color: inv.used ? AppTheme.statusSuccess : AppTheme.statusWarning,
                               ),
                             ),
                           ],
                         ),
                         if (inv.note.isNotEmpty)
-                          Text(inv.note, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+                          Text(inv.note, style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -159,7 +162,8 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
                     tooltip: strings.authInviteDelete,
                     onPressed: () => _deleteInvite(strings, inv),
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
           if (_invites.length < _total)
@@ -239,7 +243,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
         content: Text('${strings.authInviteDeleteConfirm}: ${inv.code}?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
         ],
       ),
     );

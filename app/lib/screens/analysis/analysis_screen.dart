@@ -14,6 +14,7 @@ import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/pitch_contour_chart.dart';
 import '../../widgets/waveform_view.dart';
+import '../../widgets/error_panel.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -88,7 +89,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
-    final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -117,24 +117,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ],
         if (_error != null) ...[
           const SizedBox(height: 16),
-          Card(
-            color: scheme.errorContainer,
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline, color: scheme.onErrorContainer),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(_error!)),
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: () => setState(() => _error = null),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          ErrorPanel(message: _error!, onRetry: _loading ? null : _pickAndAnalyze),
         ],
         if (_source.isNotEmpty) ...[
           const SizedBox(height: 16),

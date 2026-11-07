@@ -257,7 +257,12 @@ def main():
     for wave in range(1, args.waves + 1):
         if wave > 1:
             t0 = time.time()
-            subprocess.run(["/tmp/hue_santap/start-santap.sh"], capture_output=True, timeout=60)
+            try:
+                subprocess.run(["/tmp/hue_santap/start-santap.sh"], capture_output=True, timeout=60)
+            except FileNotFoundError:
+                subprocess.run(["launchctl", "kickstart", "-k",
+                                f"gui/{__import__('os').getuid()}/com.ghita.hueheritagemusic.santap"],
+                               capture_output=True, timeout=60)
             up = False
             while time.time() - t0 < 45:
                 try:

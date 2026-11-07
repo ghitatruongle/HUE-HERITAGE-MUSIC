@@ -161,3 +161,15 @@ def test_env_probe_no_secret_leak(client):
             assert "sqlite" not in r.text.lower()[:4000]
         else:
             assert r.status_code in (404, 400)
+
+def test_health_endpoint_is_async_never_queues_threadpool():
+    from app.main import create_app
+
+    app = create_app()
+    route = next(r for r in app.routes if getattr(r, "path", "") == "/health")
+    handler = route.endpoint
+    import inspect as _inspect
+
+    assert _inspect.iscoroutinefunction(handler), (
+        "/health phải là async def — endpoint đồng bộ bị chết đói threadpool khi server quá tải"
+    )

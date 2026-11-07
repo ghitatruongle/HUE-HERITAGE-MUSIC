@@ -179,7 +179,8 @@ def test_lesson_cache_44k_migrated_to_16k(_auth_env):
     assert [s2["index"] for s2 in cached2["sections"]] == [s1["index"] for s1 in cached["sections"]]
 
 
-def test_poor_reference_fallback_no_missing_penalty():
+def test_poor_reference_fallback_no_missing_penalty(monkeypatch):
+    monkeypatch.setattr(settings, "reference_segmentation", "v1", raising=False)
     s_times, s_f0 = [], []
     t = 0.0
     for _ in range(60):

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../services/locale_provider.dart';
+import 'error_panel.dart';
 
 class AudioPlayerBar extends StatefulWidget {
   final String? url;
@@ -14,6 +15,7 @@ class AudioPlayerBar extends StatefulWidget {
   final Uint8List? bytes;
   final String label;
   final bool autoPlay;
+  final bool compact;
   final Dio? dio;
 
   const AudioPlayerBar({
@@ -23,6 +25,7 @@ class AudioPlayerBar extends StatefulWidget {
     this.bytes,
     this.label = '',
     this.autoPlay = false,
+    this.compact = false,
     this.dio,
   });
 
@@ -32,6 +35,7 @@ class AudioPlayerBar extends StatefulWidget {
 
 class _AudioPlayerBarState extends State<AudioPlayerBar> {
   final AudioPlayer _player = AudioPlayer();
+  int _loadGen = 0;
   bool _ready = false;
   bool _dragging = false;
   double _dragValue = 0;
@@ -67,13 +71,16 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
     return rawUrl;
   }
 
-  Future<String?> _signedUrl(String rawUrl) async {
+  Future<String?> _signedUrl(String rawUrl, {bool forceResign = false}) async {
     final dio = widget.dio;
     if (dio == null) {
       return null;
     }
     final parsedRaw = Uri.tryParse(rawUrl);
-    if (parsedRaw != null && parsedRaw.queryParameters.containsKey('e') && parsedRaw.queryParameters.containsKey('s')) {
+    final alreadySigned = parsedRaw != null &&
+        parsedRaw.queryParameters.containsKey('e') &&
+        parsedRaw.queryParameters.containsKey('s');
+    if (alreadySigned && !forceResign) {
       return null;
     }
     final idx = rawUrl.indexOf('/api/');
@@ -83,7 +90,16 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
     final pathAndQuery = rawUrl.substring(idx);
     final qIdx = pathAndQuery.indexOf('?');
     final path = qIdx >= 0 ? pathAndQuery.substring(0, qIdx) : pathAndQuery;
-    final query = qIdx >= 0 ? pathAndQuery.substring(qIdx + 1) : '';
+    var query = qIdx >= 0 ? pathAndQuery.substring(qIdx + 1) : '';
+    if (forceResign && query.isNotEmpty) {
+      final kept = <String>[];
+      for (final part in query.split('&')) {
+        final key = part.split('=').first;
+        if (key == 'e' || key == 's') continue;
+        kept.add(part);
+      }
+      query = kept.join('&');
+    }
     try {
       final res = await dio.get('/api/music/play-url', queryParameters: {'path': path});
       final data = res.data;
@@ -99,7 +115,8 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
     return null;
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceResign = false}) async {
+    final gen = ++_loadGen;
     try {
       if (mounted) {
         setState(() {
@@ -108,9 +125,11 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
         });
       }
       await _player.stop();
+      if (gen != _loadGen || !mounted) return;
       if (widget.url != null && widget.url!.isNotEmpty) {
         var finalUrl = _normalizeUrl(widget.url!);
-        final signed = await _signedUrl(finalUrl);
+        final signed = await _signedUrl(finalUrl, forceResign: forceResign);
+        if (gen != _loadGen) return;
         if (signed != null) {
           finalUrl = _normalizeUrl(signed);
         }
@@ -122,13 +141,13 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
       } else {
         throw StateError('no audio source');
       }
-      if (mounted) {
-        setState(() => _ready = true);
-        if (widget.autoPlay) {
-          await _player.play();
-        }
+      if (gen != _loadGen || !mounted) return;
+      setState(() => _ready = true);
+      if (widget.autoPlay) {
+        await _player.play();
       }
     } catch (e) {
+      if (gen != _loadGen || !mounted) return;
       if (mounted) {
         setState(() => _error = context.read<LocaleProvider>().strings.audioLoadFail);
       }
@@ -164,28 +183,94 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Expanded(
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Colors.red, fontSize: 12),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh, size: 18),
-              onPressed: _load,
-              tooltip: context.read<LocaleProvider>().strings.learnRetry,
-            ),
-          ],
+        child: ErrorPanel(
+          message: _error!,
+          onRetry: () => _load(forceResign: true),
         ),
       );
     }
     if (!_ready) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
-        child: Center(child: CircularProgressIndicator()),
+      return const SizedBox(
+        height: 56,
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    final strings = context.read<LocaleProvider>().strings;
+    final playButton = StreamBuilder<PlayerState>(
+      stream: _player.playerStateStream,
+      builder: (context, snap) {
+        final state = snap.data?.processingState ?? ProcessingState.idle;
+        final playing = snap.data?.playing ?? false;
+        final buffering = state == ProcessingState.loading || state == ProcessingState.buffering;
+        return IconButton(
+          iconSize: 48,
+          tooltip: playing ? strings.audioPause : strings.playBtn,
+          icon: buffering
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.2),
+                )
+              : Icon(playing ? Icons.pause_circle : Icons.play_circle),
+          onPressed: () {
+            if (playing) {
+              _player.pause();
+            } else {
+              _player.play();
+            }
+          },
+        );
+      },
+    );
+    final sliderRow = StreamBuilder<Duration>(
+      stream: _player.positionStream,
+      builder: (context, snap) {
+        final pos = snap.data ?? Duration.zero;
+        final total = _player.duration ?? Duration.zero;
+        final maxMs = total.inMilliseconds.toDouble();
+        final cap = maxMs > 0 ? maxMs : 1.0;
+        final cur = _dragging
+            ? _dragValue
+            : pos.inMilliseconds.toDouble().clamp(0.0, cap).toDouble();
+        return Row(
+          children: [
+            Text(_fmt(pos)),
+            Expanded(
+              child: Slider(
+                value: cur,
+                max: cap,
+                onChangeStart: (v) {
+                  setState(() {
+                    _dragging = true;
+                    _dragValue = v;
+                  });
+                },
+                onChanged: (v) {
+                  setState(() => _dragValue = v);
+                },
+                onChangeEnd: (v) {
+                  _player.seek(Duration(milliseconds: v.toInt()));
+                  setState(() => _dragging = false);
+                },
+              ),
+            ),
+            Text(_fmt(total)),
+          ],
+        );
+      },
+    );
+    if (widget.compact) {
+      return Row(
+        children: [
+          playButton,
+          Expanded(child: sliderRow),
+        ],
       );
     }
     return Column(
@@ -196,60 +281,8 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
             padding: const EdgeInsets.only(bottom: 4),
             child: Text(widget.label, style: Theme.of(context).textTheme.bodySmall),
           ),
-        StreamBuilder<PlayerState>(
-          stream: _player.playerStateStream,
-          builder: (context, snap) {
-            final playing = snap.data?.playing ?? false;
-            return IconButton(
-              iconSize: 48,
-              icon: Icon(playing ? Icons.pause_circle : Icons.play_circle),
-              onPressed: () {
-                if (playing) {
-                  _player.pause();
-                } else {
-                  _player.play();
-                }
-              },
-            );
-          },
-        ),
-        StreamBuilder<Duration>(
-          stream: _player.positionStream,
-          builder: (context, snap) {
-            final pos = snap.data ?? Duration.zero;
-            final total = _player.duration ?? Duration.zero;
-            final maxMs = total.inMilliseconds.toDouble();
-            final cap = maxMs > 0 ? maxMs : 1.0;
-            final cur = _dragging
-                ? _dragValue
-                : pos.inMilliseconds.toDouble().clamp(0.0, cap).toDouble();
-            return Row(
-              children: [
-                Text(_fmt(pos)),
-                Expanded(
-                  child: Slider(
-                    value: cur,
-                    max: cap,
-                    onChangeStart: (v) {
-                      setState(() {
-                        _dragging = true;
-                        _dragValue = v;
-                      });
-                    },
-                    onChanged: (v) {
-                      setState(() => _dragValue = v);
-                    },
-                    onChangeEnd: (v) {
-                      _player.seek(Duration(milliseconds: v.toInt()));
-                      setState(() => _dragging = false);
-                    },
-                  ),
-                ),
-                Text(_fmt(total)),
-              ],
-            );
-          },
-        ),
+        playButton,
+        sliderRow,
       ],
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/locale_provider.dart';
+import 'chart_palette.dart';
 
 class CompareChart extends StatelessWidget {
   final List<double> times;
@@ -43,6 +44,7 @@ class CompareChart extends StatelessWidget {
     if (times.isEmpty) {
       return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(strings.noData)));
     }
+    final palette = ChartPalette.of(context);
     var peak = 100.0;
     for (final f in sampleF0) {
       if (f > peak) {
@@ -59,8 +61,8 @@ class CompareChart extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Text(sampleLabel ?? strings.compareChartSample, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 12)),
-            Text(targetLabel ?? strings.compareChartTarget, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(sampleLabel ?? strings.compareChartSample, style: TextStyle(color: palette.reference, fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(targetLabel ?? strings.compareChartTarget, style: TextStyle(color: palette.user, fontWeight: FontWeight.w600, fontSize: 12)),
           ],
         ),
         SizedBox(
@@ -75,12 +77,12 @@ class CompareChart extends StatelessWidget {
                 LineChartBarData(
                   spots: _spots(sampleF0),
                   dotData: const FlDotData(show: false),
-                  color: Colors.blue,
+                  color: palette.reference,
                 ),
                 LineChartBarData(
                   spots: _spots(warpedF0),
                   dotData: const FlDotData(show: false),
-                  color: Colors.red,
+                  color: palette.user,
                 ),
               ],
             ),

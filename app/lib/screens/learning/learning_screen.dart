@@ -11,6 +11,7 @@ import '../../api/endpoints/sing_api.dart';
 import '../../models/pitch_data.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/history_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
@@ -176,12 +177,27 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
     strings = context.watch<LocaleProvider>().strings;
     return Column(
       children: [
-        TabBar(
-          controller: _tabController,
-          tabs: [
-            Tab(icon: const Icon(Icons.graphic_eq), text: strings.listenTabTitle),
-            Tab(icon: const Icon(Icons.school), text: strings.practiceTabTitle),
-          ],
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicator: BoxDecoration(
+              color: AppTheme.primaryPurple,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            dividerColor: Colors.transparent,
+            labelColor: Colors.white,
+            unselectedLabelColor: scheme.onSurfaceVariant,
+            tabs: [
+              Tab(icon: const Icon(Icons.graphic_eq), text: strings.listenTabTitle),
+              Tab(icon: const Icon(Icons.school), text: strings.practiceTabTitle),
+            ],
+          ),
         ),
         Expanded(
           child: TabBarView(
@@ -208,7 +224,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
         if (_recording)
           Row(
             children: [
-              const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+              const _PulsingDot(),
               const SizedBox(width: 6),
               Text(strings.learnRecording),
             ],
@@ -238,10 +254,37 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
         if (_busy) LinearProgressIndicator(value: _progress > 0 ? _progress : null),
         if (_result != null) ...[
           const SizedBox(height: 12),
-          Text('Mean F0: ${_result!.meanF0} Hz - ${_result!.frames} frames'),
+          Text(strings.analysisMeanF0(_result!.meanF0.toStringAsFixed(1))),
+          Text(strings.learnFrames(_result!.frames), style: Theme.of(context).textTheme.bodySmall),
           PitchContourChart(data: _result!),
         ],
       ],
+    );
+  }
+}
+
+class _PulsingDot extends StatefulWidget {
+  const _PulsingDot();
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.35, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut)),
+      child: const Icon(Icons.fiber_manual_record, color: AppTheme.statusDanger, size: 14),
     );
   }
 }

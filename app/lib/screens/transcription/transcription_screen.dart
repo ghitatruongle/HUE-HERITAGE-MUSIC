@@ -137,7 +137,22 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       final name = 'hue_${r.sha.substring(0, 8)}.$ext';
       if (kIsWeb) {
         final url = midi ? api.midiUrl(r.sha, bpm: r.bpm) : api.xmlUrl(r.sha, bpm: r.bpm);
-        triggerDownload(url, name);
+        var dl = url;
+        try {
+          final raw = url.substring(url.indexOf('/api/'));
+          final qIdx = raw.indexOf('?');
+          final pathOnly = qIdx >= 0 ? raw.substring(0, qIdx) : raw;
+          final query = qIdx >= 0 ? raw.substring(qIdx + 1) : '';
+          final res = await dio.get('/api/music/play-url', queryParameters: {'path': pathOnly});
+          final data = res.data;
+          if (data is Map && data['url'] is String && (data['url'] as String).isNotEmpty) {
+            var signed = data['url'] as String;
+            if (!signed.startsWith('http')) signed = '${dio.options.baseUrl}$signed';
+            if (query.isNotEmpty) signed = signed.contains('?') ? '$signed&$query' : '$signed?$query';
+            dl = signed;
+          }
+        } catch (_) {}
+        triggerDownload(dl, name);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(strings.transcribeDownloadedFile(name))),
@@ -232,9 +247,9 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                       child: TextField(
                         controller: _bpm,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'BPM',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: strings.transcribeBpm,
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),

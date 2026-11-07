@@ -17,6 +17,8 @@ import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/error_panel.dart';
 import '../../widgets/compare_chart.dart';
 
 class RestorationScreen extends StatefulWidget {
@@ -44,6 +46,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   CompareResult? _compareResult;
   bool _isComparing = false;
   String? _compareError;
+  StateSetter? _sheetRefresh;
 
   @override
   void initState() {
@@ -98,19 +101,21 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     try {
       final res = await RestorationApi(dio).restoreItem(item.id);
       _log('restore', item.title, 'done');
-      if (mounted) {
+      if (mounted && _selectedItem?.id == item.id) {
         setState(() {
           _restoreResult = res;
           _isRestoring = false;
         });
+        _sheetRefresh?.call(() {});
       }
     } catch (e) {
       _log('restore', item.title, 'error');
-      if (mounted) {
+      if (mounted && _selectedItem?.id == item.id) {
         setState(() {
           _restoreError = ApiClient.describe(e);
           _isRestoring = false;
         });
+        _sheetRefresh?.call(() {});
       }
     }
   }
@@ -134,26 +139,30 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     final dio = config.api.dio;
     _log('restore-upload', file.name, 'running');
 
+    BuildContext? dialogCtx;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 12),
-            Text(strings.processing),
-          ],
-        ),
-      ),
+      builder: (dCtx) {
+        dialogCtx = dCtx;
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(strings.processing),
+            ],
+          ),
+        );
+      },
     );
 
     try {
       final res = await RestorationApi(dio).restoreUpload(bytes: bytes, filename: file.name);
       _log('restore-upload', file.name, 'done');
       if (!mounted) return;
-      Navigator.pop(context);
+      if (dialogCtx != null && dialogCtx!.mounted) Navigator.pop(dialogCtx!);
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -196,7 +205,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       );
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context);
+        if (dialogCtx != null && dialogCtx!.mounted) Navigator.pop(dialogCtx!);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
       }
     }
@@ -238,7 +247,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       } else if (_compareTargetItem != null) {
         targetBytes = await heritageApi.audioBytes(_compareTargetItem!.id);
       } else {
-        throw StateError(strings.compareNoTarget);
+        setState(() {
+          _compareError = strings.compareNoTarget;
+          _isComparing = false;
+        });
+        return;
       }
 
       final res = await SingApi(dio).compareBytes(sampleBytes, targetBytes);
@@ -271,7 +284,6 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -281,7 +293,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E1A33) : const Color(0xFFEBE6F5),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(14),
             ),
             child: TabBar(
@@ -366,8 +378,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   Widget _buildDspRestorationTab(dynamic strings) {
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width >= 900;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? const Color(0xFF2E2B48) : const Color(0xFFE4DFEE);
+    final borderColor = Theme.of(context).colorScheme.outline;
 
     if (!isDesktop) {
       return Column(
@@ -464,11 +475,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
-          return Center(child: Text('${strings.errorPrefix}: ${ApiClient.describe(snap.error!)}'));
+          return ErrorPanel(message: '${strings.errorPrefix}: ${ApiClient.describe(snap.error!)}', onRetry: _reloadItems);
         }
         final items = snap.data ?? [];
         if (items.isEmpty) {
-          return Center(child: Text(strings.noRecordings));
+          return EmptyState(icon: Icons.auto_fix_high_rounded, title: strings.noRecordings, ctaLabel: strings.learnRetry, onCta: _reloadItems);
         }
         if (_selectedItem == null && items.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -589,7 +600,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                           color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text('DSP Done', style: TextStyle(color: AppTheme.emeraldGreen, fontSize: 11, fontWeight: FontWeight.bold)),
+                        child: Text(strings.restoreDspDone, style: const TextStyle(color: AppTheme.emeraldGreen, fontSize: 11, fontWeight: FontWeight.bold)),
                       ),
                   ],
                 ),
@@ -628,7 +639,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                 ],
                 if (_restoreError != null) ...[
                   const SizedBox(height: 8),
-                  Text(_restoreError!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                  Text(_restoreError!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 13)),
                 ],
               ],
             ),
@@ -645,15 +656,15 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                 children: [
                   _metricRow(strings.restorationDcRemoved, _restoreResult!.dcRemoved.toStringAsFixed(4)),
                   const Divider(height: 16),
-                  _metricRow(strings.restorationClicksFixed, '${_restoreResult!.clicksFixed} clicks'),
+                  _metricRow(strings.restorationClicksFixed, '${_restoreResult!.clicksFixed} ${strings.restoreClicks}'),
                   const Divider(height: 16),
                   _metricRow(strings.restorationPeakChange, '${_restoreResult!.peakBefore.toStringAsFixed(2)} -> ${_restoreResult!.peakAfter.toStringAsFixed(2)}'),
                   const Divider(height: 16),
                   _metricRow(strings.restorationNoiseFloor, '${_restoreResult!.noiseFloorDb.toStringAsFixed(1)} dB'),
                   const Divider(height: 16),
-                  _metricRow('Sample Rate', '${_restoreResult!.sampleRate} Hz'),
+                  _metricRow(strings.restoreSampleRate, '${_restoreResult!.sampleRate} Hz'),
                   const Divider(height: 16),
-                  _metricRow('Algorithm', strings.restorationAlgorithm),
+                  _metricRow(strings.restoreAlgorithm, strings.restorationAlgorithm),
                 ],
               ),
             ),
@@ -685,11 +696,16 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => SizedBox(
-        height: MediaQuery.of(context).size.height * 0.85,
-        child: _buildDspDetailWorkspace(item, strings),
+      builder: (_) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          _sheetRefresh = setSheetState;
+          return SizedBox(
+            height: MediaQuery.of(sheetCtx).size.height * 0.85,
+            child: _buildDspDetailWorkspace(item, strings),
+          );
+        },
       ),
-    );
+    ).whenComplete(() => _sheetRefresh = null);
     return const SizedBox.shrink();
   }
 
@@ -766,7 +782,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     ),
                     if (_compareSampleItem != null) ...[
                       const SizedBox(height: 12),
-                      AudioPlayerBar(url: heritageApi.audioUrl(_compareSampleItem!.id), label: _compareSampleItem!.title),
+                      AudioPlayerBar(url: heritageApi.audioUrl(_compareSampleItem!.id), label: _compareSampleItem!.title, dio: dio),
                     ],
                   ],
                 ),
@@ -846,7 +862,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       ),
                       if (_compareTargetItem != null) ...[
                         const SizedBox(height: 10),
-                        AudioPlayerBar(url: heritageApi.audioUrl(_compareTargetItem!.id), label: _compareTargetItem!.title),
+                        AudioPlayerBar(url: heritageApi.audioUrl(_compareTargetItem!.id), label: _compareTargetItem!.title, dio: dio),
                       ],
                     ],
                   ],
@@ -886,7 +902,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         ),
         if (_compareError != null) ...[
           const SizedBox(height: 12),
-          Center(child: Text(_compareError!, style: const TextStyle(color: Colors.red))),
+          ErrorPanel(message: _compareError!)
         ],
         if (_compareResult != null) ...[
           const SizedBox(height: 24),
@@ -904,7 +920,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
             ? strings.compareVerdictModerate
             : strings.compareVerdictDifferent;
 
-    final color = score >= 80 ? AppTheme.emeraldGreen : (score >= 50 ? AppTheme.amberGold : Colors.orange);
+    final color = score >= 80 ? AppTheme.emeraldGreen : (score >= 50 ? AppTheme.amberGold : AppTheme.statusDanger);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

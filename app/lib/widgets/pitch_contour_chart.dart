@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/pitch_data.dart';
 import '../services/locale_provider.dart';
+import 'chart_palette.dart';
 
 class PitchContourChart extends StatelessWidget {
   final PitchData data;
@@ -28,6 +29,7 @@ class PitchContourChart extends StatelessWidget {
         spots.add(FlSpot(t, f));
       }
     }
+    final palette = ChartPalette.of(context);
     var peak = 100.0;
     for (final f in data.f0) {
       if (f > peak) {
@@ -46,6 +48,7 @@ class PitchContourChart extends StatelessWidget {
             LineChartBarData(
               spots: spots,
               dotData: const FlDotData(show: false),
+              color: palette.user,
             ),
           ],
         ),

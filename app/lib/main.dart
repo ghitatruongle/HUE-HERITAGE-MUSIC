@@ -130,14 +130,14 @@ class _OfflineBannerState extends State<OfflineBanner> {
           children: [
             if (offline)
               Material(
-                color: const Color(0xFF8C3B3B),
+                color: Theme.of(context).colorScheme.errorContainer,
                 child: SizedBox(
                   width: double.infinity,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
                     child: Text(
                       locale.strings.offlineMessage,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontSize: 13),
                       textAlign: TextAlign.center,
                     ),
                   ),

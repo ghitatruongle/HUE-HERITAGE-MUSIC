@@ -5,6 +5,14 @@ class AppStrings {
 
   bool get isVi => languageCode == 'vi';
 
+  String get navHome => isVi ? 'Trang chủ' : 'Home';
+  String get navHeritage => isVi ? 'Kho di sản' : 'Heritage Archive';
+  String get navLearning => isVi ? 'Học hát Ca Huế' : 'Singing Practice';
+  String get navAnalysis => isVi ? 'Phân tích F0' : 'Pitch Analysis';
+  String get navTranscription => isVi ? 'Audio -> Bản nhạc' : 'Audio to Sheet';
+  String get navCover => isVi ? 'Cover' : 'Cover Song';
+  String get navInstruments => isVi ? 'Nhạc cụ' : 'Instruments';
+  String get authTitle => isVi ? 'Tài khoản' : 'Account';
   String get appTitle => isVi ? 'Di sản âm nhạc Huế' : 'Hue Heritage Music';
   String get appSubtitle => isVi
       ? 'Nền tảng AI bảo tồn, truyền dạy và phát huy ca Huế, nhã nhạc cung đình và nhạc cụ truyền thống.'
@@ -15,17 +23,9 @@ class AppStrings {
   String get projectInfoTitle => isVi ? 'Thông tin dự án' : 'Project Info';
   String get taskHistoryTitle => isVi ? 'Lịch sử tác vụ' : 'Task History';
 
-  String get navHome => isVi ? 'Trang chủ' : 'Home';
-  String get navHeritage => isVi ? 'Kho di sản' : 'Heritage Archive';
-  String get navLearning => isVi ? 'Học hát Ca Huế' : 'Singing Practice';
-  String get navAnalysis => isVi ? 'Phân tích F0' : 'Pitch Analysis';
-  String get navTranscription => isVi ? 'Audio -> Bản nhạc' : 'Audio to Sheet';
   String get navCreation => isVi ? 'Sáng tạo cùng Ca Huế' : 'Hue Heritage Studio';
-  String get navCover => isVi ? 'Cover' : 'Cover Song';
   String get navRestoration => isVi ? 'Phục dựng' : 'Restoration';
-  String get navInstruments => isVi ? 'Nhạc cụ' : 'Instruments';
   String get navMore => isVi ? 'Danh mục' : 'More';
-  String get authTitle => isVi ? 'Tài khoản' : 'Account';
 
   String get featHeritageTitle => isVi ? 'Kho di sản số' : 'Heritage Archive';
   String get featHeritageDesc => isVi
@@ -51,6 +51,7 @@ class AppStrings {
   String analysisFileLabel(String name) => isVi ? 'Tệp: $name' : 'File: $name';
   String get analysisF0Title => isVi ? 'Đường cao độ F0' : 'F0 Pitch Curve';
   String analysisMeanF0(String hz) => isVi ? 'F0 trung bình: $hz Hz' : 'Mean F0: $hz Hz';
+  String learnFrames(int n) => isVi ? '$n khung' : '$n frames';
   String get analysisInstrumentsTitle => isVi ? 'Nhạc cụ nhận diện được' : 'Detected Instruments';
   String get analysisNoInstruments => isVi ? 'Không nhận diện được nhạc cụ nào.' : 'No instruments detected.';
   String get analysisInstrumentsFail => isVi
@@ -104,12 +105,10 @@ class AppStrings {
   String get practiceScaleSample => isVi ? 'Mẫu thang' : 'Scale sample';
   String get practiceScaleRecord => isVi ? 'Thu tiếng hát' : 'Record singing';
   String get practiceScaleGrade => isVi ? 'Chấm thang' : 'Grade scale';
-  String get practiceOnScale => isVi ? 'Độ bám thang' : 'Scale adherence';
   String get practiceMicDenied => isVi ? 'Mic bị từ chối' : 'Microphone denied';
   String get practiceMicStartFail => isVi ? 'Không bắt đầu được ghi âm. Kiểm tra quyền microphone.' : 'Could not start recording. Check microphone permission.';
   String get practiceBusySection => isVi ? 'Đang thu câu hát — hãy dừng bản thu đó trước.' : 'A phrase recording is in progress — stop it first.';
   String get practiceBusyScale => isVi ? 'Đang thu luyện thang — hãy dừng bản thu đó trước.' : 'A scale recording is in progress — stop it first.';
-  String get practiceCountIn => isVi ? 'Đếm nhập' : 'Count-in';
   String get practiceReplayTake => isVi ? 'Nghe lại bản thu của bạn:' : 'Replay your take:';
   String get practiceMidiBtn => isVi ? 'MIDI bản luyện' : 'Practice MIDI';
   String get practiceSaved => isVi ? 'Đã lưu' : 'Saved';
@@ -122,12 +121,11 @@ class AppStrings {
   String lessonModeChip(String mode) => isVi ? 'Điệu $mode' : 'Mode $mode';
   String lessonSectionCount(int n) => isVi ? '$n câu' : '$n phrases';
   String practiceCountInLabel(String bpmInfo) => isVi ? 'Đếm nhập $bpmInfo' : 'Count-in $bpmInfo';
+  String get practiceCountInFail => isVi ? 'Không phát được tiếng đếm nhập — bắt đầu thu luôn' : 'Metronome count-in failed — starting to record';
   String get practiceScoreTotal => isVi ? 'Tổng' : 'Total';
   String get practiceScorePitch => isVi ? 'Cao độ' : 'Pitch';
-  String get practiceScoreTime => isVi ? 'Nhịp' : 'Timing';
   String get practiceScoreRhythm => isVi ? 'Nhịp' : 'Rhythm';
   String get practiceScoreStability => isVi ? 'Đều giọng' : 'Stability';
-  String get practiceOrnamentLabel => isVi ? 'Hoa mỹ' : 'Ornament';
   String practiceOrnamentValue(String pct, String rate) => isVi
       ? 'Rền/vọng: $pct% nốt (~$rate Hz)'
       : 'Vibrato: $pct% notes (~$rate Hz)';
@@ -136,14 +134,13 @@ class AppStrings {
       ? 'Độ bám thang: $score/100 (trong thang: $onScale%)'
       : 'Scale adherence: $score/100 (on scale: $onScale%)';
   String get practiceListenSample => isVi ? 'Nghe mẫu nghệ nhân' : 'Listen to master sample';
+  String get practiceSampleUnavailable => isVi ? 'Chưa tải được mẫu nghệ nhân — chạm để thử lại' : 'Could not load the master sample — tap to retry';
   String get practiceRefSample => isVi ? 'So với giọng mẫu' : 'vs master sample';
   String get practiceRefOriginal => isVi ? 'So với bản gốc' : 'vs original';
   String practiceTakeChip(int n) => isVi ? 'Take $n' : 'Take $n';
-  String get practiceTakeBest => isVi ? 'Take tốt nhất' : 'Best take';
   String get practiceRegrade => isVi ? 'Chấm lại' : 'Re-grade';
   String get practiceSlowSpeed => isVi ? 'Tốc độ nghe' : 'Playback speed';
   String get practiceTakePreview => isVi ? 'Xem trước giọng (trên máy) — so với đường mục tiêu' : 'Local pitch preview — vs target contour';
-  String get practiceNoTarget => isVi ? 'Chưa có đường mục tiêu cho câu này' : 'No target contour for this phrase';
   String get practiceSilenceStopHint => isVi ? 'Tự dừng khi bạn ngắt giọng ~1.2s' : 'Auto-stops ~1.2s after you pause';
   String get practiceServerProgress => isVi ? 'Tiến độ trên máy chủ' : 'Server-side progress';
   String get practiceLocalProgress => isVi ? 'Tiến độ trên máy này' : 'On-device progress';
@@ -163,9 +160,7 @@ class AppStrings {
   String get adminLearningUploaded => isVi ? 'Đã lưu mẫu cho câu' : 'Sample saved for phrase';
   String get adminLearningDeleted => isVi ? 'Đã xóa mẫu câu' : 'Phrase sample deleted';
   String get adminLearningPickWav => isVi ? 'Chọn file .wav (≤15MB)' : 'Pick a .wav file (≤15MB)';
-  String get adminLearningOnlyWav => isVi ? 'Chỉ nhận file .wav' : 'Only .wav files are accepted';
   String adminLearningPhrase(int n) => isVi ? 'Câu $n' : 'Phrase $n';
-  String get adminLearningStats => isVi ? 'Thống kê luyện tập' : 'Practice stats';
   String adminLearningStatLine(int sessions, int users, int recent) => isVi
       ? '$sessions lượt luyện · $users người tập · $recent lượt 7 ngày qua'
       : '$sessions sessions · $users learners · $recent in last 7 days';
@@ -180,10 +175,7 @@ class AppStrings {
   String get transcribeNoTake => isVi ? 'Chưa có bản thu. Hãy thu âm ở màn Học hát hoặc chọn tệp.' : 'No recording yet. Record in Learning or pick a file.';
   String get transcribeBpmRange => isVi ? 'BPM trong khoảng 1-300' : 'BPM must be 1-300';
   String get transcribePickFile => isVi ? 'Chưa chọn tệp âm thanh.' : 'No audio file chosen.';
-  String get transcribeResultTitle => isVi ? 'Ký âm' : 'Transcription';
   String get transcribeNoSha => isVi ? 'Thiếu mã băm để tải file' : 'Missing hash for download';
-  String get transcribeDownloaded => isVi ? 'Đã tải xuống' : 'Downloaded';
-  String get transcribeSavedTemp => isVi ? 'Đã lưu vào thư mục tạm' : 'Saved to temp folder';
   String get transcribePickBtn => isVi ? 'Chọn tệp' : 'Pick file';
   String get transcribeUseLast => isVi ? 'Dùng bản thu vừa ghi' : 'Use last recording';
   String get transcribeSource => isVi ? 'Nguồn' : 'Source';
@@ -291,6 +283,15 @@ class AppStrings {
       : 'No network connection. Some online features may be unavailable.';
 
   String get playBtn => isVi ? 'Phát' : 'Play';
+  String get audioPause => isVi ? 'Tạm dừng' : 'Pause';
+  String get creationLoraStrength => isVi ? 'Độ mạnh LoRA' : 'LoRA strength';
+  String get transcribeBpm => isVi ? 'Nhịp/phút (BPM)' : 'BPM';
+  String get restoreDspDone => isVi ? 'DSP xong' : 'DSP done';
+  String get restoreClicks => isVi ? 'cú nhấp' : 'clicks';
+  String get restoreSampleRate => isVi ? 'Tần số mẫu' : 'Sample rate';
+  String get restoreAlgorithm => isVi ? 'Thuật toán' : 'Algorithm';
+  String get commonOk => isVi ? 'Đồng ý' : 'OK';
+  String get authTogglePassword => isVi ? 'Hiện/ẩn mật khẩu' : 'Show/hide password';
   String get versionLabel => isVi ? 'Phiên bản' : 'Version';
   String get sidebarTagline => isVi ? 'AI Di sản âm nhạc' : 'AI Heritage Music';
   String get sheetDisclaimer => isVi
@@ -516,7 +517,6 @@ class AppStrings {
   String get mustChangeNow => isVi ? 'Đổi mật khẩu' : 'Change password';
   String get mustChangeLater => isVi ? 'Để sau' : 'Later';
 
-  String get navAdmin => isVi ? 'Quản trị' : 'Admin';
   String get adminTitle => isVi ? 'Quản trị hệ thống' : 'System Administration';
   String get adminTabDashboard => isVi ? 'Tổng quan' : 'Dashboard';
   String get adminTabUsers => isVi ? 'Người dùng' : 'Users';
@@ -527,7 +527,6 @@ class AppStrings {
   String get adminStatInvites => isVi ? 'Mã mời' : 'Invites';
   String get adminStatUnused => isVi ? 'Còn hiệu lực' : 'Unused';
   String get adminStatItems => isVi ? 'Bản ghi di sản' : 'Heritage items';
-  String get adminStatStorage => isVi ? 'Dung lượng kho' : 'Archive size';
   String get adminStatDerived => isVi ? 'File dẫn xuất' : 'Derived files';
   String get adminStatGenerated => isVi ? 'Bản thu AI đã tạo' : 'AI-generated audio';
   String get adminStatTasks => isVi ? 'Tác vụ theo trạng thái' : 'Tasks by status';
@@ -560,6 +559,7 @@ class AppStrings {
   String get adminCancel => isVi ? 'Hủy' : 'Cancel';
   String get adminLoadFail => isVi ? 'Không tải được dữ liệu quản trị.' : 'Failed to load admin data.';
   String get adminReauthTitle => isVi ? 'Xác thực quản trị' : 'Admin re-authorization';
+  String get navAdmin => isVi ? 'Quản trị' : 'Admin';
   String get adminReauthBody => isVi
       ? 'Hành động này nhạy cảm — nhập lại mật khẩu tài khoản quản trị để tiếp tục (hiệu lực 10 phút).'
       : 'This is a sensitive action — re-enter the admin password to continue (valid for 10 minutes).';

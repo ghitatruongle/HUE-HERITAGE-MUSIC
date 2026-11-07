@@ -74,7 +74,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final sidebarBg = isDark ? const Color(0xFF131120) : const Color(0xFFF0ECF7);
-    final borderColor = isDark ? const Color(0xFF2E2B48) : const Color(0xFFE4DFEE);
+    final borderColor = Theme.of(context).colorScheme.outline;
 
     return Row(
       children: [
@@ -320,7 +320,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                               height: 8,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: server.hasServer ? AppTheme.emeraldGreen : Colors.red,
+                                color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
                               ),
                             ),
                           ),
@@ -369,7 +369,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                   height: 8,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: server.hasServer ? AppTheme.emeraldGreen : Colors.red,
+                                    color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -406,7 +406,10 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     ThemeProvider theme,
     ServerConfig server,
   ) {
-    return widget.destinations[widget.selectedIndex].screen;
+    return ContentMaxWidth(
+      maxWidth: 1360,
+      child: widget.destinations[widget.selectedIndex].screen,
+    );
   }
 
   void _showAllDestinationsSheet(BuildContext context, LocaleProvider locale) {

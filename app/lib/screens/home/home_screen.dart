@@ -324,11 +324,7 @@ class _HomeContent extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2A1545), Color(0xFF4A2B78), Color(0xFF6B3FA0)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: AppTheme.brandGradient,
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF5B3B8C).withValues(alpha: 0.25),
@@ -397,14 +393,14 @@ class _HomeContent extends StatelessWidget {
                   height: 7,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent,
+                    color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
                   ),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   server.hasServer ? strings.serverOnline : strings.serverOffline,
                   style: TextStyle(
-                    color: server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent,
+                    color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -471,7 +467,7 @@ class _FeatureCardState extends State<_FeatureCard> {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final baseBorder = isDark ? const Color(0xFF2E2B48) : const Color(0xFFE4DFEE);
+    final baseBorder = scheme.outline;
     const hoverBorder = AppTheme.primaryPurpleGlow;
 
     return MouseRegion(
