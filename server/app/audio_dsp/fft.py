@@ -1,7 +1,12 @@
 import math
 
+try:
+    import numpy as np
+except Exception:
+    np = None
 
-def fft(x):
+
+def _fft_python(x):
     n = len(x)
     if n == 0:
         return []
@@ -38,15 +43,48 @@ def fft(x):
     return a
 
 
-def ifft(x):
+def _ifft_python(x):
     n = len(x)
     if n == 0:
         return []
     conj = [complex(v).conjugate() for v in x]
-    y = fft(conj)
+    y = _fft_python(conj)
     m = len(y)
     rec = [v.conjugate() / m for v in y]
     return rec[:n]
+
+
+def fft(x):
+    if np is None:
+        return _fft_python(x)
+    arr = np.asarray(x, dtype=np.float64)
+    n = len(arr)
+    if n == 0:
+        return []
+    if n & (n - 1) != 0:
+        p = 1
+        while p < n:
+            p <<= 1
+        arr = np.concatenate([arr, np.zeros(p - n, dtype=np.float64)])
+        n = p
+    return np.fft.fft(arr).tolist()
+
+
+def ifft(x):
+    if np is None:
+        return _ifft_python(x)
+    arr = np.asarray(x, dtype=np.complex128)
+    n = len(arr)
+    if n == 0:
+        return []
+    if n & (n - 1) != 0:
+        p = 1
+        while p < n:
+            p <<= 1
+        arr = np.concatenate([arr, np.zeros(p - n, dtype=np.complex128)])
+    m = len(arr)
+    rec = np.conj(np.fft.fft(np.conj(arr))) / m
+    return rec[:n].tolist()
 
 
 def hann(n):
@@ -55,26 +93,48 @@ def hann(n):
 
 def stft(samples, size=1024, hop=512):
     win = hann(size)
-    frames = []
-    pos = 0
     n = len(samples)
-    while pos + size <= n:
-        frames.append([samples[pos + i] * win[i] for i in range(size)])
-        pos += hop
-    return frames, win
+    if np is None:
+        frames = []
+        pos = 0
+        while pos + size <= n:
+            frames.append([samples[pos + i] * win[i] for i in range(size)])
+            pos += hop
+        return frames, win
+    if n < size:
+        return [], win
+    count = (n - size) // hop + 1
+    arr = np.asarray(samples, dtype=np.float64)
+    idx = np.arange(size)[None, :] + hop * np.arange(count)[:, None]
+    frames = arr[idx] * np.asarray(win, dtype=np.float64)[None, :]
+    return [frames[i] for i in range(count)], win
 
 
 def istft(frames, win, size=1024, hop=512):
-    total = (len(frames) - 1) * hop + size if frames else 0
-    out = [0.0] * total
-    wsum = [0.0] * total
+    if np is None or not frames:
+        total = (len(frames) - 1) * hop + size if frames else 0
+        out = [0.0] * total
+        wsum = [0.0] * total
+        for f, fr in enumerate(frames):
+            pos = f * hop
+            for i in range(size):
+                w = win[i]
+                out[pos + i] += fr[i].real * w
+                wsum[pos + i] += w * w
+        for i in range(total):
+            if wsum[i] > 1e-9:
+                out[i] /= wsum[i]
+        return out
+    total = (len(frames) - 1) * hop + size
+    out = np.zeros(total, dtype=np.float64)
+    wsum = np.zeros(total, dtype=np.float64)
+    w = np.asarray(win, dtype=np.float64)
+    w2 = w * w
     for f, fr in enumerate(frames):
         pos = f * hop
-        for i in range(size):
-            w = win[i]
-            out[pos + i] += fr[i].real * w
-            wsum[pos + i] += w * w
-    for i in range(total):
-        if wsum[i] > 1e-9:
-            out[i] /= wsum[i]
-    return out
+        arr = np.asarray(fr, dtype=np.complex128)
+        out[pos:pos + size] += arr.real * w
+        wsum[pos:pos + size] += w2
+    nz = wsum > 1e-9
+    out[nz] /= wsum[nz]
+    return out.tolist()

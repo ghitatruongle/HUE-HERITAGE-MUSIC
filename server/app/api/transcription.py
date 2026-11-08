@@ -7,9 +7,9 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, R
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from ..database.session import get_db
+from ..database.session import get_db, SessionLocal
 from ..database import crud
-from ..services import amt_eval, media_pipeline
+from ..services import amt_eval, media_pipeline, user_inflight
 from ..storage import manager
 from ..audio_access import require_audio_access
 from .auth import require_user, resolve_bearer_user
@@ -34,9 +34,10 @@ async def transcribe(
     bpm: float = Form(60.0),
     heritage_id: str = Form(""),
     engine: str = Form("basic_pitch"),
-    db: Session = Depends(get_db),
     user_id: Optional[str] = Depends(require_user),
 ):
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
@@ -44,28 +45,43 @@ async def transcribe(
         raise HTTPException(status_code=413, detail="file too large")
     if not math.isfinite(bpm) or bpm < 1 or bpm > 300:
         raise HTTPException(status_code=400, detail="bad bpm")
+    if not user_inflight.try_acquire(user_inflight.user_key("transcribe", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
-        notes, used, engine_error = await asyncio.to_thread(
-            media_pipeline.extract_notes, data, bpm, engine
-        )
-    except ValueError:
-        raise HTTPException(status_code=400, detail="wav decode failed")
+        try:
+            notes, used, engine_error = await asyncio.to_thread(
+                media_pipeline.extract_notes, data, bpm, engine
+            )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="wav decode failed")
+    finally:
+        user_inflight.release(user_inflight.user_key("transcribe", user_id))
     digest = manager.sha256_bytes(data)
-    item = crud.get_item(db, heritage_id) if heritage_id else None
-    if item:
-        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
-        if not crud.can_view_item(item, viewer):
-            raise HTTPException(status_code=404, detail="not found")
-    if item and item.sha256 != digest:
-        raise HTTPException(status_code=400, detail="sha mismatch with heritage item")
+    item = None
+    if heritage_id:
+        db = SessionLocal()
+        try:
+            item = crud.get_item(db, heritage_id)
+            if item:
+                viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+                if not crud.can_view_item(item, viewer):
+                    raise HTTPException(status_code=404, detail="not found")
+                if item.sha256 != digest:
+                    raise HTTPException(status_code=400, detail="sha mismatch with heritage item")
+        finally:
+            db.close()
     _, stem, mid, xm = await asyncio.to_thread(
         media_pipeline.write_artifacts, data, notes, bpm, file.filename or "hue"
     )
     if item:
-        if not crud.has_audio(db, item.id, "midi", str(mid)):
-            crud.create_audio(db, item.id, "midi", str(mid), digest, mid.stat().st_size)
-        if not crud.has_audio(db, item.id, "musicxml", str(xm)):
-            crud.create_audio(db, item.id, "musicxml", str(xm), digest, xm.stat().st_size)
+        db = SessionLocal()
+        try:
+            if not crud.has_audio(db, item.id, "midi", str(mid)):
+                crud.create_audio(db, item.id, "midi", str(mid), digest, mid.stat().st_size)
+            if not crud.has_audio(db, item.id, "musicxml", str(xm)):
+                crud.create_audio(db, item.id, "musicxml", str(xm), digest, xm.stat().st_size)
+        finally:
+            db.close()
     result = {
         "label": LABEL,
         "engine": used,

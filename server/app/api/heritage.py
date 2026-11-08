@@ -1,5 +1,6 @@
 from typing import Optional
 from pathlib import Path
+import asyncio
 
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..database.session import acquire_write_slot, get_db
 from ..database import crud
-from ..services import heritage_service
+from ..services import heritage_service, user_inflight
 from ..storage import manager
 from ..audio_access import require_audio_access, sign_path
 from .auth import require_user, resolve_bearer_user
@@ -105,11 +106,19 @@ async def upload_heritage(
     )
     uploader = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
     visibility = "admin_only" if crud.is_admin_user(uploader) else "public"
-    item, created = heritage_service.ingest_upload(
-        db, data, file.filename or "audio.wav", title, type, artist,
-        owner_user_id=uploader.id if uploader is not None else None,
-        visibility=visibility, **metadata,
-    )
+    if not user_inflight.try_acquire(user_inflight.user_key("heritage-upload", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
+    try:
+        path, digest, _fresh = await asyncio.to_thread(
+            heritage_service.save_upload_payload, data, file.filename or "audio.wav"
+        )
+        item, created = heritage_service.ingest_saved(
+            db, path, digest, len(data), file.filename or "audio.wav", title, type, artist,
+            owner_user_id=uploader.id if uploader is not None else None,
+            visibility=visibility, **metadata,
+        )
+    finally:
+        user_inflight.release(user_inflight.user_key("heritage-upload", user_id))
     result = heritage_service.item_to_dict(item)
     result["created"] = created
     return result

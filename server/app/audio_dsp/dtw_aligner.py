@@ -36,30 +36,28 @@ def dtw(a, b, band_ratio=BAND_RATIO):
         return _dtw_python(a, b, band_ratio=band_ratio)
     semi_a = np.fromiter((to_semi(v) for v in a), dtype=np.float64, count=n)
     semi_b = np.fromiter((to_semi(v) for v in b), dtype=np.float64, count=m)
-    both_v = (semi_a[:, None] > 0) & (semi_b[None, :] > 0)
-    both_u = (semi_a[:, None] <= 0) & (semi_b[None, :] <= 0)
-    diff = np.abs(semi_a[:, None] - semi_b[None, :])
-    C = np.where(both_v, diff, np.where(both_u, 0.0, GAP_COST))
-    del diff, both_v, both_u
-    mask = np.zeros((n, m), dtype=bool)
-    for i in range(n):
-        lo = max(0, i - w)
-        hi = min(m, i + w + 1)
-        mask[i, lo:hi] = True
-    bt = np.zeros((n, m), dtype=np.uint8)
+    bt_band = np.zeros((n, 2 * w + 1), dtype=np.uint8)
     prev = np.full(m, _BIG)
     for i in range(n):
-        c = C[i]
+        c = np.abs(semi_a[i] - semi_b)
+        c = np.where(
+            (semi_a[i] > 0) & (semi_b > 0),
+            c,
+            np.where((semi_a[i] <= 0) & (semi_b <= 0), 0.0, GAP_COST),
+        )
         S = np.cumsum(c)
         P = np.concatenate(([0.0], S[:-1]))
+        lo = max(0, i - w)
+        hi = min(m, i + w + 1)
         if i == 0:
             e = np.full(m, _BIG)
-            if mask[0, 0]:
-                e[0] = 0.0
+            e[0] = 0.0
         else:
             diag = np.concatenate(([_BIG], prev[:-1]))
             e = np.minimum(prev, diag)
-            e = np.where(mask[i], e, _BIG)
+            band_mask = np.zeros(m, dtype=bool)
+            band_mask[lo:hi] = True
+            e = np.where(band_mask, e, _BIG)
         vals = e - P
         cur = S + np.minimum.accumulate(vals)
         diag_v = np.concatenate(([_BIG], prev[:-1]))
@@ -70,8 +68,10 @@ def dtw(a, b, band_ratio=BAND_RATIO):
             0,
             np.where(prev <= left_v + eps, 1, 2),
         ).astype(np.uint8)
-        row[~mask[i]] = 0
-        bt[i] = row
+        if i > 0:
+            row[:lo] = 0
+            row[hi:] = 0
+        bt_band[i, : hi - lo] = row[lo:hi]
         prev = cur
     if prev[m - 1] >= _BIG * 0.5:
         return [], 0.0
@@ -90,7 +90,11 @@ def dtw(a, b, band_ratio=BAND_RATIO):
         if j == 0:
             i -= 1
             continue
-        mv = bt[i][j]
+        off = j - max(0, i - w)
+        if off < 0 or off >= 2 * w + 1:
+            mv = 0
+        else:
+            mv = bt_band[i, off]
         if mv == 0:
             i -= 1
             j -= 1

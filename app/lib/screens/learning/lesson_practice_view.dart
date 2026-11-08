@@ -17,6 +17,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/lesson_api.dart';
 import '../../models/lesson.dart';
 import 'scale_practice_card.dart';
+import '../../services/app_lifecycle_service.dart';
 import '../../services/download_helper.dart';
 import '../../services/file_saver.dart';
 import '../../services/local_pitch.dart';
@@ -50,6 +51,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   final RecordingController _rec = RecordingController(AudioRecorder());
   final AudioPlayer _samplePlayer = AudioPlayer();
   final AudioPlayer _metronomePlayer = AudioPlayer();
+  Future<void> _metroChain = Future.value();
+  late AppLifecycleHooks _lifecycleHooks;
   List<Lesson> _lessons = [];
   Lesson? _selected;
   LessonDetail? _detail;
@@ -104,17 +107,30 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         setState(() => _looping.clear());
       }
     });
+    _lifecycleHooks = AppLifecycleHooks(
+      onPause: () {
+        unawaited(_stopEverything());
+      },
+    );
+    AppLifecycleService.instance.register(_lifecycleHooks);
   }
 
   @override
   void dispose() {
+    AppLifecycleService.instance.unregister(_lifecycleHooks);
     _vuTimer?.cancel();
     _autoStopTimer?.cancel();
     _scaleAutoStop?.cancel();
     _sampleSub?.cancel();
     _rec.dispose();
+    final metroDrain = _metroChain.catchError((_) {});
+    _metroChain = Future.value();
+    metroDrain.whenComplete(() {
+      try {
+        _metronomePlayer.dispose();
+      } catch (_) {}
+    });
     _samplePlayer.dispose();
-    _metronomePlayer.dispose();
     super.dispose();
   }
 
@@ -297,14 +313,18 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     return null;
   }
 
-  Future<void> _playSegment(String url, {Duration? clipStart, Duration? clipEnd, required bool loop}) async {
+  Future<void> _playSegment(String url, {Duration? clipStart, Duration? clipEnd, required bool loop, int? gen}) async {
     await _samplePlayer.stop();
+    if (gen != null && gen != _playGen) return;
     await _samplePlayer.setUrl(url);
+    if (gen != null && gen != _playGen) return;
     if (clipStart != null && clipEnd != null) {
       await _samplePlayer.setClip(start: clipStart, end: clipEnd);
     }
+    if (gen != null && gen != _playGen) return;
     await _samplePlayer.setLoopMode(loop ? LoopMode.one : LoopMode.off);
     await _samplePlayer.setSpeed(_speed);
+    if (gen != null && gen != _playGen) return;
     await _samplePlayer.play();
   }
 
@@ -328,14 +348,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       final clipStart = Duration(milliseconds: (section.start * 1000).round());
       final clipEnd = Duration(milliseconds: (section.end * 1000).round());
       try {
-        await _playSegment(url, clipStart: clipStart, clipEnd: clipEnd, loop: true);
+        await _playSegment(url, clipStart: clipStart, clipEnd: clipEnd, loop: true, gen: gen);
       } catch (_) {
         if (gen != _playGen) return;
         final resigned = await _signPath(dio, basePath);
         if (gen != _playGen) return;
         if (resigned == null || resigned == url) rethrow;
         _signedRefUrl = resigned;
-        await _playSegment(resigned, clipStart: clipStart, clipEnd: clipEnd, loop: true);
+        await _playSegment(resigned, clipStart: clipStart, clipEnd: clipEnd, loop: true, gen: gen);
       }
       if (gen != _playGen || !mounted) return;
       setState(() {
@@ -374,14 +394,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         return;
       }
       try {
-        await _playSegment(url, loop: true);
+        await _playSegment(url, loop: true, gen: gen);
       } catch (_) {
         if (gen != _playGen) return;
         final resigned = await _signPath(dio, section.sampleUrl);
         if (gen != _playGen) return;
         if (resigned == null || resigned == url) rethrow;
         _signedSampleUrls[section.index] = resigned;
-        await _playSegment(resigned, loop: true);
+        await _playSegment(resigned, loop: true, gen: gen);
       }
       if (gen != _playGen || !mounted) return;
       setState(() {
@@ -417,7 +437,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       final clipStart = Duration(milliseconds: (math.max(0, base + start - 0.25) * 1000).round());
       final clipEnd = Duration(milliseconds: ((base + end) * 1000).round());
       try {
-        await _playSegment(url, clipStart: clipStart, clipEnd: clipEnd, loop: false);
+        await _playSegment(url, clipStart: clipStart, clipEnd: clipEnd, loop: false, gen: gen);
       } catch (_) {
         if (gen != _playGen) return;
         final path = useSample ? section.sampleUrl : basePath;
@@ -429,7 +449,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         } else {
           _signedRefUrl = resigned;
         }
-        await _playSegment(resigned, clipStart: clipStart, clipEnd: clipEnd, loop: false);
+        await _playSegment(resigned, clipStart: clipStart, clipEnd: clipEnd, loop: false, gen: gen);
       }
       if (gen != _playGen || !mounted) return;
       setState(() {
@@ -543,8 +563,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     if (_countIn) {
       try {
         final bpmVal = (_detail?.bpm ?? 60).round();
-        await _metronomePlayer.stop();
-        await _metronomePlayer.setAudioSource(await _bytesSource(_metronomeWav(bpmVal)));
+        final chain = _metroChain.then((_) async {
+          try {
+            await _metronomePlayer.stop();
+            await _metronomePlayer.setAudioSource(await _bytesSource(_metronomeWav(bpmVal)));
+          } catch (_) {}
+        });
+        _metroChain = chain;
+        await chain;
         final done = Completer<void>();
         final sub = _metronomePlayer.playerStateStream.listen((st) {
           if (st.processingState == ProcessingState.completed && !done.isCompleted) {
@@ -554,17 +580,18 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         try {
           await _metronomePlayer.play();
           final est = (240 * 1000 / (bpmVal > 0 ? bpmVal : 60)).ceil() + 1500;
-          await done.future.timeout(Duration(milliseconds: est), onTimeout: () => sub.cancel());
+          await done.future.timeout(Duration(milliseconds: est), onTimeout: () {});
         } finally {
           await sub.cancel();
         }
       } catch (_) {
-        try {
-          await _metronomePlayer.stop();
-        } catch (_) {}
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.practiceCountInFail)));
         }
+      } finally {
+        try {
+          await _metronomePlayer.stop();
+        } catch (_) {}
       }
       if (!mounted || _rec.epoch != epochAtStart) {
         _rec.arming = false;

@@ -11,7 +11,7 @@ from ..config import settings
 from ..database.session import SessionLocal, get_db
 from ..database import crud
 from ..database.models import HeritageItem
-from ..services import media_pipeline
+from ..services import media_pipeline, user_inflight
 from ..storage import manager
 from ..audio_access import sign_path, verify_path
 from .auth import require_user, resolve_bearer_user
@@ -58,13 +58,20 @@ def run_restore(data, heritage_id):
 
 
 @router.post("/music/restore")
-async def restore_upload(file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+async def restore_upload(request: Request, file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
-    return await asyncio.to_thread(run_restore, data, "")
+    if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
+    try:
+        return await asyncio.to_thread(run_restore, data, "")
+    finally:
+        user_inflight.release(user_inflight.user_key("restore", user_id))
 
 
 @router.post("/music/restore-item/{item_id}")
@@ -84,7 +91,12 @@ def restore_item(item_id: str, request: Request, db: Session = Depends(get_db), 
         data = path.read_bytes()
     except OSError:
         raise HTTPException(status_code=404, detail="file missing")
-    return run_restore(data, item.id)
+    if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
+    try:
+        return run_restore(data, item.id)
+    finally:
+        user_inflight.release(user_inflight.user_key("restore", user_id))
 
 
 @router.get("/music/restored/{sha}")

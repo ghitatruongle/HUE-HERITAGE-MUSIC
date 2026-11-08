@@ -22,7 +22,7 @@ UNIFORM_SR = 16000
 def resample_16k(samples, sr):
     if sr == UNIFORM_SR:
         return samples, sr
-    if sr <= 0 or not samples:
+    if sr <= 0 or len(samples) == 0:
         return samples, sr
     if np is None:
         step = sr / UNIFORM_SR
@@ -57,33 +57,47 @@ def read_mono_wav(data: bytes, max_seconds: Optional[float] = MAX_SECONDS):
     ch = w.getnchannels()
     sr = w.getframerate()
     sw = w.getsampwidth()
-    raw = w.readframes(n)
-    w.close()
     if sr <= 0 or ch <= 0 or sw not in (1, 2, 4) or n < 0:
+        w.close()
         raise ValueError("bad wav header")
     frame_bytes = ch * sw
-    n = min(n, len(raw) // frame_bytes)
-    raw = raw[: n * frame_bytes]
-    if sw == 1:
-        vals = struct.unpack("<%dB" % (n * ch), raw)
-        samples = [(v - 128) / 128.0 for v in vals]
-    elif sw == 2:
-        vals = struct.unpack("<%dh" % (n * ch), raw)
-        samples = [v / 32768.0 for v in vals]
-    else:
-        vals = struct.unpack("<%di" % (n * ch), raw)
-        samples = [v / 2147483648.0 for v in vals]
-    if ch > 1:
-        mono = []
-        for i in range(n):
-            s = 0.0
-            for c in range(ch):
-                s += samples[i * ch + c]
-            mono.append(s / ch)
-        samples = mono
+    limit = n
     if max_seconds is not None and max_seconds > 0:
-        limit = int(sr * max_seconds)
-        samples = samples[:limit]
+        limit = min(limit, int(sr * max_seconds))
+    raw = w.readframes(limit)
+    w.close()
+    n = min(limit, len(raw) // frame_bytes)
+    raw = raw[: n * frame_bytes]
+    if np is None:
+        if sw == 1:
+            vals = struct.unpack("<%dB" % (n * ch), raw)
+            samples = [(v - 128) / 128.0 for v in vals]
+        elif sw == 2:
+            vals = struct.unpack("<%dh" % (n * ch), raw)
+            samples = [v / 32768.0 for v in vals]
+        else:
+            vals = struct.unpack("<%di" % (n * ch), raw)
+            samples = [v / 2147483648.0 for v in vals]
+        if ch > 1:
+            mono = []
+            for i in range(n):
+                s = 0.0
+                for c in range(ch):
+                    s += samples[i * ch + c]
+                mono.append(s / ch)
+            samples = mono
+        return samples, sr
+    if sw == 1:
+        samples = (np.frombuffer(raw, dtype=np.uint8).astype(np.float64) - 128.0) / 128.0
+    elif sw == 2:
+        samples = np.frombuffer(raw, dtype="<i2").astype(np.float64) / 32768.0
+    else:
+        samples = np.frombuffer(raw, dtype="<i4").astype(np.float64) / 2147483648.0
+    if ch > 1:
+        mono = np.zeros(n, dtype=np.float64)
+        for c in range(ch):
+            mono += samples[c::ch]
+        samples = mono / ch
     return samples, sr
 
 
@@ -114,7 +128,7 @@ def _decode_via_librosa(data: bytes, max_seconds: Optional[float] = MAX_SECONDS)
     if max_seconds is not None and max_seconds > 0:
         limit = int(sr * max_seconds)
         arr = arr[:limit]
-    return [float(v) for v in arr], int(sr)
+    return arr, int(sr)
 
 
 def estimate_f0_reference(samples, sr, frame=FRAME, hop=HOP):

@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 import os
 import shutil
 import threading
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
 from .config import settings, INSECURE_SECRET_KEYS, MIN_SECRET_KEY_LENGTH
+from .storage import manager as _storage_manager
 from .api.router import api_router
 from .database.session import init_db, SessionLocal
 from .database import crud
@@ -32,8 +34,15 @@ AUDIO_SUFFIXES = (
 HEAVY_POST_PREFIXES = ("/api/music/", "/api/lessons/")
 HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload")
 LARGE_BODY_PREFIXES = ("/api/lessons/",)
-LARGE_BODY_PATHS = ("/api/music/analyze-pitch", "/api/music/compare")
+LARGE_BODY_PATHS = (
+    "/api/music/analyze-pitch",
+    "/api/music/compare",
+    "/api/music/instruments",
+    "/api/music/restore",
+    "/api/music/transcribe",
+)
 LARGE_BODY_LIMIT = 15 * 1024 * 1024
+COMPARE_BODY_LIMIT = _storage_manager.COMPARE_BODY_LIMIT
 
 
 class SecurityHeadersMiddleware:
@@ -66,6 +75,10 @@ class SecurityHeadersMiddleware:
                 headers.setdefault("X-Frame-Options", "DENY")
                 headers.setdefault("Referrer-Policy", "no-referrer")
                 headers.setdefault("Content-Security-Policy", self.CSP)
+                path = scope.get("path", "")
+                if path.startswith("/api/auth/") or path.startswith("/api/admin/"):
+                    headers.setdefault("Cache-Control", "no-store")
+                    headers.setdefault("Pragma", "no-cache")
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
@@ -138,6 +151,8 @@ class BodyLimitMiddleware:
     def _limit_for(self, path: str) -> int:
         if path.startswith("/api/heritage/upload"):
             return 50 * 1024 * 1024 + 2 * 1024 * 1024
+        if path == "/api/music/compare":
+            return COMPARE_BODY_LIMIT
         if path.startswith(LARGE_BODY_PREFIXES) or path in LARGE_BODY_PATHS:
             return LARGE_BODY_LIMIT
         return self.default_limit
@@ -200,6 +215,9 @@ class BodyLimitMiddleware:
         await self.app(scope, counting_receive, send)
 
 
+SHED_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/admin-unlock"}
+
+
 class SheddingMiddleware:
     def __init__(self, app, max_in_flight=0):
         self.app = app
@@ -208,6 +226,9 @@ class SheddingMiddleware:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or self.max_in_flight <= 0:
+            await self.app(scope, receive, send)
+            return
+        if (scope.get("path") or "") in SHED_EXEMPT_PATHS:
             await self.app(scope, receive, send)
             return
         if self.in_flight >= self.max_in_flight:
@@ -308,23 +329,28 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if docs_open else None,
     )
     application.add_middleware(GZipMiddleware, minimum_size=1000)
+    origins_cfg = settings.allowed_origins.strip()
+    allow_origins = [o.strip() for o in origins_cfg.split(",") if o.strip()] if origins_cfg != "*" else ["*"]
+    if settings.auth_required and origins_cfg == "*":
+        allow_origins = []
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in settings.allowed_origins.split(",") if o.strip()],
+        allow_origins=allow_origins,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(NoGzipAudioMiddleware)
     application.add_middleware(HeavyRateLimitMiddleware)
     application.add_middleware(BodyLimitMiddleware)
     application.add_middleware(SheddingMiddleware, max_in_flight=settings.shed_concurrency)
-    if settings.auth_required and settings.allowed_origins.strip() == "*":
+    application.add_middleware(SecurityHeadersMiddleware)
+    if settings.auth_required and origins_cfg == "*":
         import logging
 
         logging.getLogger(__name__).warning(
-            "ALLOWED_ORIGINS=* while AUTH_REQUIRED=true; set an explicit origin list for production"
+            "ALLOWED_ORIGINS=* suppressed while AUTH_REQUIRED=true; "
+            "set an explicit origin list to re-enable cross-origin browser access"
         )
     application.include_router(api_router, prefix="/api")
 

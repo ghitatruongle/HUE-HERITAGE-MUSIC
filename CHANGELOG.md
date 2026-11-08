@@ -1,5 +1,44 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.2-beta3 (2026-11-08, working tree — bản beta cuối cùng, trọng tâm ổn định server + client) — CHƯA PHÁT HÀNH
+
+> Đợt nâng cấp vá 17 phát hiện ổn định mới (kiểm chứng file:line từng cái) + hoàn tất 9 mục beta2 để lại; trả nợ "DTW 35MB"; mở vùng kiểm định trống duy nhất còn lại: endpoint DSP nặng chưa từng chịu tải thật.
+
+### Máy chủ — hết chặn event loop + RAM đỉnh
+- Decode WAV không còn đứng toàn máy chủ: `/api/music/analyze-pitch` chuyển decode sang luồng nền (trước đây 1 file 15MB chặn mọi người dùng khác 1–4 giây)
+- Upload heritage không còn chặn event loop khi băm SHA-256 + ghi đĩa
+- RAM đỉnh khi chấm điểm giảm hàng chục lần: decode cắt theo thời lượng TRƯỚC khi giải mã + dùng mảng NumPy thay danh sách Python (trước đây ~0.5–1GB/request cho file dài)
+- Ký âm mở kết nối DB SAU khi xử lý xong — hết cảnh ghim kết nối suốt nhiều phút DSP; xác thực người dùng mở phiên DB ngắn thay vì giữ suốt request
+- File DSP >2MB không còn bị cắt 413 oan: `/api/music/instruments`, `/api/music/restore`, `/api/music/transcribe` nhận đúng trần 15MB như khai báo
+- Khi máy quá tải, đăng nhập quản trị không còn bị từ chối 503 theo nhầm (miễn shedding cho login/admin-unlock; vẫn giới hạn theo IP)
+- CORS mặc định an toàn hơn: bật xác thực mà khai `ALLOWED_ORIGINS=*` thì trình duyệt chéo nguồn không còn được phép (app desktop/mobile không bị ảnh hưởng); khai danh sách origin rõ ràng để mở lại
+
+### Máy chủ — CPU DSP + chống stampede
+- `harmonicity` tính bằng NumPy nhanh ~280 lần (trước đây mỗi request nhạc cụ đốt phút CPU bằng vòng lặp thuần Python)
+- STFT/khôi phục dùng FFT NumPy — khôi phục file 8s từ 60–180s CPU xuống ~0.3s
+- Cache bài học có khóa theo bài — nhiều request đầu tiên cùng lúc chỉ build 1 lần (hết stampede)
+- Mỗi người dùng tối đa 2 tác vụ DSP nặng đồng thời (nhạc cụ / khôi phục / so sánh / ký âm / luyện tập) — vượt trả 429 lịch sự thay vì đốt máy chủ
+
+### Ứng dụng — chống sập, jank và race
+- Vào nền khi đang thu: thu âm dừng có kiểm soát qua đúng khóa thu âm (hết giữ khóa mic, hết lệch trạng thái); player nhạc tạm dừng
+- Chọn file phân tích lỗi plugin/quyền hiện thông báo lỗi thay vì im lặng kẹt màn hình
+- Đổi máy chủ giữa phiên: token KHÔNG còn gắn vào máy chủ lạ người dùng nhập; watcher cũ được thay thế; 401 nhất thời tự thẩm định lại phiên trước khi đăng xuất (mất phiên chỉ khi máy chủ xác nhận token chết)
+- Chờ kết quả tạo nhạc: phân biệt rõ "máy chủ khởi động lại, tác vụ mất" với mạng chập chờn
+- Khi offline, các tác vụ nặng (phân tích / tạo nhạc / khôi phục) chặn sớm với thông báo ngay — hết chờ timeout vô nghĩa
+
+### Thuật toán chấm điểm
+- DTW chỉ cấp phát vùng băng thay vì 2 ma trận full n×m — bộ nhớ đỉnh 34.3MB → 0.63MB (−54×) với đầu ra GIỐNG HỆT (kiểm chứng trên bộ fixture ngẫu nhiên có seed)
+
+### Giữ nguyên theo thiết kế
+- URL ký trên bài `admin_only` do admin chủ động mint vẫn cho khách giữ link truy cập (ngữ nghĩa chia sẻ chủ ý được test OC ghim); URL cũ vẫn chết đúng khi đổi visibility (kiểm tra lại bằng 4 test mới)
+
+### Hạn chế đã biết (ghi nhận trung thực)
+- N6 glít metronome: đã chặn tiếng click chảy vào bản thu + chuỗi hóa thao tác; còn lại phụ thuộc nền tảng
+- N7 crash-log chỉ lưu cục bộ trên máy (không gửi máy chủ) — quyết định riêng tư, xem lại sau bản chính thức
+- Quota lưu trữ theo người dùng chưa có; hiện giới hạn số tác vụ đồng thời (2/user) thay thế
+- PWD-Hunt driver không còn trong kho kiểm thử — mặt phá dò mật khẩu được phủ bởi các đợt trước (9 hình thức, CLEAN) + ADMIN-MAX lần này
+- Kill-Chain C2 "URL sống sau flip admin_only" = hành vi chia sẻ chủ ý theo thiết kế OC (như mục trên), không phải lỗ hổng
+
 ## 0.0.2-beta2 (2026-11-07) — "Ổn định toàn diện app + giao diện"
 
 > Bản beta với trọng tâm độ ổn định: 15 track vá theo kết quả nghiên cứu sâu 2 vòng + audit 32 file (37 phát hiện), giữ nguyên trọn vẹn tính năng của beta1.

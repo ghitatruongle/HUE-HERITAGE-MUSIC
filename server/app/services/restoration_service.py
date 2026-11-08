@@ -3,6 +3,11 @@ import math
 import struct
 import wave
 
+try:
+    import numpy as np
+except Exception:
+    np = None
+
 from ..audio_dsp import fft as dsp_fft
 from . import pitch_service
 
@@ -102,7 +107,11 @@ def restore(data):
     while count_frames * hop + size < total:
         count_frames += 1
     count_frames += 1
-    samples = samples + [0.0] * (count_frames * hop + size - total)
+    if np is None:
+        samples = samples + [0.0] * (count_frames * hop + size - total)
+    else:
+        pad = np.zeros(count_frames * hop + size - total, dtype=np.float64)
+        samples = np.concatenate([np.asarray(samples, dtype=np.float64), pad])
     frames, win = dsp_fft.stft(samples, size, hop)
     first = sorted([abs(v) for v in dsp_fft.fft(frames[len(frames) // 2])])
     med = first[len(first) // 2]

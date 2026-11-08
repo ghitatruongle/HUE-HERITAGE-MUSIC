@@ -10,18 +10,29 @@ class ApiError {
 
 class ApiClient {
   final Dio dio;
+  final String baseHost;
 
   static Options get dspOptions => Options(receiveTimeout: AppConstants.dspTimeout, sendTimeout: AppConstants.dspTimeout);
 
   ApiClient({String? baseUrl})
-      : dio = Dio(BaseOptions(
+      : baseHost = _hostOf(baseUrl ?? ''),
+        dio = Dio(BaseOptions(
           baseUrl: baseUrl ?? '',
           connectTimeout: AppConstants.apiTimeout,
           receiveTimeout: AppConstants.apiTimeout,
           sendTimeout: AppConstants.uploadTimeout,
         )) {
-    dio.interceptors.add(_AuthInterceptor());
+    dio.interceptors.add(_AuthInterceptor(baseHost, dio));
     dio.interceptors.add(_RetryInterceptor(dio));
+  }
+
+  static String _hostOf(String url) {
+    if (url.isEmpty) return '';
+    try {
+      return Uri.parse(url).host;
+    } catch (_) {
+      return '';
+    }
   }
 
   static String describe(Object error) {
@@ -94,11 +105,20 @@ class _RetryInterceptor extends Interceptor {
 }
 
 class _AuthInterceptor extends Interceptor {
+  final String _baseHost;
+  final Dio _dio;
+  bool _healing = false;
+
+  _AuthInterceptor(this._baseHost, this._dio);
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final token = AuthService.currentToken;
     if (token != null && token.isNotEmpty && !options.headers.containsKey('Authorization')) {
-      options.headers['Authorization'] = 'Bearer $token';
+      final host = options.uri.host;
+      if (_baseHost.isEmpty || host.isEmpty || host == _baseHost) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
     }
     handler.next(options);
   }
@@ -108,8 +128,38 @@ class _AuthInterceptor extends Interceptor {
     final path = err.requestOptions.uri.path;
     final isAuthAttempt = path.contains('/auth/');
     if (err.response?.statusCode == 401 && !isAuthAttempt) {
-      AuthService.instance?.clearToken();
+      final host = err.requestOptions.uri.host;
+      if (_baseHost.isNotEmpty && host == _baseHost) {
+        _healThenClear(err.requestOptions);
+      }
     }
     handler.next(err);
+  }
+
+  void _healThenClear(RequestOptions requestOptions) async {
+    final auth = AuthService.instance;
+    if (auth == null || _healing) {
+      return;
+    }
+    _healing = true;
+    try {
+      final client = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ));
+      client.options.validateStatus = (code) => code != null && code < 500;
+      client.httpClientAdapter = _dio.httpClientAdapter;
+      final token = AuthService.currentToken ?? '';
+      final res = await client.get(
+        '${requestOptions.uri.origin}/api/auth/me',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      if ((res.statusCode == 401 || res.statusCode == 403) && AuthService.currentToken == token) {
+        await auth.clearToken();
+      }
+    } catch (_) {
+    } finally {
+      _healing = false;
+    }
   }
 }

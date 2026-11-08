@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -362,55 +363,63 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     final oldCtrl = TextEditingController();
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-        title: Text(strings.changePasswordBtn),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: oldCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordOld)),
-            TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(icon: Icon(_obscureDialog ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
-            TextField(controller: confirmCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordConfirm)),
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(strings.changePasswordBtn),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: oldCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordOld)),
+              TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(icon: Icon(_obscureDialog ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
+              TextField(controller: confirmCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordConfirm)),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
-        ],
-      ),
-      ),
-    );
-    if (!mounted || confirmed != true) return;
-    if (newCtrl.text != confirmCtrl.text || newCtrl.text.length < 6) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordMismatch)));
-      }
-      return;
-    }
-    setState(() => _busy = true);
-    final dio = context.read<ServerConfig>().api.dio;
-    final auth = context.read<AuthService>();
-    try {
-      final newToken = await AuthEndpoints(dio).changePassword(
-        oldPassword: oldCtrl.text,
-        newPassword: newCtrl.text,
+        ),
       );
-      if (newToken.isNotEmpty) {
-        await auth.save(token: newToken, username: auth.username ?? '', email: auth.email, role: auth.isAdmin ? 'admin' : 'user');
+      if (!mounted || confirmed != true) return;
+      if (newCtrl.text != confirmCtrl.text || newCtrl.text.length < 6) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordMismatch)));
+        }
+        return;
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordDone)));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+      setState(() => _busy = true);
+      final dio = context.read<ServerConfig>().api.dio;
+      final auth = context.read<AuthService>();
+      try {
+        final newToken = await AuthEndpoints(dio).changePassword(
+          oldPassword: oldCtrl.text,
+          newPassword: newCtrl.text,
+        );
+        if (newToken.isNotEmpty) {
+          await auth.save(token: newToken, username: auth.username ?? '', email: auth.email, role: auth.isAdmin ? 'admin' : 'user');
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordDone)));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _busy = false);
+        }
       }
     } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
+      unawaited(Future<void>.delayed(const Duration(milliseconds: 400), () {
+        oldCtrl.dispose();
+        newCtrl.dispose();
+        confirmCtrl.dispose();
+      }));
     }
   }
 

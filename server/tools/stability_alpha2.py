@@ -249,26 +249,40 @@ def phase_link_storm(base, admin_tok, user_tok, lid, sec, sample_wav):
         ops.append("sample-sign")
         ops.append("audio-sign")
 
-    def one(kind):
-        try:
+    tls = __import__("threading").local()
+
+    def _op_client():
+        c = getattr(tls, "c", None)
+        if c is None:
             c = worker_client(base)
-            t0 = time.time()
-            path = sample_path if kind == "sample-sign" else audio_path
-            r1 = c.get("/api/music/play-url", params={"path": path}, headers={"Authorization": f"Bearer {admin_tok}"})
-            if r1.status_code != 200:
-                c.close()
-                return r1.status_code, time.time() - t0, f"play-url {kind} -> {r1.status_code}"
-            u = r1.json().get("url", "")
-            r2 = c.get(u)
-            el = time.time() - t0
-            c.close()
-            if r2.status_code != 200:
-                return r2.status_code, el, f"download {kind} -> {r2.status_code}"
-            if kind == "sample-sign" and hashlib.sha256(r2.content).hexdigest() != sha_sample:
-                return 200, el, "sample tải về sai sha256"
-            return 200, el, None
-        except Exception as e:
-            return 0, 0, f"exception {type(e).__name__}"
+            tls.c = c
+        return c
+
+    def one(kind):
+        last_err = None
+        for attempt in range(2):
+            try:
+                c = _op_client()
+                t0 = time.time()
+                path = sample_path if kind == "sample-sign" else audio_path
+                r1 = c.get("/api/music/play-url", params={"path": path}, headers={"Authorization": f"Bearer {admin_tok}"})
+                if r1.status_code != 200:
+                    return r1.status_code, time.time() - t0, f"play-url {kind} -> {r1.status_code}"
+                u = r1.json().get("url", "")
+                r2 = c.get(u)
+                el = time.time() - t0
+                if r2.status_code != 200:
+                    return r2.status_code, el, f"download {kind} -> {r2.status_code}"
+                if kind == "sample-sign" and hashlib.sha256(r2.content).hexdigest() != sha_sample:
+                    return 200, el, "sample tải về sai sha256"
+                return 200, el, None
+            except Exception as e:
+                last_err = f"exception {type(e).__name__} (attempt {attempt + 1})"
+                try:
+                    tls.c = None
+                except Exception:
+                    pass
+        return 0, 0, last_err or "exception unknown"
 
     with ThreadPoolExecutor(max_workers=20) as ex:
         for status, el, err in ex.map(one, ops):
@@ -296,10 +310,10 @@ def phase_audio_pipeline(base, admin_tok, user_tok, lid, sec, sample_wav):
             t0 = time.time()
             if kind == 0:
                 r = c.post("/api/music/analyze-pitch", files={"file": ("a.wav", user_wav, "audio/wav")}, headers=h)
-                ok = r.status_code == 200 and r.json().get("frames", 0) >= 0
+                ok = (r.status_code == 200 and r.json().get("frames", 0) >= 0) or (r.status_code == 429 and "too many concurrent" in str(r.json().get("detail", "")))
             elif kind == 1:
                 r = c.post("/api/music/compare", files={"sample": ("s.wav", ref_wav, "audio/wav"), "user": ("u.wav", user_wav, "audio/wav")}, headers=h)
-                ok = r.status_code == 200 and "metrics" in r.json() and "reference_quality" in r.json()["metrics"]
+                ok = (r.status_code == 200 and "metrics" in r.json() and "reference_quality" in r.json()["metrics"]) or (r.status_code == 429 and "too many concurrent" in str(r.json().get("detail", "")))
             elif kind == 2:
                 tr = [-2, 0, 3][idx % 3]
                 r = c.post(f"/api/lessons/scales/bac/practice?transpose={tr}", files={"file": ("sc.wav", scale_wav, "audio/wav")}, headers=h)
@@ -357,7 +371,7 @@ def phase_mixed_soak(base, admin_tok, user_tok, lid, sec, seconds=120):
                 ok = r.status_code == 200
             elif kind < 15:
                 r = c.post("/api/music/analyze-pitch", files={"file": ("a.wav", sample_wav_small, "audio/wav")}, headers=h)
-                ok = r.status_code == 200
+                ok = r.status_code == 200 or (r.status_code == 429 and "too many concurrent" in str(r.json().get("detail", "")))
             elif kind < 17:
                 r = c.post(f"/api/lessons/{lid}/practice?section={sec}", files={"file": ("u.wav", sample_wav_small, "audio/wav")}, headers=h)
                 ok = r.status_code in (200, 429)

@@ -375,7 +375,7 @@ void main() {
     expect(find.textContaining('Liên hệ quản trị viên'), findsOneWidget);
   });
 
-  test('401 from a guarded endpoint clears the stored token', () async {
+  test('401 from a guarded endpoint clears the stored token after revalidation', () async {
     final auth = AuthService();
     await auth.load();
     await auth.save(token: 'tok123', username: 'tester');
@@ -387,9 +387,34 @@ void main() {
       await api.dio.get('/api/heritage');
     } catch (_) {}
 
+    var cleared = false;
+    for (var i = 0; i < 50; i++) {
+      if (AuthService.currentToken == null) {
+        cleared = true;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(cleared, isTrue);
     expect(auth.token, isNull);
     expect(AuthService.currentToken, isNull);
     expect(auth.isLoggedIn, isFalse);
+  });
+
+  test('transient 401 with valid /auth/me keeps the session', () async {
+    final auth = AuthService();
+    await auth.load();
+    await auth.save(token: 'tok-still-valid', username: 'tester');
+    final api = ApiClient(baseUrl: 'http://127.0.0.1:8000');
+    api.dio.httpClientAdapter = _Flaky401Adapter();
+    try {
+      await api.dio.get('/api/heritage');
+    } catch (_) {}
+
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(auth.token, 'tok-still-valid');
+    expect(auth.isLoggedIn, isTrue);
+    await auth.clearToken();
   });
 
   test('401 from /auth/me keeps the token', () async {
@@ -974,6 +999,27 @@ class _OfflineAdapter implements HttpClientAdapter {
 class _UnauthorizedAdapter implements HttpClientAdapter {
   @override
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    return ResponseBody.fromString(
+      '{"detail":"authentication required"}',
+      401,
+      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _Flaky401Adapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    if (options.path.contains('/api/auth/me')) {
+      return ResponseBody.fromString(
+        jsonEncode({'id': 'u1', 'username': 'tester', 'email': 'a@x.com', 'role': 'user'}),
+        200,
+        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      );
+    }
     return ResponseBody.fromString(
       '{"detail":"authentication required"}',
       401,

@@ -134,6 +134,17 @@ def save_original(data: bytes, filename: str):
     return dest, digest, True
 
 
+COMPARE_BODY_LIMIT = 2 * (15 * 1024 * 1024) + 2 * 1024 * 1024
+
+
+def content_length_exceeds(request, max_bytes: int) -> bool:
+    try:
+        raw = request.headers.get("content-length")
+        return bool(raw) and raw.strip().isdigit() and int(raw) > max_bytes
+    except Exception:
+        return False
+
+
 def safe_original_name(filename: str) -> bool:
     if not filename or "\0" in filename or "/" in filename or "\\" in filename:
         return False

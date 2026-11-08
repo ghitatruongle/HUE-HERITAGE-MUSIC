@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..database.session import acquire_write_slot, get_db
+from ..database.session import acquire_write_slot, get_db, SessionLocal
 from ..database import crud
 from .. import rate_limit, security_log
 
@@ -254,24 +254,28 @@ class LoginRequest(BaseModel):
 FORCE_CHANGE_ALLOWED_PATHS = ("/api/auth/change-password", "/api/auth/revoke-all")
 
 
-def require_user(request: Request, db: Session = Depends(get_db)) -> Optional[str]:
+def require_user(request: Request) -> Optional[str]:
     if not settings.auth_required:
         return None
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="authentication required")
     user_id, epoch = parse_token(header[7:].strip())
-    user = crud.get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=401, detail="unknown user")
-    if epoch < (user.token_epoch or 0):
-        raise HTTPException(status_code=401, detail="token revoked")
-    if getattr(user, "active", 1) == 0:
-        raise HTTPException(status_code=403, detail="account disabled")
-    if getattr(user, "must_change_password", 0) and request.method not in ("GET", "HEAD", "OPTIONS"):
-        path = request.url.path
-        if not any(path == p or path.startswith(p + "/") for p in FORCE_CHANGE_ALLOWED_PATHS):
-            raise HTTPException(status_code=403, detail="password change required")
+    db = SessionLocal()
+    try:
+        user = crud.get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(status_code=401, detail="unknown user")
+        if epoch < (user.token_epoch or 0):
+            raise HTTPException(status_code=401, detail="token revoked")
+        if getattr(user, "active", 1) == 0:
+            raise HTTPException(status_code=403, detail="account disabled")
+        if getattr(user, "must_change_password", 0) and request.method not in ("GET", "HEAD", "OPTIONS"):
+            path = request.url.path
+            if not any(path == p or path.startswith(p + "/") for p in FORCE_CHANGE_ALLOWED_PATHS):
+                raise HTTPException(status_code=403, detail="password change required")
+    finally:
+        db.close()
     return user_id
 
 
@@ -619,19 +623,22 @@ class AdminUnlockRequest(BaseModel):
 @router.post("/admin-unlock")
 def admin_unlock(req: AdminUnlockRequest, request: Request, db: Session = Depends(get_db), admin_id: str = Depends(require_admin)):
     unlock_key = f"unlock:{_client_ip(request)}:{admin_id}"
+    if not rate_limit.hit_and_allow(f"unlock-try:{_client_ip(request)}", 20):
+        security_log.security_event("admin_unlock_rate_limited", admin=admin_id, ip=_client_ip(request))
+        raise HTTPException(status_code=429, detail="too many requests, slow down")
+    user = crud.get_user_by_id(db, admin_id)
+    if user and _uniform_verify(req.password, user.password_hash):
+        with _auth_failures_lock:
+            _admin_unlock_failures.pop(unlock_key, None)
+        _admin_unlocks[admin_id] = time.time()
+        security_log.security_event("admin_unlock", admin=admin_id)
+        return {"unlocked": True, "window_seconds": settings.admin_unlock_window_seconds}
     if _ip_failures_exceeded(_admin_unlock_failures, unlock_key, _ADMIN_UNLOCK_FAILURE_LIMIT):
         security_log.security_event("admin_unlock_rate_limited", admin=admin_id, ip=_client_ip(request))
         raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
-    user = crud.get_user_by_id(db, admin_id)
-    if not user or not _uniform_verify(req.password, user.password_hash):
-        _record_ip_failure(_admin_unlock_failures, unlock_key)
-        security_log.security_event("admin_unlock_failed", admin=admin_id, ip=_client_ip(request))
-        raise HTTPException(status_code=401, detail="wrong password")
-    with _auth_failures_lock:
-        _admin_unlock_failures.pop(unlock_key, None)
-    _admin_unlocks[admin_id] = time.time()
-    security_log.security_event("admin_unlock", admin=admin_id)
-    return {"unlocked": True, "window_seconds": settings.admin_unlock_window_seconds}
+    _record_ip_failure(_admin_unlock_failures, unlock_key)
+    security_log.security_event("admin_unlock_failed", admin=admin_id, ip=_client_ip(request))
+    raise HTTPException(status_code=401, detail="wrong password")
 
 
 @router.post("/users")

@@ -1,5 +1,10 @@
 import math
 
+try:
+    import numpy as np
+except Exception:
+    np = None
+
 from . import fft as dsp_fft
 
 
@@ -64,19 +69,38 @@ def harmonicity(samples, sr):
     n = len(samples)
     if n < 512:
         return 0.0
-    e = sum(s * s for s in samples) / n
+    if np is None:
+        e = sum(s * s for s in samples) / n
+        if e < 0.0000001:
+            return 0.0
+        lmin = max(1, int(sr / 1000))
+        lmax = min(int(sr / 50), n // 2)
+        best = 0.0
+        for lag in range(lmin, lmax):
+            v = 0.0
+            for i in range(n - lag):
+                v += samples[i] * samples[i + lag]
+            nv = v / ((n - lag) * e)
+            if nv > best:
+                best = nv
+        return round(best, 3)
+    arr = np.asarray(samples, dtype=np.float64)
+    e = float(np.dot(arr, arr)) / n
     if e < 0.0000001:
         return 0.0
     lmin = max(1, int(sr / 1000))
     lmax = min(int(sr / 50), n // 2)
-    best = 0.0
-    for lag in range(lmin, lmax):
-        v = 0.0
-        for i in range(n - lag):
-            v += samples[i] * samples[i + lag]
-        nv = v / ((n - lag) * e)
-        if nv > best:
-            best = nv
+    if lmin >= lmax:
+        return 0.0
+    size = 1
+    while size < 2 * n:
+        size <<= 1
+    spec = np.fft.rfft(arr, size)
+    ac = np.fft.irfft(spec * np.conj(spec), size)[:n]
+    lags = np.arange(lmin, lmax)
+    lens = (n - lags).astype(np.float64)
+    nv = ac[lags] / (lens * e)
+    best = float(nv.max())
     return round(best, 3)
 
 

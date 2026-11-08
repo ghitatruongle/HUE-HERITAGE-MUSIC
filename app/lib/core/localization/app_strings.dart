@@ -257,6 +257,9 @@ class AppStrings {
   String creationPollLost(int attempts) => isVi
       ? 'Mất kết nối máy chủ khi chờ kết quả (đã thử $attempts lần). Tác vụ vẫn chạy phía máy chủ.'
       : 'Lost server connection while waiting for the result (tried $attempts times). The task is still running on the server.';
+  String get creationTaskLost => isVi
+      ? 'Máy chủ đã khởi động lại hoặc tác vụ không còn tồn tại. Hãy thử tạo lại.'
+      : 'The server restarted or the task no longer exists. Please create it again.';
 
   String get serverNotConfigured => isVi ? 'Chưa cấu hình máy chủ.' : 'Server not configured.';
   String get errorPrefix => isVi ? 'Lỗi' : 'Error';

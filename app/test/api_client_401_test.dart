@@ -47,6 +47,15 @@ void main() {
     final client = ApiClient(baseUrl: 'http://server.test');
     client.dio.httpClientAdapter = _FakeAdapter(401);
     await expectLater(client.dio.get('/api/lessons/list'), throwsException);
+    var cleared = false;
+    for (var i = 0; i < 50; i++) {
+      if (auth.token == null) {
+        cleared = true;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(cleared, isTrue);
     expect(auth.token, isNull);
     expect(AuthService.currentToken, isNull);
   });

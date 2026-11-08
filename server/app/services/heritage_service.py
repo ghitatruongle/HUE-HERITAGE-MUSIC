@@ -41,18 +41,21 @@ def item_to_dict(item):
     }
 
 
-def ingest_upload(db: Session, data: bytes, filename: str, title: str, type: str, artist: str = "", owner_user_id: str | None = None, visibility: str = "public", **metadata):
-    path, digest, _ = manager.save_original(data, filename)
+def save_upload_payload(data: bytes, filename: str):
+    return manager.save_original(data, filename)
+
+
+def ingest_saved(db: Session, path, digest: str, data_len: int, filename: str, title: str, type: str, artist: str = "", owner_user_id: str | None = None, visibility: str = "public", **metadata):
     existing = crud.get_by_sha(db, digest)
     if existing:
         return existing, False
     name = title if title else Path(filename).stem
     try:
         item = crud.create_item(
-            db, name, type, digest, path.name, len(data), artist=artist,
+            db, name, type, digest, path.name, data_len, artist=artist,
             owner_user_id=owner_user_id, visibility=visibility, **metadata,
         )
-        crud.create_audio(db, item.id, "original", str(path), digest, len(data))
+        crud.create_audio(db, item.id, "original", str(path), digest, data_len)
         return item, True
     except IntegrityError:
         db.rollback()
@@ -60,3 +63,8 @@ def ingest_upload(db: Session, data: bytes, filename: str, title: str, type: str
         if existing:
             return existing, False
         raise
+
+
+def ingest_upload(db: Session, data: bytes, filename: str, title: str, type: str, artist: str = "", owner_user_id: str | None = None, visibility: str = "public", **metadata):
+    path, digest, _ = save_upload_payload(data, filename)
+    return ingest_saved(db, path, digest, len(data), filename, title, type, artist, owner_user_id=owner_user_id, visibility=visibility, **metadata)

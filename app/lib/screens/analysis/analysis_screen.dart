@@ -11,6 +11,7 @@ import '../../models/instrument_result.dart';
 import '../../models/pitch_data.dart';
 import '../../api/endpoints/sing_api.dart';
 import '../../services/locale_provider.dart';
+import '../../services/connectivity_guard.dart';
 import '../../services/server_config.dart';
 import '../../widgets/pitch_contour_chart.dart';
 import '../../widgets/waveform_view.dart';
@@ -33,24 +34,41 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String _source = '';
 
   Future<void> _pickAndAnalyze() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
-      withData: kIsWeb,
-    );
-    final file = result?.files.single;
-    if (file == null) return;
-    Uint8List? bytes = file.bytes;
-    if (bytes == null && !kIsWeb && file.path != null) {
-      bytes = await File(file.path!).readAsBytes();
+    Uint8List? bytes;
+    String name = '';
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.audio,
+        withData: kIsWeb,
+      );
+      final file = result?.files.single;
+      if (file == null) return;
+      name = file.name;
+      bytes = file.bytes;
+      if (bytes == null && !kIsWeb && file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = ApiClient.describe(e);
+        _loading = false;
+      });
+      return;
     }
     if (bytes == null) return;
-    await _run(bytes, file.name);
+    await _run(bytes, name);
   }
 
   Future<void> _run(Uint8List bytes, String name) async {
     final config = context.read<ServerConfig>();
     if (!config.hasServer) {
       setState(() => _error = context.read<LocaleProvider>().strings.analysisNoServer);
+      return;
+    }
+    if (!mounted) return;
+    if (!await ConnectivityGuard.instance.isOnline) {
+      setState(() => _error = context.read<LocaleProvider>().strings.offlineMessage);
       return;
     }
     setState(() {

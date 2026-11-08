@@ -15,6 +15,7 @@ import '../../models/heritage_item.dart';
 import '../../models/restore_result.dart';
 import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
+import '../../services/connectivity_guard.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/empty_state.dart';
@@ -95,12 +96,18 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
   Future<void> _runDspRestoration(HeritageItem item) async {
     if (_isRestoring) return;
+    final strings = context.read<LocaleProvider>().strings;
     final history = context.read<HistoryService>();
+    final dio = context.read<ServerConfig>().api.dio;
+    if (!mounted) return;
+    if (!await ConnectivityGuard.instance.isOnline) {
+      if (mounted) setState(() => _restoreError = strings.offlineMessage);
+      return;
+    }
     setState(() {
       _isRestoring = true;
       _restoreError = null;
     });
-    final dio = context.read<ServerConfig>().api.dio;
     _log(history, 'restore', item.title, 'running');
     try {
       final res = await RestorationApi(dio).restoreItem(item.id);

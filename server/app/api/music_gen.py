@@ -298,7 +298,7 @@ async def gen_task_events(request: Request, task_id: str):
 
         db = SessionLocal()
         try:
-            user_id = require_user(request, db)
+            user_id = require_user(request)
         finally:
             db.close()
     task = generator_service.get_task(task_id)

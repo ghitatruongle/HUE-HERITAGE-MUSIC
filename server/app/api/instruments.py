@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..database.session import get_db
 from ..database import crud
-from ..services import instrument_service
+from ..services import instrument_service, user_inflight
 from ..storage import manager
 from .auth import require_user, resolve_bearer_user
 
@@ -17,16 +17,22 @@ MAX_BYTES = manager.MAX_ANALYSIS_BYTES
 
 
 @router.post("/music/instruments")
-async def detect_instruments(file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+async def detect_instruments(request: Request, file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
+    if not user_inflight.try_acquire(user_inflight.user_key("instruments", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
         return await asyncio.to_thread(instrument_service.detect, data)
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
+    finally:
+        user_inflight.release(user_inflight.user_key("instruments", user_id))
 
 
 @router.post("/music/instruments-item/{item_id}")

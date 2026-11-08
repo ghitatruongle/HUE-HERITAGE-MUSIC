@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import wave
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -212,7 +213,11 @@ def build_lesson(item: HeritageItem) -> dict:
     return payload
 
 
-def get_lesson(item: HeritageItem) -> Optional[dict]:
+_LESSON_BUILD_LOCKS: dict = {}
+_LESSON_LOCKS_GUARD = threading.Lock()
+
+
+def _try_cached_lesson(item: HeritageItem) -> Optional[dict]:
     cached = _lesson_cache_path(item)
     if cached.exists():
         try:
@@ -225,7 +230,21 @@ def get_lesson(item: HeritageItem) -> Optional[dict]:
                     return data
         except Exception:
             pass
-    return build_lesson(item)
+    return None
+
+
+def get_lesson(item: HeritageItem) -> Optional[dict]:
+    data = _try_cached_lesson(item)
+    if data is not None:
+        return data
+    sha = item.sha256 or item.id
+    with _LESSON_LOCKS_GUARD:
+        lock = _LESSON_BUILD_LOCKS.setdefault(sha, threading.Lock())
+    with lock:
+        data = _try_cached_lesson(item)
+        if data is not None:
+            return data
+        return build_lesson(item)
 
 
 def lesson_summary(item: HeritageItem) -> Optional[dict]:

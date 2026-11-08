@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import 'task_result_card.dart';
 import '../../models/heritage_item.dart';
 import '../../models/music_task.dart';
+import '../../services/connectivity_guard.dart';
 import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
@@ -130,15 +132,19 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
   Future<void> _runSingOriginal() async {
     if (_selectedTune == null) return;
+    final strings = context.read<LocaleProvider>().strings;
+    final dio = context.read<ServerConfig>().api.dio;
+    final history = context.read<HistoryService>();
+    if (!mounted) return;
+    if (!await ConnectivityGuard.instance.isOnline) {
+      if (mounted) setState(() => _errorTab1 = strings.offlineMessage);
+      return;
+    }
     setState(() {
       _busyTab1 = true;
       _errorTab1 = null;
       _taskTab1 = null;
     });
-
-    final dio = context.read<ServerConfig>().api.dio;
-    final history = context.read<HistoryService>();
-    final strings = context.read<LocaleProvider>().strings;
 
     try {
       final task = await MusicApi(dio).singOriginal(
@@ -180,6 +186,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   Future<void> _runSingNewLyrics() async {
     if (_selectedTune == null) return;
     final strings = context.read<LocaleProvider>().strings;
+    final dio = context.read<ServerConfig>().api.dio;
+    final history = context.read<HistoryService>();
+    if (!mounted) return;
+    if (!await ConnectivityGuard.instance.isOnline) {
+      if (mounted) setState(() => _errorTab2 = strings.offlineMessage);
+      return;
+    }
     final lyrics = _customLyricsCtrl.text.trim();
     if (lyrics.isEmpty) {
       setState(() => _errorTab2 = strings.creationLyricsRequired);
@@ -191,9 +204,6 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       _errorTab2 = null;
       _taskTab2 = null;
     });
-
-    final dio = context.read<ServerConfig>().api.dio;
-    final history = context.read<HistoryService>();
 
     try {
       final task = await MusicApi(dio).singNewLyrics(
@@ -290,9 +300,9 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
   Future<void> _pollTask(String id, {required bool isTab1, required int durationSeconds}) async {
     if (!mounted) return;
-    final dio = context.read<ServerConfig>().api.dio;
     final history = context.read<HistoryService>();
     final pollLost = context.read<LocaleProvider>().strings.creationPollLost;
+    final taskLost = context.read<LocaleProvider>().strings.creationTaskLost;
     setState(() => _polling = true);
     final deadline = DateTime.now().add(Duration(seconds: 150 + durationSeconds * 3));
     var consecutiveFailures = 0;
@@ -300,6 +310,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     while (mounted && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(seconds: 2));
       if (!mounted) return;
+      final dio = context.read<ServerConfig>().api.dio;
       try {
         final t = await MusicApi(dio).task(id);
         consecutiveFailures = 0;
@@ -314,6 +325,33 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         }
         if (t.status != 'running' && t.status != 'pending' && t.status != 'queued') {
           await history.updateStatus(id, t.status);
+          break;
+        }
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) {
+          if (mounted) {
+            setState(() {
+              if (isTab1) {
+                _errorTab1 = taskLost;
+              } else {
+                _errorTab2 = taskLost;
+              }
+            });
+          }
+          break;
+        }
+        consecutiveFailures++;
+        if (consecutiveFailures >= 5) {
+          if (mounted) {
+            final msg = pollLost(consecutiveFailures);
+            setState(() {
+              if (isTab1) {
+                _errorTab1 = msg;
+              } else {
+                _errorTab2 = msg;
+              }
+            });
+          }
           break;
         }
       } catch (_) {

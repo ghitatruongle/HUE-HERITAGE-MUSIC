@@ -1,9 +1,9 @@
 from typing import Optional
 import asyncio
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 
-from ..services import pitch_service, compare_service
+from ..services import pitch_service, compare_service, user_inflight
 from ..storage import manager
 from .auth import require_user
 
@@ -12,17 +12,24 @@ MAX_BYTES = manager.MAX_ANALYSIS_BYTES
 
 
 @router.post("/music/analyze-pitch")
-async def analyze_pitch(file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+async def analyze_pitch(request: Request, file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
+    if not user_inflight.try_acquire(user_inflight.user_key("pitch", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
-        samples, sr = pitch_service.read_mono_wav(data)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="wav decode failed")
-    times, f0s = await asyncio.to_thread(pitch_service.estimate_f0, samples, sr)
+        try:
+            samples, sr = await asyncio.to_thread(pitch_service.read_mono_wav, data)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="wav decode failed")
+        times, f0s = await asyncio.to_thread(pitch_service.estimate_f0, samples, sr)
+    finally:
+        user_inflight.release(user_inflight.user_key("pitch", user_id))
     voiced = [f for f in f0s if f > 0]
     mean_f0 = round(sum(voiced) / len(voiced), 1) if voiced else 0.0
     return {
@@ -37,17 +44,24 @@ async def analyze_pitch(file: UploadFile = File(...), user_id: Optional[str] = D
 
 
 @router.post("/music/compare")
-async def compare_sing(sample: UploadFile = File(...), user: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+async def compare_sing(request: Request, sample: UploadFile = File(...), user: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
+    if manager.content_length_exceeds(request, manager.COMPARE_BODY_LIMIT):
+        raise HTTPException(status_code=413, detail="file too large")
     s_data = await sample.read()
     u_data = await user.read()
     if len(s_data) == 0 or len(u_data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
     if len(s_data) > MAX_BYTES or len(u_data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
+    if not user_inflight.try_acquire(user_inflight.user_key("compare", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
-        return await asyncio.to_thread(compare_service.compare, s_data, u_data)
-    except ValueError as e:
-        msg = str(e)
-        if "empty contour" in msg:
-            raise HTTPException(status_code=400, detail="empty pitch contour (silence or unvoiced audio)")
-        raise HTTPException(status_code=400, detail="wav decode failed")
+        try:
+            return await asyncio.to_thread(compare_service.compare, s_data, u_data)
+        except ValueError as e:
+            msg = str(e)
+            if "empty contour" in msg:
+                raise HTTPException(status_code=400, detail="empty pitch contour (silence or unvoiced audio)")
+            raise HTTPException(status_code=400, detail="wav decode failed")
+    finally:
+        user_inflight.release(user_inflight.user_key("compare", user_id))

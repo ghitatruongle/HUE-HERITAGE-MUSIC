@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cross_file/cross_file.dart';
@@ -10,6 +11,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/sing_api.dart';
 import '../../models/pitch_data.dart';
 import '../../core/localization/app_strings.dart';
+import '../../services/app_lifecycle_service.dart';
 import '../../services/history_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
@@ -37,15 +39,23 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   String? _error;
   double _progress = 0;
   late AppStrings strings;
+  late AppLifecycleHooks _lifecycleHooks;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _lifecycleHooks = AppLifecycleHooks(
+      onPause: () {
+        unawaited(_stopAndKeep());
+      },
+    );
+    AppLifecycleService.instance.register(_lifecycleHooks);
   }
 
   @override
   void dispose() {
+    AppLifecycleService.instance.unregister(_lifecycleHooks);
     _tabController.dispose();
     if (_recording) {
       _recorder.stop().catchError((_) => null).whenComplete(() => _recorder.dispose());
@@ -59,27 +69,42 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
     return '${Directory.systemTemp.path}/hue_learn.wav';
   }
 
+  Future<void> _stopAndKeep() async {
+    if (!_recording) {
+      return;
+    }
+    String? p;
+    try {
+      p = await _recorder.stop();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _recording = false);
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _recording = false;
+      _filePath = p;
+    });
+    if (p != null) {
+      final media = context.read<SessionMedia>();
+      if (kIsWeb) {
+        try {
+          final bytes = await XFile(p).readAsBytes();
+          media.setRecording(bytes: bytes);
+        } catch (_) {}
+      } else {
+        media.setRecording(path: p);
+      }
+    }
+  }
+
   Future<void> _toggle() async {
     if (_recording) {
-      final p = await _recorder.stop();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _recording = false;
-        _filePath = p;
-      });
-      if (p != null) {
-        final media = context.read<SessionMedia>();
-        if (kIsWeb) {
-          try {
-            final bytes = await XFile(p).readAsBytes();
-            media.setRecording(bytes: bytes);
-          } catch (_) {}
-        } else {
-          media.setRecording(path: p);
-        }
-      }
+      await _stopAndKeep();
       return;
     }
     final ok = await _recorder.hasPermission();

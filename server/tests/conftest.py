@@ -20,6 +20,10 @@ os.environ["MODELS_DIR"] = str(_tmp / "models")
 os.environ["HUE_SECURITY_LOG"] = str(_tmp / "security.log")
 os.environ.setdefault("AUTH_REQUIRED", "false")
 os.environ.setdefault("SECRET_KEY", "hue-test-secret-key-" + "0" * 48)
+os.environ["AUTH_FLOOD_IP_LIMIT"] = "5000"
+os.environ["REGISTER_IP_RATE_LIMIT"] = "5000"
+os.environ["REGISTER_FAILURE_IP_LIMIT"] = "5000"
+os.environ["HEAVY_RATE_LIMIT"] = "5000"
 
 
 @pytest.fixture(autouse=True)

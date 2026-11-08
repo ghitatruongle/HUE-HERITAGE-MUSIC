@@ -33,7 +33,7 @@ class AudioPlayerBar extends StatefulWidget {
   State<AudioPlayerBar> createState() => _AudioPlayerBarState();
 }
 
-class _AudioPlayerBarState extends State<AudioPlayerBar> {
+class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObserver {
   final AudioPlayer _player = AudioPlayer();
   int _loadGen = 0;
   bool _ready = false;
@@ -44,7 +44,17 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      try {
+        _player.pause();
+      } catch (_) {}
+    }
   }
 
   @override
@@ -165,6 +175,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _player.dispose();
     super.dispose();
   }
