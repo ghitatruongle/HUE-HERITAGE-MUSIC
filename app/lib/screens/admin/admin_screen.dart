@@ -9,12 +9,15 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/admin_endpoints.dart';
 import '../../api/endpoints/auth_endpoints.dart';
 import '../../api/endpoints/lesson_api.dart';
+import '../../core/localization/app_strings.dart';
+import '../../core/query_epoch.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/lesson.dart';
 import '../../services/admin_reauth.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
+import '../../widgets/error_panel.dart';
 import '../auth/account_manager_section.dart';
 import '../auth/invite_manager_section.dart';
 import 'security_section.dart';
@@ -39,7 +42,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -72,6 +75,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 Tab(text: strings.adminTabStorage),
                 Tab(text: strings.adminTabLearning),
                 Tab(text: strings.adminTabSecurity),
+                Tab(text: strings.adminTabCrash),
               ],
             ),
           ),
@@ -85,6 +89,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
                 _StorageTab(),
                 LearningSamplesTab(),
                 SecuritySection(),
+                _CrashTab(),
               ],
             ),
           ),
@@ -1175,6 +1180,168 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
               ),
             ),
       ],
+    );
+  }
+}
+
+class _CrashTab extends StatefulWidget {
+  const _CrashTab();
+
+  @override
+  State<_CrashTab> createState() => _CrashTabState();
+}
+
+class _CrashTabState extends State<_CrashTab> {
+  final QueryEpoch _queryEpoch = QueryEpoch();
+  final List<CrashReportEntry> _items = [];
+  bool _loading = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    final epoch = _queryEpoch.next();
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final items = await AdminEndpoints(dio).crashReports(limit: 100);
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(items);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _hasError = true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _deleteAll() async {
+    final strings = context.read<LocaleProvider>().strings;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.crashDeleteAll),
+        content: Text(strings.crashDeleteConfirm),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(strings.adminCancel)),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.statusDanger),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(strings.crashDeleteAll),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      await runWithAdminReauth(context, () => AdminEndpoints(dio).clearCrashReports());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.crashDeleted)));
+      _reload();
+    } on AdminReauthCancelled {
+      return;
+    } catch (_) {
+      if (mounted) _reload();
+    }
+  }
+
+  Future<void> _openDetail(CrashReportEntry entry) async {
+    final strings = context.read<LocaleProvider>().strings;
+    String detail = entry.summary;
+    try {
+      final dio = context.read<ServerConfig>().api.dio;
+      final full = await AdminEndpoints(dio).crashReportDetail(entry.id);
+      detail = full.detail.isEmpty ? full.summary : full.detail;
+    } catch (_) {}
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.crashDetailTitle),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              '${entry.createdAt}\n${entry.platform} · ${entry.appVersion}\nuser: ${entry.userId.isEmpty ? '-' : entry.userId}\n\n$detail',
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(strings.adminReauthConfirm)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: Text(strings.adminTabCrash),
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), tooltip: strings.adminRefresh, onPressed: _reload),
+          IconButton(icon: const Icon(Icons.delete_sweep), tooltip: strings.crashDeleteAll, onPressed: _items.isEmpty ? null : _deleteAll),
+        ],
+      ),
+      body: _buildBody(strings),
+    );
+  }
+
+  Widget _buildBody(AppStrings strings) {
+    if (_loading && _items.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_hasError && _items.isEmpty) {
+      return ErrorPanel(message: strings.crashLoadFail, onRetry: _reload);
+    }
+    if (_items.isEmpty) {
+      return Center(
+        child: Text(
+          strings.crashEmpty,
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(12),
+        itemCount: _items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final e = _items[index];
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.bug_report, color: AppTheme.statusWarning),
+              title: Text(
+                e.summary.isEmpty ? '-' : e.summary,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '${e.platform.isEmpty ? '-' : e.platform} · ${e.appVersion.isEmpty ? '-' : e.appVersion} · ${e.createdAt}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () => _openDetail(e),
+            ),
+          );
+        },
+      ),
     );
   }
 }

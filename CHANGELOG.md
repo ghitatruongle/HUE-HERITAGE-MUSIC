@@ -1,6 +1,46 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
-## 0.0.2-beta3 (2026-11-08, working tree — bản beta cuối cùng, trọng tâm ổn định server + client) — CHƯA PHÁT HÀNH
+## 0.0.2 (chính thức) (2026-11-08)
+
+> Bản chính thức của chuỗi 0.0.2: nền beta3 đã kiểm định trọn vẹn + lớp "governance" cho chạy dài ngày tháng — dọn dẹp tự động khi server đang chạy, trần lưu trữ theo người dùng, backup cơ sở dữ liệu, crash-log chỉ admin xem. Không thêm tính năng mới ngoài các mục bền vững này.
+
+### Độ bền lưu trữ (disk governance)
+- **Dọn dẹp định kỳ khi server đang chạy** (mỗi 6 giờ, `MAINTENANCE_INTERVAL_HOURS`): toàn bộ retention 7/14/30 ngày không còn chỉ chạy lúc khởi động hay chờ admin bấm nút — server chạy bằng launchd nhiều tháng vẫn tự giữ đĩa sạch
+- Thêm 3 cây lưu trữ vào dọn dẹp: `heritage/restored/` (bản phục hồi trước đây ghi đĩa vĩnh viễn), `heritage/musicxml/` (MusicXML ký âm) và `lesson_samples/<sha>` mồ côi khi bản ghi gốc đã bị xóa (`RESTORED_RETENTION_DAYS`, `MUSICXML_RETENTION_DAYS`)
+- **Trần lưu trữ theo người dùng** (mặc định 500MB, `USER_STORAGE_QUOTA_MB`): upload vượt trần nhận 413 kèm thông điệp dung lượng đã dùng; admin trưởng không trần; `/api/auth/me` trả `storage_used_bytes` / `storage_quota_bytes`
+- Xóa tài khoản giờ xóa sạch `practice_sessions` của họ (trước đây thành mồ côi vĩnh viễn trong DB)
+
+### Độ bền server khi chạy dài
+- **Worker pool có trần** (`WORKER_THREADS=8`): transcribe/restore/instruments + sinh nhạc không còn spawn thread mới mỗi task — 100 người dùng đồng thời không còn nhân vô hạn thread
+- `ThrottleInterval=15` vào plist launchd — crash-loop không còn spin-restart liên tục dồn ứ log (log launchd trước đây đã tới 30MB)
+- `/health` chế độ extended thêm `rss_mb` / `threads` / `db_wal_mb` — giám sát rò rỉ bộ nhớ và WAL khi chạy dài
+
+### Độ bền dữ liệu
+- Script backup `server/tools/db_backup.sh`: sqlite online backup không khóa server + integrity check + xoay N bản (mặc định giữ 7) — chạy tay hoặc treo launchd/cron
+- Bảng `schema_meta.schema_version` — migration có mốc version chính thức, chuẩn bị cho nâng schema tương lai
+
+### Crash log — chỉ admin trưởng xem
+- App gửi crash-log lên server lúc khởi động (nếu còn đăng nhập): `POST /api/crash-reports` (bắt buộc đăng nhập, ≤256KB, rate-limit)
+- Chỉ admin trưởng xem được: tab **"Crash"** mới trong màn Quản trị (danh sách, xem chi tiết, xóa tất cả); người dùng thường không thấy crash của ai, kể cả của mình trên server
+- Vẫn lưu cục bộ xoay 5×256KB; gửi thành công thì dọn bản chính để không gửi trùng
+
+### Ứng dụng — dọn đĩa khi dùng lâu
+- File tạm phát nhạc/beep metronome (`hue_play_*.wav` / `hue_beep_*.wav`) trước đây mọc mới mỗi lần bấm và không bao giờ xóa — giờ tự xóa file cũ ngay và dọn nốt khi đóng; hết cảnh đầy đĩa khi luyện tập dài
+- File tải về rồi chia sẻ trên mobile (MIDI/MusicXML ký âm, bản luyện) được **xóa sau khi chia sẻ** — temp dir không còn tích đống
+
+### Hạn chế đã biết (trung thực)
+- Màn hình hiển thị "đã dùng X / trần Y" cho người dùng đọc từ `/api/auth/me` — API đã trả đủ, UI hiển thị sẽ vào bản sau
+- N6 glít metronome: đã chặn tiếng click chảy vào bản thu + chuỗi hóa thao tác; phần còn lại phụ thuộc nền tảng
+- SQLite 1 file: khi mở ra public internet nên đặt sau reverse-proxy và bật backup định kỳ bằng `db_backup.sh`
+
+### Kiểm định
+- pytest **263/263** (thêm 14 test hồi quy: dọn dẹp 3 cây + lesson_samples mồ côi · quota 413/admin exempt · cascade practice_sessions · schema_meta · worker pool · backup roundtrip + xoay · crash-report flow admin-only + trần 256KB)
+- flutter analyze **0** · flutter test **70/70** (thêm tab Crash 7 tab Quản trị + file tạm tự xóa) · build web release OK
+- Smoke E2E **39/39** + verify orchestrator TOÀN XANH trên server cô lập 0.0.2 (DSP-storm SỐNG/SẠCH: restore 12×200 · analyze 18×200+6×429 đúng trần per-user · compare/transcribe 200 hết · **5xx=0**, health max 334ms; stability restart-giữa-bão SẠCH; 0 Traceback)
+- Soak dài **1800s (30 phút)** 18 VU: **28/28 SẠCH** — OK=68.495 · 4xx lịch sự=5.719 · **5xx=0 · 0 exception** · p50=158ms · p95=583ms · hồi phục <20s · restart giữa soak không mất dữ liệu
+- Battery tấn công trên sân tập chạy code 0.0.2: SQLi / XSS / CSRF / **Kill-chain 6 chuỗi** / **PWD-Hunt 14/14** (driver dựng lại) — toàn bộ **0 breach**; duy nhất 1 phát hiện = artifact test đã biết từ beta3 (422 body-thiếu trả trước 403 khi thiếu xác thực lại — auth vẫn ép khi request đủ)
+
+## 0.0.2-beta3 (2026-11-08, bản beta cuối cùng, trọng tâm ổn định server + client)
 
 > Đợt nâng cấp vá 17 phát hiện ổn định mới (kiểm chứng file:line từng cái) + hoàn tất 9 mục beta2 để lại; trả nợ "DTW 35MB"; mở vùng kiểm định trống duy nhất còn lại: endpoint DSP nặng chưa từng chịu tải thật.
 

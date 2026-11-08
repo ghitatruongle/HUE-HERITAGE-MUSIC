@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from .models import HeritageItem, AudioFile, User, Task, PracticeSession
+from sqlalchemy import func, or_
+from .models import HeritageItem, AudioFile, User, Task, PracticeSession, CrashReport
 
 
 METADATA_FIELDS = [
@@ -203,9 +203,65 @@ def delete_user_everything(db: Session, user_id: str):
     if not user:
         return False
     db.query(Task).filter(Task.user_id == user_id).update({Task.user_id: None})
+    db.query(PracticeSession).filter(PracticeSession.user_id == user_id).delete()
     db.delete(user)
     db.commit()
     return True
+
+
+def _utf8_safe(value: str) -> str:
+    return (value or "").encode("utf-8", "replace").decode("utf-8")
+
+
+def create_crash_report(db: Session, user_id: Optional[str], app_version: str, platform: str, summary: str, detail: str) -> str:
+    row = CrashReport(
+        user_id=user_id,
+        app_version=_utf8_safe(app_version)[:64],
+        platform=_utf8_safe(platform)[:64],
+        summary=_utf8_safe(summary)[:500],
+        detail=_utf8_safe(detail),
+    )
+    db.add(row)
+    db.commit()
+    return row.id
+
+
+def list_crash_reports(db: Session, limit: int = 100, offset: int = 0):
+    return (
+        db.query(CrashReport)
+        .order_by(CrashReport.created_at.desc())
+        .offset(max(0, offset))
+        .limit(max(1, min(500, limit)))
+        .all()
+    )
+
+
+def clear_crash_reports(db: Session) -> int:
+    deleted = db.query(CrashReport).delete()
+    db.commit()
+    return deleted
+
+
+def prune_old_crash_reports(db: Session, retention_days: int) -> int:
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    deleted = db.query(CrashReport).filter(CrashReport.created_at < cutoff).delete()
+    db.commit()
+    return deleted
+
+
+def user_storage_bytes(db: Session, user_id: Optional[str]) -> int:
+    if not user_id:
+        return 0
+    total = (
+        db.query(func.coalesce(func.sum(AudioFile.size), 0))
+        .join(HeritageItem, HeritageItem.id == AudioFile.item_id)
+        .filter(HeritageItem.owner_user_id == user_id)
+        .filter(AudioFile.kind == "original")
+        .scalar()
+    )
+    return int(total or 0)
 
 
 def set_user_active(db: Session, user_id: str, active: bool):

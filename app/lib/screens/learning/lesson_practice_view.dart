@@ -52,6 +52,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   final AudioPlayer _samplePlayer = AudioPlayer();
   final AudioPlayer _metronomePlayer = AudioPlayer();
   Future<void> _metroChain = Future.value();
+  String? _lastTempBeepPath;
   late AppLifecycleHooks _lifecycleHooks;
   List<Lesson> _lessons = [];
   Lesson? _selected;
@@ -123,12 +124,23 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     _scaleAutoStop?.cancel();
     _sampleSub?.cancel();
     _rec.dispose();
+    final staleBeep = _lastTempBeepPath;
     final metroDrain = _metroChain.catchError((_) {});
     _metroChain = Future.value();
     metroDrain.whenComplete(() {
       try {
         _metronomePlayer.dispose();
       } catch (_) {}
+      if (staleBeep != null) {
+        () async {
+          try {
+            final f = File(staleBeep);
+            if (await f.exists()) {
+              await f.delete();
+            }
+          } catch (_) {}
+        }();
+      }
     });
     _samplePlayer.dispose();
     super.dispose();
@@ -138,8 +150,18 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     if (kIsWeb) {
       return AudioSource.uri(Uri.dataFromBytes(bytes, mimeType: 'audio/wav'));
     }
-    final file = File('${Directory.systemTemp.path}/hue_beep_${DateTime.now().millisecondsSinceEpoch}.wav');
+    final file = File('${Directory.systemTemp.path}/hue_beep_${identityHashCode(this)}_${DateTime.now().millisecondsSinceEpoch}.wav');
     await file.writeAsBytes(bytes);
+    final previous = _lastTempBeepPath;
+    _lastTempBeepPath = file.path;
+    if (previous != null && previous != file.path) {
+      try {
+        final prevFile = File(previous);
+        if (await prevFile.exists()) {
+          await prevFile.delete();
+        }
+      } catch (_) {}
+    }
     return AudioSource.uri(Uri.file(file.path));
   }
 
@@ -709,11 +731,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         } catch (_) {}
       }
       await dio.download(url, savePath);
-      if (Platform.isAndroid || Platform.isIOS) {
+      final shared = Platform.isAndroid || Platform.isIOS;
+      if (shared) {
         await shareDownloadedFile(savePath, name);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${strings.practiceSaved} $savePath')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(shared ? strings.practiceShared(name) : '${strings.practiceSaved} $savePath')));
       }
     } catch (e) {
       if (mounted) {

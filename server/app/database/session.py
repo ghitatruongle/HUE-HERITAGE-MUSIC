@@ -81,6 +81,23 @@ MIGRATION_COLUMNS = {
 }
 
 
+SCHEMA_VERSION = 1
+
+
+def _ensure_schema_version():
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS schema_meta "
+                "(key VARCHAR(64) PRIMARY KEY, value VARCHAR(64) NOT NULL)"
+            )
+        )
+        conn.execute(
+            text("INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('schema_version', :v)"),
+            {"v": str(SCHEMA_VERSION)},
+        )
+
+
 def init_db():
     from . import models
     Base.metadata.create_all(bind=engine)
@@ -93,6 +110,7 @@ def init_db():
             if col not in existing:
                 with engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+    _ensure_schema_version()
     _enforce_admin_truong()
 
 

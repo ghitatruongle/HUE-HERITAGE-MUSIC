@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..database.session import acquire_write_slot, get_db
 from ..database import crud
+from ..config import settings
 from ..services import heritage_service, user_inflight
 from ..storage import manager
 from ..audio_access import require_audio_access, sign_path
@@ -106,6 +107,14 @@ async def upload_heritage(
     )
     uploader = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
     visibility = "admin_only" if crud.is_admin_user(uploader) else "public"
+    if uploader is not None and not crud.is_admin_user(uploader) and settings.user_storage_quota_mb > 0:
+        used = crud.user_storage_bytes(db, uploader.id)
+        limit_bytes = settings.user_storage_quota_mb * 1024 * 1024
+        if used + len(data) > limit_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"storage quota exceeded: {used // (1024 * 1024)}MB used of {settings.user_storage_quota_mb}MB",
+            )
     if not user_inflight.try_acquire(user_inflight.user_key("heritage-upload", user_id)):
         raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
@@ -117,6 +126,8 @@ async def upload_heritage(
             owner_user_id=uploader.id if uploader is not None else None,
             visibility=visibility, **metadata,
         )
+        if not created and not crud.can_view_item(item, uploader):
+            raise HTTPException(status_code=404, detail="upload rejected: duplicate content")
     finally:
         user_inflight.release(user_inflight.user_key("heritage-upload", user_id))
     result = heritage_service.item_to_dict(item)

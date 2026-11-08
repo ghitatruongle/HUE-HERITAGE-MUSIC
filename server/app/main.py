@@ -32,7 +32,7 @@ AUDIO_SUFFIXES = (
 )
 
 HEAVY_POST_PREFIXES = ("/api/music/", "/api/lessons/")
-HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload")
+HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload", "/api/crash-reports")
 LARGE_BODY_PREFIXES = ("/api/lessons/",)
 LARGE_BODY_PATHS = (
     "/api/music/analyze-pitch",
@@ -310,6 +310,24 @@ def _raise_fd_limit():
         pass
 
 
+def _maintenance_thread():
+    import time
+
+    from .services import maintenance
+
+    interval = max(1, settings.maintenance_interval_hours) * 3600
+    while True:
+        time.sleep(interval)
+        try:
+            db = SessionLocal()
+            try:
+                maintenance.run_maintenance(db)
+            finally:
+                db.close()
+        except Exception:
+            logging.getLogger(__name__).exception("maintenance loop failed")
+
+
 def create_app() -> FastAPI:
     _raise_fd_limit()
     _validate_secret_key()
@@ -323,7 +341,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.2-beta3",
+        version="0.0.2",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -361,14 +379,16 @@ def create_app() -> FastAPI:
         limiter = anyio.to_thread.current_default_thread_limiter()
         limiter.total_tokens = 192
         threading.Thread(target=_warmup_lessons, daemon=True).start()
+        if settings.maintenance_interval_hours > 0:
+            threading.Thread(target=_maintenance_thread, daemon=True).start()
 
     @application.get("/health")
     async def health():
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.2-beta3",
-            "stage": "0.0.2-beta3",
+            "version": "0.0.2",
+            "stage": "0.0.2",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio
@@ -383,11 +403,27 @@ def create_app() -> FastAPI:
                     disk_free_gb = shutil.disk_usage(settings.storage_dir).free / 1024**3
                 except Exception:
                     disk_free_gb = None
+                try:
+                    import resource
+                    import sys as _sys
+
+                    _rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                    rss_mb = round(_rss / 1024 / 1024, 1) if _sys.platform == "darwin" else round(_rss / 1024, 1)
+                except Exception:
+                    rss_mb = None
+                try:
+                    db_path = settings.database_url.replace("sqlite:///", "")
+                    wal_mb = round(Path(db_path + "-wal").stat().st_size / 1024 / 1024, 2)
+                except Exception:
+                    wal_mb = None
                 return {
                     "engine_online": ace_step_engine.api_available(),
                     "tasks_running": len(running),
                     "tasks_queued": len(queued),
                     "disk_free_gb": round(disk_free_gb, 1) if disk_free_gb is not None else None,
+                    "rss_mb": rss_mb,
+                    "threads": threading.active_count(),
+                    "db_wal_mb": wal_mb,
                 }
 
             payload.update(await asyncio.to_thread(_extended))

@@ -40,6 +40,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
   bool _dragging = false;
   double _dragValue = 0;
   String? _error;
+  String? _lastTempPlayPath;
 
   @override
   void initState() {
@@ -168,14 +169,35 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
     if (kIsWeb) {
       return AudioSource.uri(Uri.dataFromBytes(bytes, mimeType: 'audio/wav'));
     }
-    final file = File('${Directory.systemTemp.path}/hue_play_${DateTime.now().millisecondsSinceEpoch}.wav');
+    final file = File('${Directory.systemTemp.path}/hue_play_${identityHashCode(this)}_${DateTime.now().millisecondsSinceEpoch}.wav');
     await file.writeAsBytes(bytes);
+    final previous = _lastTempPlayPath;
+    _lastTempPlayPath = file.path;
+    if (previous != null && previous != file.path) {
+      try {
+        final prevFile = File(previous);
+        if (await prevFile.exists()) {
+          await prevFile.delete();
+        }
+      } catch (_) {}
+    }
     return AudioSource.uri(Uri.file(file.path));
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    final stale = _lastTempPlayPath;
+    if (stale != null) {
+      () async {
+        try {
+          final f = File(stale);
+          if (await f.exists()) {
+            await f.delete();
+          }
+        } catch (_) {}
+      }();
+    }
     _player.dispose();
     super.dispose();
   }

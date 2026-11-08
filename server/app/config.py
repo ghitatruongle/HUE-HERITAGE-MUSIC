@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     uvicorn_limit_concurrency: int = 512
     db_pool_size: int = 64
     db_max_overflow: int = 160
+    restored_retention_days: int = 30
+    musicxml_retention_days: int = 30
+    user_storage_quota_mb: int = 500
+    maintenance_interval_hours: int = 6
+    worker_threads: int = 8
+    crash_report_retention_days: int = 30
 
 
 settings = Settings()

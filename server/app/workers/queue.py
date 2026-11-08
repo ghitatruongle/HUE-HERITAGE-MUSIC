@@ -1,9 +1,8 @@
-import threading
-
 from ..config import settings
 from ..database.session import SessionLocal
 from ..database import crud
 from . import runner
+from .pool import get_pool
 
 QUEUE_NAME = "hue"
 KINDS = ("transcribe", "restore", "instruments")
@@ -29,7 +28,7 @@ def _run_inline(task_id: str, kind: str, params: dict):
             crud.update_task(db, task_id, status="error", error=str(e), finished=True)
         finally:
             db.close()
-    threading.Thread(target=work, daemon=True).start()
+    get_pool("task", max(1, settings.worker_threads)).submit(work)
 
 
 def _enqueue_rq(task_id: str, kind: str, params: dict) -> bool:

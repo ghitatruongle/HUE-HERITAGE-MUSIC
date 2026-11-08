@@ -572,6 +572,14 @@ class AppStrings {
   String get adminReauthCancelled => isVi ? 'Đã hủy — chưa xác thực quản trị.' : 'Cancelled — admin not re-authorized.';
 
   String get adminTabSecurity => isVi ? 'Bảo mật' : 'Security';
+  String get adminTabCrash => isVi ? 'Crash' : 'Crash';
+  String get crashEmpty => isVi ? 'Chưa có báo cáo crash nào.' : 'No crash reports yet.';
+  String get crashLoadFail => isVi ? 'Không tải được crash log.' : 'Failed to load crash logs.';
+  String get crashDeleteAll => isVi ? 'Xóa tất cả' : 'Delete all';
+  String get crashDeleteConfirm => isVi ? 'Xóa toàn bộ báo cáo crash trên máy chủ?' : 'Delete all crash reports on the server?';
+  String get crashDeleted => isVi ? 'Đã xóa crash log.' : 'Crash logs deleted.';
+  String get crashDetailTitle => isVi ? 'Chi tiết crash' : 'Crash detail';
+  String practiceShared(String name) => isVi ? 'Đã chia sẻ: $name' : 'Shared: $name';
   String get adminLoadMore => isVi ? 'Tải thêm' : 'Load more';
   String get loadFailGeneric => isVi ? 'Không tải được dữ liệu.' : 'Failed to load data.';
 

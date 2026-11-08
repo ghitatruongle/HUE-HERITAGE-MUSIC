@@ -63,7 +63,8 @@ def transcribe(samples, sr: int) -> list:
             w.setsampwidth(2)
             w.setframerate(sr)
             w.writeframes(pcm.tobytes())
-        _, _, note_events = predict(tmp_path, model)
+        with LOCK:
+            _, _, note_events = predict(tmp_path, model)
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)

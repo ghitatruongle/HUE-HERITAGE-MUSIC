@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -51,6 +52,7 @@ Future<void> main() async {
     auth: auth,
   ));
   if (auth.isLoggedIn && config.hasServer) {
+    unawaited(CrashLog.flushToServer(config.api.dio, AppConstants.appVersion, defaultTargetPlatform.name));
     unawaited(auth.validateSession(config.baseUrl));
   }
 }

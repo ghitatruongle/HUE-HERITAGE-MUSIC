@@ -223,6 +223,36 @@ class SecuritySummary {
   }
 }
 
+class CrashReportEntry {
+  final String id;
+  final String userId;
+  final String appVersion;
+  final String platform;
+  final String summary;
+  final String detail;
+  final String createdAt;
+
+  CrashReportEntry({
+    required this.id,
+    required this.userId,
+    required this.appVersion,
+    required this.platform,
+    required this.summary,
+    required this.detail,
+    required this.createdAt,
+  });
+
+  static CrashReportEntry fromJson(Map<String, dynamic> j) => CrashReportEntry(
+        id: j['id']?.toString() ?? '',
+        userId: j['user_id']?.toString() ?? '',
+        appVersion: j['app_version']?.toString() ?? '',
+        platform: j['platform']?.toString() ?? '',
+        summary: j['summary']?.toString() ?? '',
+        detail: j['detail']?.toString() ?? '',
+        createdAt: j['created_at']?.toString() ?? '',
+      );
+}
+
 class DerivedFile {
   final String kind;
   final int size;
@@ -329,5 +359,39 @@ class AdminEndpoints {
   Future<SecuritySummary> securitySummary() async {
     final res = await dio.get('/api/admin/security/summary');
     return SecuritySummary.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<List<CrashReportEntry>> crashReports({int limit = 100, int offset = 0}) async {
+    final res = await dio.get(
+      '/api/admin/crash-reports',
+      queryParameters: {'limit': limit, 'offset': offset},
+    );
+    final raw = res.data;
+    final list = <CrashReportEntry>[];
+    if (raw is Map) {
+      final items = raw['items'];
+      if (items is List) {
+        for (final e in items) {
+          if (e is Map) {
+            list.add(CrashReportEntry.fromJson(Map<String, dynamic>.from(e)));
+          }
+        }
+      }
+    }
+    return list;
+  }
+
+  Future<CrashReportEntry> crashReportDetail(String id) async {
+    final res = await dio.get('/api/admin/crash-reports/$id');
+    return CrashReportEntry.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<int> clearCrashReports() async {
+    final res = await dio.delete('/api/admin/crash-reports');
+    final raw = res.data;
+    if (raw is Map && raw['deleted'] is num) {
+      return (raw['deleted'] as num).toInt();
+    }
+    return 0;
   }
 }

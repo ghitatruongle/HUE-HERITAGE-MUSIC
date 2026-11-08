@@ -60,11 +60,11 @@ def create_task(kind, prompt, duration, lora, strength, seed, extra=None, user_i
                 TASKS.pop(k, None)
         TASKS[tid] = task
     if status == "running":
-        threading.Thread(
-            target=_run_generation,
-            args=(tid, tid, prompt, duration, seed, lora, strength, extra),
-            daemon=True,
-        ).start()
+        from ..workers.pool import get_pool
+
+        get_pool("generation", max(2, settings.generation_concurrency + 1)).submit(
+            lambda: _run_generation(tid, tid, prompt, duration, seed, lora, strength, extra)
+        )
     return task
 
 

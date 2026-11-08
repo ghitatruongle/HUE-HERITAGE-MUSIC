@@ -102,3 +102,14 @@ class InviteCode(Base):
     used_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CrashReport(Base):
+    __tablename__ = "crash_reports"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    app_version: Mapped[str] = mapped_column(String(64), default="")
+    platform: Mapped[str] = mapped_column(String(64), default="")
+    summary: Mapped[str] = mapped_column(String(512), default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

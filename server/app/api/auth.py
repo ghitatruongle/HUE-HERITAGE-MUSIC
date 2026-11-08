@@ -470,12 +470,16 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 @router.get("/me")
 def get_me(request: Request, db: Session = Depends(get_db)):
     user = _bearer_user(request, db)
+    quota_mb = settings.user_storage_quota_mb
+    storage_quota_bytes = None if (crud.is_admin_user(user) or quota_mb <= 0) else quota_mb * 1024 * 1024
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
         "role": _role_of(user),
         "must_change_password": _must_change(user),
+        "storage_used_bytes": crud.user_storage_bytes(db, user.id),
+        "storage_quota_bytes": storage_quota_bytes,
         "token": make_token_for(user),
     }
 

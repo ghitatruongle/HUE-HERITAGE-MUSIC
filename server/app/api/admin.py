@@ -212,51 +212,78 @@ def admin_delete_storage_item(
     return {"deleted": item_id, "title": item.title, "files_removed": removed}
 
 
-def _cleanup_dir(dir_path: Path, retention_days: int, exclude_subdirs: set | None = None) -> dict:
-    freed = 0
-    count = 0
-    if retention_days <= 0 or not dir_path.exists():
-        return {"files": count, "bytes": freed}
-    skip = exclude_subdirs or set()
-    now = time.time()
-    for f in dir_path.rglob("*"):
-        try:
-            rel = f.relative_to(dir_path)
-            if skip and len(rel.parts) > 1 and rel.parts[0] in skip:
-                continue
-            if f.is_file() and now - f.stat().st_mtime > retention_days * 86400:
-                size = f.stat().st_size
-                f.unlink()
-                freed += size
-                count += 1
-        except OSError:
-            pass
-    return {"files": count, "bytes": freed}
-
-
 @router.post("/maintenance/cleanup")
 def admin_cleanup(
     admin_id: str = Depends(require_admin_fresh),
     db: Session = Depends(get_db),
     _write_slot: None = Depends(acquire_write_slot),
 ):
-    storage_root = Path(settings.storage_dir)
-    details = {
-        "generated": _cleanup_dir(storage_root / "generated", settings.generated_retention_days),
-        "practice_midi": _cleanup_dir(storage_root / "heritage" / "midi", settings.practice_midi_retention_days),
-        "analysis": _cleanup_dir(
-            storage_root / "analysis", settings.analysis_retention_days, exclude_subdirs={"lessons"}
-        ),
-        "lesson_cache": _cleanup_dir(storage_root / "analysis" / "lessons", settings.lesson_cache_retention_days),
-    }
-    tasks_deleted = crud.prune_old_tasks(db, settings.task_retention_days)
-    details["tasks"] = {"deleted": tasks_deleted}
-    freed_bytes = sum(v["bytes"] for k, v in details.items() if k != "tasks")
+    from ..services import maintenance
+
+    result = maintenance.run_maintenance(db)
+    details = result["details"]
+    tasks_deleted = details.get("tasks", {}).get("deleted", 0)
     invalidate_stats_cache()
     security_log.security_event(
-        "admin_cleanup_run", admin=admin_id, freed_bytes=freed_bytes, tasks_deleted=tasks_deleted
+        "admin_cleanup_run", admin=admin_id, freed_bytes=result["freed_bytes"], tasks_deleted=tasks_deleted
     )
-    return {"freed_bytes": freed_bytes, "details": details}
+    return {"freed_bytes": result["freed_bytes"], "details": details}
+
+
+@router.get("/crash-reports")
+def admin_list_crash_reports(
+    limit: int = 100,
+    offset: int = 0,
+    admin_id: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = crud.list_crash_reports(db, limit=limit, offset=offset)
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "app_version": r.app_version,
+                "platform": r.platform,
+                "summary": r.summary,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/crash-reports/{report_id}")
+def admin_crash_report_detail(
+    report_id: str,
+    admin_id: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ..database.models import CrashReport
+
+    row = db.get(CrashReport, report_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="crash report not found")
+    return {
+        "id": row.id,
+        "user_id": row.user_id,
+        "app_version": row.app_version,
+        "platform": row.platform,
+        "summary": row.summary,
+        "detail": row.detail,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@router.delete("/crash-reports")
+def admin_clear_crash_reports(
+    admin_id: str = Depends(require_admin_fresh),
+    db: Session = Depends(get_db),
+    _write_slot: None = Depends(acquire_write_slot),
+):
+    deleted = crud.clear_crash_reports(db)
+    security_log.security_event("crash_reports_cleared", admin=admin_id, deleted=deleted)
+    return {"deleted": deleted}
 
 
 @router.get("/learning/stats")
