@@ -163,4 +163,13 @@ void main() {
     expect(find.text('Nút chính'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  test('Thanh tiến độ card Lưu trữ đọc được ở cả 2 theme (ngưỡng UI 3.0)', () {
+    final dark = AppTheme.darkTheme.colorScheme;
+    final light = AppTheme.lightTheme.colorScheme;
+    expectAA(dark.primary, dark.surfaceContainerHighest, 3.0, 'dark primary bar/containerHighest');
+    expectAA(light.primary, light.surfaceContainerHighest, 3.0, 'light primary bar/containerHighest');
+    expectAA(dark.error, dark.surfaceContainerHighest, 3.0, 'dark error bar/containerHighest');
+    expectAA(light.error, light.surfaceContainerHighest, 3.0, 'light error bar/containerHighest');
+  });
 }

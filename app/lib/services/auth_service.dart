@@ -34,6 +34,8 @@ class AuthService extends ChangeNotifier {
   bool _secureStorageBroken = false;
   bool _mustChangePassword = false;
   bool _sessionExpiredNotice = false;
+  int? _storageUsedBytes;
+  int? _storageQuotaBytes;
   int _stateSeq = 0;
 
   AuthService() {
@@ -55,6 +57,8 @@ class AuthService extends ChangeNotifier {
   bool get secureStorageBroken => _secureStorageBroken;
   bool get mustChangePassword => _mustChangePassword;
   bool get sessionExpiredNotice => _sessionExpiredNotice;
+  int? get storageUsedBytes => _storageUsedBytes;
+  int? get storageQuotaBytes => _storageQuotaBytes;
 
   void consumeSessionExpiredNotice() {
     _sessionExpiredNotice = false;
@@ -119,6 +123,17 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Dio? _validateDio;
+
+  Dio _ensureValidateDio() {
+    final cached = _validateDio ??= Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 5),
+      receiveTimeout: const Duration(seconds: 5),
+    ));
+    cached.options.validateStatus = (code) => code != null && code < 500;
+    return cached;
+  }
+
   Future<void> validateSession(String serverUrl, {Dio? dio}) async {
     final token = _token;
     if (token == null || token.isEmpty || _isGuest || serverUrl.isEmpty) {
@@ -126,11 +141,7 @@ class AuthService extends ChangeNotifier {
     }
     final seq = _stateSeq;
     try {
-      final client = dio ??
-          Dio(BaseOptions(
-            connectTimeout: const Duration(seconds: 5),
-            receiveTimeout: const Duration(seconds: 5),
-          ));
+      final client = dio ?? _ensureValidateDio();
       client.options.validateStatus = (code) => code != null && code < 500;
       final res = await client.get(
         '$serverUrl/api/auth/me',
@@ -145,6 +156,10 @@ class AuthService extends ChangeNotifier {
         _email = (data['email'] ?? _email ?? '').toString();
         _role = (data['role'] ?? _role).toString() == 'admin' ? 'admin' : 'user';
         _mustChangePassword = data['must_change_password'] == true;
+        final usedRaw = data['storage_used_bytes'];
+        final quotaRaw = data['storage_quota_bytes'];
+        _storageUsedBytes = usedRaw is num ? usedRaw.toInt() : null;
+        _storageQuotaBytes = quotaRaw is num ? quotaRaw.toInt() : null;
         final fresh = (data['token'] ?? '').toString();
         if (fresh.isNotEmpty) {
           _token = fresh;
@@ -228,6 +243,8 @@ class AuthService extends ChangeNotifier {
     _email = null;
     _isGuest = true;
     _mustChangePassword = false;
+    _storageUsedBytes = null;
+    _storageQuotaBytes = null;
     _currentToken = null;
     notifyListeners();
   }
@@ -246,6 +263,8 @@ class AuthService extends ChangeNotifier {
     _role = role == 'admin' ? 'admin' : 'user';
     _isGuest = false;
     _mustChangePassword = mustChangePassword;
+    _storageUsedBytes = null;
+    _storageQuotaBytes = null;
     _sessionExpiredNotice = false;
     _currentToken = token;
     try {
@@ -268,6 +287,8 @@ class AuthService extends ChangeNotifier {
     _role = 'user';
     _isGuest = false;
     _mustChangePassword = false;
+    _storageUsedBytes = null;
+    _storageQuotaBytes = null;
     _currentToken = null;
     try {
       await _storage.delete(key: _tokenKey);

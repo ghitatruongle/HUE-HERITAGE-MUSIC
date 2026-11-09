@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..database.session import get_db, SessionLocal
 from ..database import crud
+from ..ai import basic_pitch_amt
 from ..services import amt_eval, media_pipeline, user_inflight
 from ..storage import manager
 from ..audio_access import require_audio_access
@@ -54,6 +55,8 @@ async def transcribe(
             )
         except ValueError:
             raise HTTPException(status_code=400, detail="wav decode failed")
+        except basic_pitch_amt.EngineBusy as e:
+            raise HTTPException(status_code=503, detail=str(e))
     finally:
         user_inflight.release(user_inflight.user_key("transcribe", user_id))
     digest = manager.sha256_bytes(data)
@@ -80,6 +83,12 @@ async def transcribe(
                 crud.create_audio(db, item.id, "midi", str(mid), digest, mid.stat().st_size)
             if not crud.has_audio(db, item.id, "musicxml", str(xm)):
                 crud.create_audio(db, item.id, "musicxml", str(xm), digest, xm.stat().st_size)
+        finally:
+            db.close()
+    else:
+        db = SessionLocal()
+        try:
+            crud.record_artifact_owner(db, digest, user_id, kind="transcribe")
         finally:
             db.close()
     result = {
@@ -118,13 +127,9 @@ def _safe_bpm(bpm: float) -> float:
 
 
 def _sha_viewable(db: Session, request: Request, sha: str) -> bool:
-    from ..database.models import HeritageItem
+    from ..audio_access import sha_viewable
 
-    item = db.query(HeritageItem).filter(HeritageItem.sha256 == sha).first()
-    if item is None:
-        return True
-    viewer = resolve_bearer_user(request, db)
-    return crud.can_view_item(item, viewer)
+    return sha_viewable(db, request, sha)
 
 
 @router.get("/music/midi/{sha}")
@@ -174,6 +179,8 @@ async def evaluate_transcription(
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="wav decode failed")
+    except basic_pitch_amt.EngineBusy as e:
+        raise HTTPException(status_code=503, detail=str(e))
     pred = [{"midi": n["midi"], "start": n["start"], "end": n["end"]} for n in notes]
     result = amt_eval.evaluate(pred, items)
     result["engine"] = used

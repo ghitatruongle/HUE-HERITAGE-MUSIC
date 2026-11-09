@@ -1,9 +1,25 @@
+import logging
 import math
 import threading
+import time
 from pathlib import Path
+
+from ..config import settings
 
 MODEL = None
 LOCK = threading.Lock()
+
+_stalled = False
+_stalled_thread = None
+_stalled_tmp = None
+
+
+class EngineBusy(Exception):
+    pass
+
+
+class EngineStalled(EngineBusy):
+    pass
 
 
 def available() -> bool:
@@ -22,7 +38,15 @@ def _candidates():
 
 def _load():
     global MODEL
-    with LOCK:
+    cached = MODEL
+    if cached is not None:
+        return cached
+    if not LOCK.acquire(timeout=max(1.0, float(settings.basic_pitch_lock_wait_timeout))):
+        logging.getLogger(__name__).warning(
+            "basic-pitch load lock wait exceeded %.0fs", settings.basic_pitch_lock_wait_timeout
+        )
+        raise EngineBusy("basic-pitch engine busy (model load wait timeout)")
+    try:
         if MODEL is not None:
             return MODEL
         from basic_pitch.inference import Model
@@ -34,6 +58,37 @@ def _load():
             except Exception as e:
                 last_error = e
         raise last_error or RuntimeError("no basic-pitch model candidates found")
+    finally:
+        LOCK.release()
+
+
+def _selfheal():
+    global _stalled, _stalled_thread, _stalled_tmp, MODEL
+    if not _stalled:
+        return
+    t = _stalled_thread
+    if t is not None and t.is_alive():
+        raise EngineBusy("basic-pitch engine stalled earlier; waiting for stalled worker to exit")
+    _stalled = False
+    _stalled_thread = None
+    MODEL = None
+    if _stalled_tmp and Path(_stalled_tmp).exists():
+        try:
+            Path(_stalled_tmp).unlink()
+        except OSError:
+            pass
+    _stalled_tmp = None
+    logging.getLogger(__name__).warning("basic-pitch stalled worker exited; engine re-armed with fresh model")
+
+
+def _predict_job(predict, path, model, box):
+    try:
+        box["events"] = predict(path, model)
+    except Exception as e:
+        box["error"] = e
+    except BaseException as e:
+        logging.getLogger(__name__).exception("basic-pitch helper terminated abnormally")
+        box["error"] = RuntimeError(f"basic-pitch worker terminated: {e!r}")
 
 
 def _freq_from_midi(midi: int) -> float:
@@ -41,6 +96,7 @@ def _freq_from_midi(midi: int) -> float:
 
 
 def transcribe(samples, sr: int) -> list:
+    global _stalled, _stalled_thread, _stalled_tmp
     import os
     import tempfile
     import wave
@@ -50,24 +106,58 @@ def transcribe(samples, sr: int) -> list:
 
     if not hasattr(scipy.signal, "gaussian"):
         scipy.signal.gaussian = scipy.signal.windows.gaussian
-    from basic_pitch.inference import predict
 
+    log = logging.getLogger(__name__)
+    _selfheal()
     model = _load()
     audio = np.clip(np.asarray(samples, dtype=np.float32), -1.0, 1.0)
     pcm = (audio * 32767.0).astype("<i2")
     fd, tmp_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
-    try:
-        with wave.open(tmp_path, "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(sr)
-            w.writeframes(pcm.tobytes())
-        with LOCK:
-            _, _, note_events = predict(tmp_path, model)
-    finally:
+    with wave.open(tmp_path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(pcm.tobytes())
+    if not LOCK.acquire(timeout=max(1.0, float(settings.basic_pitch_lock_wait_timeout))):
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+        log.warning("basic-pitch lock wait exceeded %.0fs; failing fast", settings.basic_pitch_lock_wait_timeout)
+        raise EngineBusy("basic-pitch engine busy (lock wait timeout)")
+    stalled = False
+    try:
+        from basic_pitch.inference import predict
+
+        if _stalled and _stalled_thread is not None and _stalled_thread.is_alive():
+            raise EngineBusy("basic-pitch engine stalled earlier; waiting for stalled worker to exit")
+        box = {}
+        helper = threading.Thread(
+            target=_predict_job, args=(predict, tmp_path, model, box), daemon=True, name="hue-basic-pitch"
+        )
+        started = time.monotonic()
+        helper.start()
+        helper.join(max(1.0, float(settings.basic_pitch_run_timeout)))
+        if helper.is_alive():
+            stalled = True
+            _stalled = True
+            _stalled_thread = helper
+            _stalled_tmp = tmp_path
+            log.error(
+                "basic-pitch predict exceeded %.0fs — engine poisoned; fast-fail 503 until stalled worker exits",
+                settings.basic_pitch_run_timeout,
+            )
+            raise EngineStalled("basic-pitch engine stalled (run timeout)")
+        if box.get("error") is not None:
+            raise box["error"]
+        _, _, note_events = box["events"]
+        log.info("basic-pitch predict ok in %.1fs", time.monotonic() - started)
+    finally:
+        LOCK.release()
+        if not stalled and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
     notes = []
     for ev in note_events:
         start, end, midi, velocity = float(ev[0]), float(ev[1]), int(ev[2]), int(ev[3])
@@ -85,4 +175,4 @@ def transcribe(samples, sr: int) -> list:
 
 
 def status():
-    return {"available": available(), "loaded": MODEL is not None, "name": "basic-pitch"}
+    return {"available": available(), "loaded": MODEL is not None, "name": "basic-pitch", "stalled": _stalled}

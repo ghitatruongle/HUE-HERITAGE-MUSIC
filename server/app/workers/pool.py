@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 
@@ -25,12 +26,15 @@ class WorkerPool:
                 ).start()
 
     def _worker(self) -> None:
+        log = logging.getLogger(__name__)
         while True:
             fn = self._q.get()
             try:
                 fn()
+            except Exception:
+                log.exception("hue-%s task failed", self.name)
             except BaseException:
-                pass
+                log.exception("hue-%s task raised BaseException — worker continues", self.name)
             finally:
                 self._q.task_done()
 

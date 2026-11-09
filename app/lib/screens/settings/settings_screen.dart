@@ -2,18 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../services/auth_service.dart';
 import '../../services/locale_provider.dart';
+import '../../services/server_config.dart';
 import '../../services/theme_provider.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/storage_quota_card.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = context.read<AuthService>();
+      final config = context.read<ServerConfig>();
+      if (auth.isLoggedIn && config.hasServer) {
+        auth.validateSession(config.baseUrl);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final theme = context.watch<ThemeProvider>();
     final locale = context.watch<LocaleProvider>();
+    final auth = context.watch<AuthService>();
     final strings = locale.strings;
 
     return ListView(
@@ -101,6 +123,15 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
         ),
+        if (auth.isLoggedIn && auth.storageUsedBytes != null) ...[
+          const SizedBox(height: 20),
+          _sectionLabel(context, strings.storageTitle),
+          StorageQuotaCard(
+            strings: strings,
+            usedBytes: auth.storageUsedBytes ?? 0,
+            quotaBytes: auth.storageQuotaBytes,
+          ),
+        ],
         const SizedBox(height: 20),
         _sectionLabel(context, strings.projectInfoTitle),
         Card(

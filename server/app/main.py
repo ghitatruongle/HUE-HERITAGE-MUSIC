@@ -170,24 +170,18 @@ class BodyLimitMiddleware:
             await self._stream_limit(scope, receive, send, limit)
             return
         body = b""
-        over = False
         while True:
             msg = await receive()
             if msg["type"] == "http.request":
-                chunk = msg.get("body", b"")
-                if not over:
-                    body += chunk
-                    if len(body) > limit:
-                        over = True
-                        body = b""
+                body += msg.get("body", b"")
+                if len(body) > limit:
+                    response = JSONResponse({"detail": "request body too large"}, status_code=413)
+                    await response(scope, receive, send)
+                    return
                 if not msg.get("more_body"):
                     break
             elif msg["type"] == "http.disconnect":
                 return
-        if over:
-            response = JSONResponse({"detail": "request body too large"}, status_code=413)
-            await response(scope, receive, send)
-            return
         sent = {"done": False}
 
         async def replay_receive():
@@ -341,7 +335,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.2",
+        version="0.0.3-beta",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -387,14 +381,15 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.2",
-            "stage": "0.0.2",
+            "version": "0.0.3-beta",
+            "stage": "0.0.3-beta",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio
 
             def _extended():
                 from .ai import ace_step_engine
+                from .ai import basic_pitch_amt
 
                 with SessionLocal() as db:
                     running = crud.list_tasks(db, status="running", limit=500)
@@ -424,6 +419,7 @@ def create_app() -> FastAPI:
                     "rss_mb": rss_mb,
                     "threads": threading.active_count(),
                     "db_wal_mb": wal_mb,
+                    "basic_pitch_stalled": basic_pitch_amt.status()["stalled"],
                 }
 
             payload.update(await asyncio.to_thread(_extended))

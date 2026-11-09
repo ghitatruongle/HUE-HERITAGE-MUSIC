@@ -91,6 +91,7 @@ class PracticeSession(Base):
     stability_score: Mapped[float] = mapped_column(Float, default=0.0)
     reference: Mapped[str] = mapped_column(String(16), default="original")
     metrics_json: Mapped[str] = mapped_column(Text, default="")
+    user_midi: Mapped[str] = mapped_column(String(128), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -112,4 +113,12 @@ class CrashReport(Base):
     platform: Mapped[str] = mapped_column(String(64), default="")
     summary: Mapped[str] = mapped_column(String(512), default="")
     detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ArtifactOwner(Base):
+    __tablename__ = "artifact_owners"
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    kind: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

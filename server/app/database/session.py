@@ -43,6 +43,9 @@ def acquire_write_slot():
         write_slot.release()
 
 MIGRATION_COLUMNS = {
+    "practice_sessions": {
+        "user_midi": "VARCHAR(128) DEFAULT '' NOT NULL",
+    },
     "users": {
         "password_hash": "VARCHAR(256) DEFAULT '' NOT NULL",
         "email": "VARCHAR(256) DEFAULT '' NOT NULL",

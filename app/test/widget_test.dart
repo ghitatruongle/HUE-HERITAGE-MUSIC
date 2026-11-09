@@ -55,6 +55,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
           ChangeNotifierProvider<LocaleProvider>.value(value: locale),
+          ChangeNotifierProvider<AuthService>.value(value: AuthService()),
+          ChangeNotifierProvider<ServerConfig>.value(value: ServerConfig()),
         ],
         child: const MaterialApp(
           home: Scaffold(body: SettingsScreen()),

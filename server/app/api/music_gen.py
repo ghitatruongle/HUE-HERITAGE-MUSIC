@@ -76,14 +76,38 @@ def issue_play_url(
         if item is None or not crud.can_view_item(item, viewer):
             raise HTTPException(status_code=404, detail="not found")
         scope = f"vis:{getattr(item, 'visibility', None) or 'public'}"
+    for prefix in ("/api/music/midi/", "/api/music/musicxml/", "/api/music/restored/"):
+        if cleaned.startswith(prefix):
+            from ..audio_access import sha_viewable
+
+            sha = cleaned[len(prefix):].split("/")[0]
+            if not sha_viewable(db, request, sha):
+                raise HTTPException(status_code=404, detail="not found")
+            break
+    if cleaned.startswith("/api/music/generated/"):
+        gen_task = crud.get_task(db, cleaned.split("/")[-1].split(".")[0])
+        if gen_task is not None and gen_task.user_id:
+            viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+            if viewer is None or (viewer.id != gen_task.user_id and not crud.is_admin_user(viewer)):
+                raise HTTPException(status_code=404, detail="not found")
     token = sign_path(cleaned, scope=scope)
     return {"url": token["url"], "expires": token["expires"]}
 
 
 @router.get("/music/generated/{filename}")
-def download_generated(filename: str, access: Optional[str] = Depends(require_audio_access)):
+def download_generated(
+    filename: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    access: Optional[str] = Depends(require_audio_access),
+):
     if not GENERATED_NAME.fullmatch(filename):
         raise HTTPException(status_code=400, detail="bad filename")
+    task = crud.get_task(db, filename.split(".")[0])
+    if task is not None and task.user_id and access != "signed":
+        viewer = resolve_bearer_user(request, db)
+        if viewer is None or (viewer.id != task.user_id and not crud.is_admin_user(viewer)):
+            raise HTTPException(status_code=404, detail="not found")
     path = manager.generated_dir() / filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")

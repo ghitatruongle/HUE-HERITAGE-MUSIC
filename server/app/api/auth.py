@@ -266,7 +266,7 @@ def require_user(request: Request) -> Optional[str]:
         user = crud.get_user_by_id(db, user_id)
         if not user:
             raise HTTPException(status_code=401, detail="unknown user")
-        if epoch < (user.token_epoch or 0):
+        if epoch != (user.token_epoch or 0):
             raise HTTPException(status_code=401, detail="token revoked")
         if getattr(user, "active", 1) == 0:
             raise HTTPException(status_code=403, detail="account disabled")
@@ -287,7 +287,7 @@ def require_admin(request: Request, db: Session = Depends(get_db)) -> str:
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=401, detail="unknown user")
-    if epoch < (user.token_epoch or 0):
+    if epoch != (user.token_epoch or 0):
         raise HTTPException(status_code=401, detail="token revoked")
     if getattr(user, "active", 1) == 0:
         raise HTTPException(status_code=403, detail="account disabled")
@@ -311,7 +311,7 @@ def _bearer_user(request: Request, db: Session):
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=401, detail="unknown user")
-    if epoch < (user.token_epoch or 0):
+    if epoch != (user.token_epoch or 0):
         raise HTTPException(status_code=401, detail="token revoked")
     if getattr(user, "active", 1) == 0:
         raise HTTPException(status_code=403, detail="account disabled")
@@ -327,7 +327,7 @@ def resolve_bearer_user(request: Request, db: Session):
     except HTTPException:
         return None
     user = crud.get_user_by_id(db, user_id)
-    if user is None or epoch < (user.token_epoch or 0):
+    if user is None or epoch != (user.token_epoch or 0):
         return None
     if getattr(user, "active", 1) == 0:
         raise HTTPException(status_code=403, detail="account disabled")
@@ -348,6 +348,11 @@ def _validate_registration(db: Session, u: str, e: str, p: str, c: str) -> None:
         raise HTTPException(status_code=400, detail="username may only contain letters, digits, dot, underscore, hyphen")
     if u.lower() in RESERVED_USERNAMES:
         raise HTTPException(status_code=400, detail="username is reserved")
+    admin_lower = settings.admin_truong_username.lower()
+    if u.lower() == admin_lower and u != settings.admin_truong_username:
+        raise HTTPException(status_code=400, detail="username conflicts with the admin truong account")
+    if u.lower().replace(".", "").replace("_", "") == admin_lower and u.lower() != admin_lower:
+        raise HTTPException(status_code=400, detail="username impersonates the admin truong account")
     if not EMAIL_RE.fullmatch(e):
         raise HTTPException(status_code=400, detail="invalid email address")
     if not _user_password_ok(p):
@@ -569,8 +574,14 @@ def change_password(req: ChangePasswordRequest, request: Request, db: Session = 
             detail="admin password must be at least 12 characters and contain letters and digits",
         )
     if not _uniform_verify(req.old_password, user.password_hash):
+        chg_key = f"chg:{_client_ip(request)}:{user.id}"
+        _record_ip_failure(_auth_failures, chg_key)
+        locked = _ip_failures_exceeded(_auth_failures, chg_key, AUTH_FAILURE_LIMIT)
         security_log.security_event("change_password_failed", user_id=user.id, username=user.username)
+        if locked:
+            raise HTTPException(status_code=429, detail="too many attempts; try again later")
         raise HTTPException(status_code=401, detail="wrong password")
+    _clear_failures(f"chg:{_client_ip(request)}:{user.id}")
     crud.update_user_password(db, user.id, hash_password(req.new_password))
     crud.set_must_change_password(db, user.id, False)
     new_epoch = crud.bump_token_epoch(db, user.id)
@@ -627,6 +638,7 @@ class AdminUnlockRequest(BaseModel):
 @router.post("/admin-unlock")
 def admin_unlock(req: AdminUnlockRequest, request: Request, db: Session = Depends(get_db), admin_id: str = Depends(require_admin)):
     unlock_key = f"unlock:{_client_ip(request)}:{admin_id}"
+    unlock_ident_key = f"unlock-ident:{admin_id}"
     if not rate_limit.hit_and_allow(f"unlock-try:{_client_ip(request)}", 20):
         security_log.security_event("admin_unlock_rate_limited", admin=admin_id, ip=_client_ip(request))
         raise HTTPException(status_code=429, detail="too many requests, slow down")
@@ -634,13 +646,17 @@ def admin_unlock(req: AdminUnlockRequest, request: Request, db: Session = Depend
     if user and _uniform_verify(req.password, user.password_hash):
         with _auth_failures_lock:
             _admin_unlock_failures.pop(unlock_key, None)
+            _admin_unlock_failures.pop(unlock_ident_key, None)
         _admin_unlocks[admin_id] = time.time()
         security_log.security_event("admin_unlock", admin=admin_id)
         return {"unlocked": True, "window_seconds": settings.admin_unlock_window_seconds}
-    if _ip_failures_exceeded(_admin_unlock_failures, unlock_key, _ADMIN_UNLOCK_FAILURE_LIMIT):
+    ident_exceeded = _ip_failures_exceeded(_admin_unlock_failures, unlock_ident_key, _ADMIN_UNLOCK_FAILURE_LIMIT)
+    ip_exceeded = _ip_failures_exceeded(_admin_unlock_failures, unlock_key, _ADMIN_UNLOCK_FAILURE_LIMIT)
+    if ident_exceeded or ip_exceeded:
         security_log.security_event("admin_unlock_rate_limited", admin=admin_id, ip=_client_ip(request))
         raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
     _record_ip_failure(_admin_unlock_failures, unlock_key)
+    _record_ip_failure(_admin_unlock_failures, unlock_ident_key)
     security_log.security_event("admin_unlock_failed", admin=admin_id, ip=_client_ip(request))
     raise HTTPException(status_code=401, detail="wrong password")
 
@@ -654,6 +670,11 @@ def admin_create_user(req: AdminCreateUserRequest, admin_id: str = Depends(requi
         raise HTTPException(status_code=400, detail="username may only contain letters, digits, dot, underscore, hyphen")
     if u.lower() in RESERVED_USERNAMES:
         raise HTTPException(status_code=400, detail="username is reserved")
+    admin_lower = settings.admin_truong_username.lower()
+    if u.lower() == admin_lower and u != settings.admin_truong_username:
+        raise HTTPException(status_code=400, detail="username conflicts with the admin truong account")
+    if u.lower().replace(".", "").replace("_", "") == admin_lower and u.lower() != admin_lower:
+        raise HTTPException(status_code=400, detail="username impersonates the admin truong account")
     e = req.email.strip().lower()
     if e and not EMAIL_RE.fullmatch(e):
         raise HTTPException(status_code=400, detail="invalid email address")

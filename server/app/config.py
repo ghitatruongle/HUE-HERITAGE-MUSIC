@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     user_storage_quota_mb: int = 500
     maintenance_interval_hours: int = 6
     worker_threads: int = 8
+    basic_pitch_lock_wait_timeout: float = 90.0
+    basic_pitch_run_timeout: float = 600.0
     crash_report_retention_days: int = 30
 
 

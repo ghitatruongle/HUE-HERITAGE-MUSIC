@@ -13,6 +13,8 @@ def extract_notes(data, bpm, engine="basic_pitch"):
         try:
             notes = bp_amt.transcribe(samples, sr)
             used = "basic_pitch"
+        except bp_amt.EngineBusy:
+            raise
         except Exception as e:
             notes = None
             engine_error = str(e)

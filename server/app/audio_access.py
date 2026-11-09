@@ -65,3 +65,23 @@ def require_audio_access(request: Request, db: Session = Depends(get_db)) -> Opt
     if verify_path(request.url.path, request.query_params.get("e"), request.query_params.get("s"), scope=scope):
         return "signed"
     raise HTTPException(status_code=401, detail="authentication or signed url required")
+
+
+def sha_viewable(db: Session, request: Request, sha: str) -> bool:
+    from .database.models import ArtifactOwner, HeritageItem
+
+    item = db.query(HeritageItem).filter(HeritageItem.sha256 == sha).first()
+    if item is not None:
+        viewer = resolve_bearer_user(request, db)
+        return crud.can_view_item(item, viewer)
+    owner = crud.get_artifact_owner(db, sha)
+    if owner is None:
+        return True
+    if owner.user_id is None:
+        return True
+    viewer = resolve_bearer_user(request, db)
+    if viewer is None:
+        return False
+    if crud.is_admin_user(viewer):
+        return True
+    return viewer.id == owner.user_id

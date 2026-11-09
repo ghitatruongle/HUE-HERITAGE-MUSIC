@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
+
+from sqlalchemy import exc  # noqa: F401 — dùng exc.IntegrityError ở record_artifact_owner
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from .models import HeritageItem, AudioFile, User, Task, PracticeSession, CrashReport
+from .models import HeritageItem, AudioFile, User, Task, PracticeSession, CrashReport, ArtifactOwner
 
 
 METADATA_FIELDS = [
@@ -434,6 +437,7 @@ def create_practice_session(
     stability_score: float,
     reference: str = "original",
     metrics: Optional[dict] = None,
+    user_midi: str = "",
 ):
     row = PracticeSession(
         user_id=user_id,
@@ -445,11 +449,49 @@ def create_practice_session(
         stability_score=float(stability_score or 0.0),
         reference=reference or "original",
         metrics_json=json.dumps(metrics or {}),
+        user_midi=user_midi or "",
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     return row
+
+
+def get_practice_session_by_midi(db: Session, midi_name: str):
+    return db.query(PracticeSession).filter(PracticeSession.user_midi == midi_name).first()
+
+
+_artifact_owner_lock = threading.Lock()
+
+
+def record_artifact_owner(db: Session, sha256: str, user_id: Optional[str], kind: str = ""):
+    with _artifact_owner_lock:
+        row = db.get(ArtifactOwner, sha256)
+        if row is not None:
+            if user_id and not row.user_id:
+                row.user_id = user_id
+                row.kind = kind or row.kind
+                db.commit()
+            return row
+        row = ArtifactOwner(sha256=sha256, user_id=user_id, kind=kind)
+        try:
+            db.add(row)
+            db.commit()
+            return row
+        except exc.IntegrityError:
+            db.rollback()
+            row = db.get(ArtifactOwner, sha256)
+            if row is not None:
+                if user_id and not row.user_id:
+                    row.user_id = user_id
+                    row.kind = kind or row.kind
+                    db.commit()
+                return row
+            raise
+
+
+def get_artifact_owner(db: Session, sha256: str):
+    return db.get(ArtifactOwner, sha256)
 
 
 def list_practice_sessions(db: Session, user_id: str, lesson_id: Optional[str] = None, limit: int = 100):

@@ -1,5 +1,30 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.3-beta (2026-11-09)
+
+> Đợt vá nền tảng ổn định: chấm dứt triệt để lỗi "chết im lặng" khi ký âm đồng thời (NK3), trả nợ UI trần lưu trữ đã hứa ở 0.0.2, và siết endpoint tác vụ không còn nhận đường dẫn file từ client.
+
+### Máy chủ — hết treo vô hạn khi ký âm đồng thời (NK3)
+- Basic-pitch có trần chờ khoá (mặc định 90s, `BASIC_PITCH_LOCK_WAIT_TIMEOUT`): engine bận trả 503 "engine busy" lịch sự thay vì treo request vô hạn; lối tắt cache model đọc ngoài khoá nên không còn chặn đứng sau trần này
+- Trần thời gian chạy 1 lần predict (mặc định 600s, `BASIC_PITCH_RUN_TIMEOUT`): engine kẹt bị cô lập (poisoned) — trả 503 cho mọi request mới cho tới khi thread kẹt kết thúc rồi tự phục hồi với model mới; không còn chết lan toàn bộ
+- Worker pool không còn nuốt exception im lặng: mọi lỗi task (kể cả BaseException) đều vào log; worker sống sót qua task lỗi và tiếp tục rút hàng đợi
+
+### Máy chủ — endpoint tác vụ sạch hơn
+- `POST /api/task` không còn nhận `audio_path` do client cung cấp — chỉ nhận `heritage_id`; server tự tra file gốc theo item và kiểm quyền xem trước khi dispatch, client gửi kèm audio_path cũng bị bỏ qua
+
+### Ứng dụng
+- Màn Cài đặt có khối **"Lưu trữ"**: người dùng thường thấy "đã dùng X / trần Y" kèm thanh tiến độ (đỏ khi chạm trần); admin trưởng thấy "Không giới hạn"; refresh tự động khi mở màn — trả nợ ghi nhận "UI hiển thị sẽ vào bản sau" của 0.0.2
+
+### Kiểm định
+- Review chuyên sâu 2 vòng (tự soi từng diff + 2 agent độc lập tuần tự server → client): **12 findings — các lỗi thật đã vá hết**, đáng chú ý nhất: bản rewrite basic-pitch từng làm **mất khối ghi WAV** (file 0 byte → predict luôn fail → fallback DSP âm thầm, test cũ không bắt được vì fake predict không đọc file) — đã khôi phục + thêm test ghim đọc lại file WAV; và race 2 helper predict đồng thời trên cùng model sau một lần stall — đã thêm re-check trong khoá
+- pytest **279/279 (0 skip)** trên venv có basic-pitch — test 440Hz chạy thật engine neural (model nạp + predict + bắt đúng MIDI 69); **278 passed + 1 skip** trên venv không có basic-pitch (parity); thêm 9 test NK3: lock-timeout fail-fast · fast-path cache model không chặn khoá predict · ghi WAV hợp lệ (1 kênh/16-bit/đúng số mẫu) · engine stall poisoned + tự phục hồi · 503 cả 2 endpoint transcribe + evaluate · pool sống sót BaseException + log · task theo heritage_id (404 chặn lộ item admin_only · 400 thiếu heritage_id · audio_path client bị bỏ qua)
+- flutter analyze **0** · flutter test **76/76** (thêm 6 test card Lưu trữ + nhánh quota=0)
+- Build web release OK · Storm ký âm 16 người dùng đồng thời trên server cô lập: **CLEAN** — 16/16 → 200 (wall 4.7s với basic-pitch thật, 0 thread kẹt), wave hồi phục 16/16 → 200 trong 0.1–0.3s, health 0 bad, 0 Traceback; probe đơn chứng minh `engine=basic_pitch`, bắt đúng 440Hz
+- Verify orchestrator trên server cô lập 0.0.3-beta (chạy lại sau review-fix): Smoke E2E **39/39** · DSP-storm **SỐNG/SẠCH** (restore 12×200 · analyze 18×200 + 6×429 đúng trần per-user · compare/transcribe 200 hết · **5xx=0** · health max 391ms · RSS đỉnh ~864MB) · Stability restart-giữa-bão **SẠCH** — dữ liệu nguyên vẹn, 0 Traceback
+
+### Hạn chế đã biết (trung thực)
+- Helper predict nếu kẹt cứng trong native code (hiếm) sẽ giữ engine ở trạng thái 503 cho tới khi thread đó tự kết thúc hoặc server khởi động lại; trạng thái này lộ ra ở `/health` extended qua `basic_pitch_stalled` để giám sát
+
 ## 0.0.2 (chính thức) (2026-11-08)
 
 > Bản chính thức của chuỗi 0.0.2: nền beta3 đã kiểm định trọn vẹn + lớp "governance" cho chạy dài ngày tháng — dọn dẹp tự động khi server đang chạy, trần lưu trữ theo người dùng, backup cơ sở dữ liệu, crash-log chỉ admin xem. Không thêm tính năng mới ngoài các mục bền vững này.

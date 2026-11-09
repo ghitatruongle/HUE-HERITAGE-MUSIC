@@ -69,7 +69,13 @@ async def restore_upload(request: Request, file: UploadFile = File(...), user_id
     if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
         raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
-        return await asyncio.to_thread(run_restore, data, "")
+        report = await asyncio.to_thread(run_restore, data, "")
+        db = SessionLocal()
+        try:
+            crud.record_artifact_owner(db, report.get("sha", ""), user_id, kind="restore")
+        finally:
+            db.close()
+        return report
     finally:
         user_inflight.release(user_inflight.user_key("restore", user_id))
 
@@ -94,7 +100,13 @@ def restore_item(item_id: str, request: Request, db: Session = Depends(get_db), 
     if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
         raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
-        return run_restore(data, item.id)
+        report = run_restore(data, item.id)
+        db2 = SessionLocal()
+        try:
+            crud.record_artifact_owner(db2, report.get("sha", ""), user_id, kind="restore")
+        finally:
+            db2.close()
+        return report
     finally:
         user_inflight.release(user_inflight.user_key("restore", user_id))
 
@@ -106,7 +118,9 @@ def download_restored(sha: str, request: Request, db: Session = Depends(get_db))
     item = _sha_item(db, sha)
     viewer = resolve_bearer_user(request, db)
     if viewer is not None:
-        if item is not None and not crud.can_view_item(item, viewer):
+        from ..audio_access import sha_viewable
+
+        if not sha_viewable(db, request, sha):
             raise HTTPException(status_code=404, detail="not found")
     elif settings.auth_required:
         scope = f"vis:{getattr(item, 'visibility', None) or 'public'}" if item is not None else ""

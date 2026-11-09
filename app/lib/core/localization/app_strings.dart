@@ -281,6 +281,11 @@ class AppStrings {
   String get settingsName => isVi ? 'Tên' : 'Name';
   String get settingsDescription => isVi ? 'Mô tả' : 'Summary';
 
+  String get storageTitle => isVi ? 'Lưu trữ' : 'Storage';
+  String get storageUsed => isVi ? 'Đã dùng' : 'Used';
+  String get storageQuota => isVi ? 'Trần dung lượng' : 'Quota';
+  String get storageUnlimited => isVi ? 'Không giới hạn' : 'Unlimited';
+
   String get offlineMessage => isVi
       ? 'Mất kết nối mạng. Một số chức năng cần internet.'
       : 'No network connection. Some online features may be unavailable.';
