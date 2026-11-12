@@ -14,9 +14,13 @@ PAYLOAD = "<script>alert('xss003')</script><img src=x onerror=alert(2)>"
 
 
 @pytest.fixture()
-def xss_client(monkeypatch):
+def xss_client(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "auth_required", True, raising=False)
     monkeypatch.setattr(settings, "secret_key", "hue-xss-lock-key-" + "0" * 40, raising=False)
+    web_root = tmp_path / "web"
+    web_root.mkdir()
+    (web_root / "index.html").write_text("<!doctype html><html><body>spa</body></html>", encoding="utf-8")
+    monkeypatch.setattr(settings, "web_dir", web_root)
     db = SessionLocal()
     try:
         db.query(User).delete()
