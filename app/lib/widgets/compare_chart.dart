@@ -71,8 +71,9 @@ class CompareChart extends StatelessWidget {
             LineChartData(
               minY: 0,
               maxY: peak * 1.2,
-              gridData: const FlGridData(show: true),
-              titlesData: const FlTitlesData(show: true),
+              gridData: ChartPalette.styledGrid(context),
+              titlesData: ChartPalette.styledTitles(context),
+              lineTouchData: ChartPalette.styledTouch(context),
               lineBarsData: [
                 LineChartBarData(
                   spots: _spots(sampleF0),

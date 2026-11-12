@@ -7,7 +7,9 @@ import '../../services/auth_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/heritage_motif.dart';
 import '../../widgets/server_onboarding_dialog.dart';
+import '../../widgets/staggered_entrance.dart';
 import '../../widgets/responsive_layout.dart';
 import '../analysis/analysis_screen.dart';
 import '../admin/admin_screen.dart';
@@ -252,10 +254,10 @@ class _HomeContent extends StatelessWidget {
         int crossAxisCount = 1;
         double childAspectRatio = 3.2;
 
-        if (width >= 960) {
+        if (width >= AppBreakpoints.wide) {
           crossAxisCount = 4;
           childAspectRatio = 2.1;
-        } else if (width >= 620) {
+        } else if (width >= AppBreakpoints.compact) {
           crossAxisCount = 2;
           childAspectRatio = 2.3;
         } else {
@@ -298,8 +300,12 @@ class _HomeContent extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  for (final f in features)
-                    _FeatureCard(feature: f, onSelect: () => onSelectTab(f.tabIndex)),
+                  for (var i = 0; i < features.length; i++)
+                    _FeatureCard(
+                      feature: features[i],
+                      index: i,
+                      onSelect: () => onSelectTab(features[i].tabIndex),
+                    ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -327,14 +333,17 @@ class _HomeContent extends StatelessWidget {
         gradient: AppTheme.brandGradient,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5B3B8C).withValues(alpha: 0.25),
+            color: AppTheme.primaryPurple.withValues(alpha: 0.25),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      child: Row(
+      child: HeritageMotif(
+        color: Colors.white,
+        opacity: 0.09,
+        child: Row(
         children: [
           Container(
             width: 44,
@@ -356,9 +365,10 @@ class _HomeContent extends StatelessWidget {
                   strings.appTitle,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 17,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
+                    letterSpacing: 0.2,
+                    fontFamily: AppTheme.displayFontFamily,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -375,37 +385,43 @@ class _HomeContent extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: (server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: (server.hasServer ? AppTheme.emeraldGreen : Colors.redAccent).withValues(alpha: 0.6),
-                width: 0.8,
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: (server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: (server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger).withValues(alpha: 0.6),
+                  width: 0.8,
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  server.hasServer ? strings.serverOnline : strings.serverOffline,
-                  style: TextStyle(
-                    color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      server.hasServer ? strings.serverOnline : strings.serverOffline,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -428,6 +444,7 @@ class _HomeContent extends StatelessWidget {
             },
           ),
         ],
+        ),
       ),
     );
   }
@@ -451,9 +468,14 @@ class _Feature {
 
 class _FeatureCard extends StatefulWidget {
   final _Feature feature;
+  final int index;
   final VoidCallback onSelect;
 
-  const _FeatureCard({required this.feature, required this.onSelect});
+  const _FeatureCard({
+    required this.feature,
+    required this.index,
+    required this.onSelect,
+  });
 
   @override
   State<_FeatureCard> createState() => _FeatureCardState();
@@ -470,7 +492,9 @@ class _FeatureCardState extends State<_FeatureCard> {
     final baseBorder = scheme.outline;
     const hoverBorder = AppTheme.primaryPurpleGlow;
 
-    return MouseRegion(
+    return StaggeredEntrance(
+      index: widget.index,
+      child: MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -570,6 +594,7 @@ class _FeatureCardState extends State<_FeatureCard> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

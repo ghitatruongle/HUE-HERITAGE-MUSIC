@@ -213,11 +213,11 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
             controller: _tabController,
             indicatorSize: TabBarIndicatorSize.tab,
             indicator: BoxDecoration(
-              color: AppTheme.primaryPurple,
+              color: scheme.primary,
               borderRadius: BorderRadius.circular(12),
             ),
             dividerColor: Colors.transparent,
-            labelColor: Colors.white,
+            labelColor: scheme.onPrimary,
             unselectedLabelColor: scheme.onSurfaceVariant,
             tabs: [
               Tab(icon: const Icon(Icons.graphic_eq), text: strings.listenTabTitle),

@@ -150,7 +150,9 @@ class _OfflineBannerState extends State<OfflineBanner> {
                     padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
                     child: Text(
                       locale.strings.offlineMessage,
-                      style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),

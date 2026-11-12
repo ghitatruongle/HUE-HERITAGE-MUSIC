@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
 import '../../api/endpoints/heritage_api.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/heritage_item.dart';
 import '../../services/locale_provider.dart';
@@ -12,6 +13,8 @@ import '../../widgets/audio_player_bar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/heritage_motif.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class HeritageListScreen extends StatefulWidget {
   const HeritageListScreen({super.key});
@@ -103,7 +106,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
     final width = MediaQuery.of(context).size.width;
-    final isMasterDetail = width >= 900;
+    final isMasterDetail = width >= AppBreakpoints.desktop;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -237,7 +240,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
     dynamic strings,
   ) {
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(itemCount: 7, itemHeight: 68);
     }
     if (_hasError && _items.isEmpty) {
       return ErrorPanel(message: '${strings.errorPrefix}: ${strings.loadFailGeneric}', onRetry: _reload);
@@ -381,27 +384,27 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
               borderRadius: BorderRadius.circular(20),
               gradient: AppTheme.brandGradient,
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF1B0E33),
-                    border: Border.all(color: AppTheme.amberGold, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+            child: HeritageMotif(
+              color: Colors.white,
+              opacity: 0.08,
+              radius: 20,
+              child: Row(
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const VinylDisc(size: 80),
                   ),
-                  child: const Center(
-                    child: Icon(Icons.album, size: 48, color: AppTheme.amberGold),
-                  ),
-                ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: Column(
@@ -427,6 +430,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                   ),
                 ),
               ],
+              ),
             ),
           ),
         ),

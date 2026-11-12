@@ -17,6 +17,19 @@ PAYLOADS = [
     "%' OR '%",
 ]
 
+PAYLOADS_EXTENDED = PAYLOADS + [
+    "' AND 1=1--",
+    "' AND 1=2--",
+    "' AND EXISTS(SELECT 1 FROM users)--",
+    "' UNION ALL SELECT sqlite_version(),NULL,NULL--",
+    "; WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x*2 FROM c) SELECT * FROM c--",
+    "1 OR 1=1",
+    "-1 OR 1=1",
+    "1e309",
+    "0x61646D696E",
+    "%'; DROP TABLE users;--",
+]
+
 
 @pytest.fixture()
 def raid_client(monkeypatch):
@@ -48,7 +61,7 @@ SQL_ERROR_SIGS = ("sqlite", "OperationalError", "IntegrityError", "syntax error"
 
 def test_sqli_payloads_never_authenticate_or_leak(raid_client):
     client = raid_client
-    for p in PAYLOADS:
+    for p in PAYLOADS_EXTENDED:
         r = client.post("/api/auth/login", json={"identifier": p, "password": p})
         assert r.status_code in (401, 400, 422), f"login {p!r} -> {r.status_code} {r.text[:80]}"
         low = r.text.lower()
@@ -65,7 +78,7 @@ def test_sqli_register_stays_rejected(raid_client):
 
 def test_sqli_id_lookup_never_leaks_or_500(raid_client):
     client = raid_client
-    for p in PAYLOADS:
+    for p in PAYLOADS_EXTENDED:
         r = client.get(f"/api/heritage/{p}")
         assert r.status_code in (400, 401, 404, 422), f"heritage get {p!r} -> {r.status_code} {r.text[:80]}"
         r = client.get(f"/api/lessons/{p}")
@@ -90,3 +103,15 @@ def test_users_table_survives_payload_burst(raid_client):
     finally:
         db.close()
     assert before == after == 1, f"users bảng bị đụng: trước={before} sau={after}"
+
+
+def test_sqli_blind_pair_indistinguishable(raid_client):
+    client = raid_client
+    responses = []
+    for p in ("' AND 1=1--", "' AND 1=2--", "ghost_user_no_such"):
+        r = client.post("/api/auth/login", json={"identifier": p, "password": "BlindPair#2026"})
+        responses.append((r.status_code, r.text))
+    assert responses[0][0] == responses[1][0] == responses[2][0] == 401
+    assert responses[0][1] == responses[1][1] == responses[2][1], (
+        f"blind oracle: tautology={responses[0][1][:80]!r} contradiction={responses[1][1][:80]!r}"
+    )

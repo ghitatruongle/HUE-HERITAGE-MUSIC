@@ -9,6 +9,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/admin_endpoints.dart';
 import '../../api/endpoints/auth_endpoints.dart';
 import '../../api/endpoints/lesson_api.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/query_epoch.dart';
 import '../../core/theme/app_theme.dart';
@@ -17,7 +18,9 @@ import '../../services/admin_reauth.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
+import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
+import '../../widgets/skeleton_loader.dart';
 import '../auth/account_manager_section.dart';
 import '../auth/invite_manager_section.dart';
 import 'security_section.dart';
@@ -138,7 +141,7 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done && _last == null) {
-            return const Center(child: CircularProgressIndicator());
+            return const SkeletonList(itemCount: 5, itemHeight: 84);
           }
           if (snap.hasError || !snap.hasData) {
             if (_last != null) {
@@ -173,7 +176,7 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
         Card(
           color: s.engineOnline
               ? AppTheme.emeraldGreen.withValues(alpha: 0.12)
-              : Colors.redAccent.withValues(alpha: 0.10),
+              : AppTheme.statusDanger.withValues(alpha: 0.10),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ListTile(
             leading: Icon(
@@ -192,12 +195,12 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
         ),
         const SizedBox(height: 12),
         GridView.count(
-          crossAxisCount: MediaQuery.of(context).size.width >= 720 ? 4 : 2,
+          crossAxisCount: MediaQuery.of(context).size.width >= AppBreakpoints.medium ? 4 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
-          childAspectRatio: 2.4,
+          childAspectRatio: MediaQuery.of(context).size.width >= AppBreakpoints.medium ? 2.4 : 2.0,
           children: [
             _StatCard(
               icon: Icons.people_alt_outlined,
@@ -260,37 +263,35 @@ class _StatCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 18, color: AppTheme.primaryPurple),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 18, color: AppTheme.primaryPurple),
+                  const SizedBox(width: 6),
+                  Text(
                     label,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-            ),
-            if (sub != null)
-              Text(
-                sub!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                ],
               ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+              if (sub != null)
+                Text(
+                  sub!,
+                  maxLines: 1,
+                  style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -755,13 +756,13 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
 
   Widget _buildList(dynamic strings) {
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(itemCount: 6, itemHeight: 72);
     }
     if (_hasError && _items.isEmpty) {
-      return Center(child: Text(strings.adminLoadFail));
+      return Center(child: ErrorPanel(message: strings.adminLoadFail, onRetry: _loading ? null : _reload));
     }
     if (_items.isEmpty) {
-      return Center(child: Text(strings.adminStorageEmpty));
+      return Center(child: EmptyState(icon: Icons.library_music_outlined, title: strings.adminStorageEmpty));
     }
     final hasMore = _items.length < _total;
     return ListView.separated(
@@ -1089,7 +1090,7 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
     final strings = context.watch<LocaleProvider>().strings;
     final scheme = Theme.of(context).colorScheme;
     if (_loading && _lessons.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(itemCount: 6, itemHeight: 88);
     }
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1303,7 +1304,7 @@ class _CrashTabState extends State<_CrashTab> {
 
   Widget _buildBody(AppStrings strings) {
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(itemCount: 6, itemHeight: 72);
     }
     if (_hasError && _items.isEmpty) {
       return ErrorPanel(message: strings.crashLoadFail, onRetry: _reload);

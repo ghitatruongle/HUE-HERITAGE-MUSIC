@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
+import '../../widgets/error_panel.dart';
 
 class AccountManagerSection extends StatefulWidget {
   const AccountManagerSection({super.key});
@@ -112,9 +113,9 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         if (_loading && _accounts.isEmpty)
           const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
         else if (_hasError && _accounts.isEmpty)
-          Text(
-            strings.authInviteLoadFail,
-            style: const TextStyle(fontSize: 12, color: AppTheme.statusDanger),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: ErrorPanel(message: strings.authInviteLoadFail, onRetry: _loading ? null : _reload),
           )
         else ...[
           for (final acc in _accounts)

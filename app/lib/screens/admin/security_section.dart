@@ -8,6 +8,7 @@ import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class SecuritySection extends StatefulWidget {
   const SecuritySection({super.key});
@@ -240,7 +241,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
         ),
         Expanded(
           child: _loading && _events.isEmpty
-              ? const Center(child: CircularProgressIndicator())
+              ? const SkeletonList(itemCount: 7, itemHeight: 60)
               : _hasError && _events.isEmpty
                   ? ErrorPanel(message: strings.adminLoadFail, onRetry: _reload)
                   : _events.isEmpty

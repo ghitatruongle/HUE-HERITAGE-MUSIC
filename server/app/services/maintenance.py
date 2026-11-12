@@ -23,7 +23,7 @@ def _cleanup_dir(dir_path: Path, retention_days: int, exclude_subdirs: set | Non
             rel = f.relative_to(dir_path)
             if skip and len(rel.parts) > 1 and rel.parts[0] in skip:
                 continue
-            if f.is_file() and now - f.stat().st_mtime > retention_days * 86400:
+            if f.is_file() and f.name != ".gitkeep" and now - f.stat().st_mtime > retention_days * 86400:
                 size = f.stat().st_size
                 f.unlink()
                 freed += size

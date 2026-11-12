@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 class AppSpacing {
@@ -18,12 +19,16 @@ class AppRadius {
 }
 
 class AppTheme {
+  static const String displayFontFamily = 'PlayfairDisplay';
+  static const String bodyFontFamily = 'BeVietnamPro';
+
   static const Color primaryPurple = Color(0xFF5B3B8C);
   static const Color primaryPurpleLight = Color(0xFF8B5CF6);
   static const Color primaryPurpleGlow = Color(0xFF9F75FF);
   static const Color deepPurple = Color(0xFF3B1D66);
   static const Color imperialGold = Color(0xFFD4AF37);
   static const Color imperialGoldInk = Color(0xFF8A6A00);
+  static const Color recordDiscDark = Color(0xFF1B0E33);
 
   static Color goldReadable(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark ? imperialGold : imperialGoldInk;
@@ -90,19 +95,21 @@ class AppTheme {
   );
 
   static TextTheme _buildTextTheme(Color textPrimary, Color textSecondary) {
+    const display = displayFontFamily;
+    const body = bodyFontFamily;
     return TextTheme(
-      headlineLarge: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: textPrimary, height: 1.2),
-      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: textPrimary, height: 1.25),
-      headlineSmall: TextStyle(fontSize: 19, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3),
-      titleLarge: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3),
-      titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3),
-      titleSmall: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary, height: 1.35),
-      bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: textPrimary, height: 1.45),
-      bodyMedium: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w400, color: textPrimary, height: 1.45),
-      bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: textSecondary, height: 1.4),
-      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary),
-      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: textSecondary),
-      labelSmall: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: textSecondary, letterSpacing: 0.4),
+      headlineLarge: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: textPrimary, height: 1.2, fontFamily: display),
+      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: textPrimary, height: 1.25, fontFamily: display),
+      headlineSmall: TextStyle(fontSize: 19, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display),
+      titleLarge: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display),
+      titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display),
+      titleSmall: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary, height: 1.35, fontFamily: display),
+      bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: textPrimary, height: 1.45, fontFamily: body),
+      bodyMedium: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w400, color: textPrimary, height: 1.45, fontFamily: body),
+      bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: textSecondary, height: 1.4, fontFamily: body),
+      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary, fontFamily: body),
+      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: textSecondary, fontFamily: body),
+      labelSmall: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500, color: textSecondary, letterSpacing: 0.4, fontFamily: body),
     );
   }
 
@@ -130,9 +137,18 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+        },
+      ),
       scaffoldBackgroundColor: darkBg,
       canvasColor: darkBg,
-      fontFamily: 'Roboto',
+      fontFamily: bodyFontFamily,
       textTheme: _buildTextTheme(darkTextPrimary, darkTextSecondary),
       appBarTheme: const AppBarTheme(
         backgroundColor: darkBg,
@@ -279,9 +295,18 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: colorScheme,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+        },
+      ),
       scaffoldBackgroundColor: lightBg,
       canvasColor: lightBg,
-      fontFamily: 'Roboto',
+      fontFamily: bodyFontFamily,
       textTheme: _buildTextTheme(lightTextPrimary, lightTextSecondary),
       appBarTheme: const AppBarTheme(
         backgroundColor: lightBg,

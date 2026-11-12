@@ -33,6 +33,7 @@ import '../../widgets/chart_palette.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/overlay_pitch_chart.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class LessonPracticeView extends StatefulWidget {
   const LessonPracticeView({super.key});
@@ -838,7 +839,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       padding: const EdgeInsets.all(12),
       children: [
         if (_loadingLessons)
-          const Center(child: CircularProgressIndicator())
+          const Column(
+            children: [
+              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: 8)),
+              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: 8)),
+              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: 8)),
+            ],
+          )
         else if (_lessons.isEmpty)
           EmptyState(
             icon: Icons.school_rounded,
@@ -969,13 +976,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             const SizedBox(height: 4),
             Row(
               children: [
-                Transform.scale(
-                  scale: 0.85,
-                  child: Switch(
-                    value: _countIn,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    onChanged: (v) => setState(() => _countIn = v),
-                  ),
+                Switch(
+                  value: _countIn,
+                  onChanged: (v) => setState(() => _countIn = v),
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -1189,6 +1192,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 gridData: const FlGridData(show: false),
                 borderData: FlBorderData(show: true, border: Border.all(color: Theme.of(context).dividerColor)),
                 titlesData: const FlTitlesData(show: false),
+                lineTouchData: ChartPalette.styledTouch(context),
                 lineBarsData: [
                   if (target.isNotEmpty)
                     LineChartBarData(
@@ -1391,7 +1395,7 @@ class _ProgressLineChart extends StatelessWidget {
             spots: [for (var i = 0; i < scores.length; i++) FlSpot(i.toDouble(), scores[i])],
             isCurved: true,
             barWidth: 2,
-            color: Theme.of(context).brightness == Brightness.dark ? AppTheme.imperialGold : AppTheme.imperialGoldInk,
+            color: ChartPalette.of(context).reference,
             dotData: const FlDotData(show: true),
           ),
         ],

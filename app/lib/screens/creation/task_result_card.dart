@@ -70,8 +70,7 @@ class TaskResultCard extends StatelessWidget {
                 TextButton.icon(
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(44, 44),
                   ),
                   icon: Icon(Icons.close_rounded, size: 14, color: scheme.onSurfaceVariant),
                   label: Text(strings.cancelBtn, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),

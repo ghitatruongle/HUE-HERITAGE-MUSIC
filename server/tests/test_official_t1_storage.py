@@ -68,6 +68,25 @@ def test_orphan_lesson_samples_removed():
         db.close()
 
 
+def test_cleanup_preserves_gitkeep_marker():
+    marker = manager.restored_dir() / ".gitkeep"
+    old = time.time() - 40 * 86400
+    marker.touch()
+    os.utime(marker, (old, old))
+    victim = manager.restored_dir() / "official_t1_gitkeep_victim.wav"
+    victim.write_bytes(b"x" * 128)
+    os.utime(victim, (old, old))
+    db = _db()
+    try:
+        details = maintenance.run_storage_cleanup(db)
+    finally:
+        db.close()
+    assert marker.exists()
+    assert not victim.exists()
+    assert details["restored"]["files"] >= 1
+    victim.unlink(missing_ok=True)
+
+
 def test_delete_user_cascades_practice_sessions():
     db = _db()
     try:

@@ -1,5 +1,42 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.3 (chính thức) (2026-11-11)
+
+> Bản chính thức của chuỗi 0.0.3: nền beta đã kiểm định trọn vẹn + đợt đại tu ĐỒ HOẠ & GIAO DIỆN — bản sắc "cung đình Huế" bằng font riêng và hoạ tiết vẽ code, hệ chuyển động trọn vẹn, dọn sạch màu cứng và thống nhất bộ widget. Không thêm tính năng mới, không đổi cấu trúc điều hướng.
+
+### Đồ hoạ — bản sắc thị giác
+- **Font riêng 2 tầng, hỗ trợ trọn dấu tiếng Việt** (giấy phép OFL, bundle ~1.1MB): Playfair Display cho tiêu đề (chất serif cung đình) + Be Vietnam Pro cho thân bài — hết cảnh mỗi nền tảng một mặt chữ (trước đây khai 'Roboto' nhưng không bundle)
+- **Hoạ tiết cung đình vẽ bằng CustomPainter** (không cần file ảnh): lớp sóng nước + hoa văn kim cương phủ mờ trên hero Trang chủ, banner Sáng tạo, card album; **đĩa nhựa VinylDisc** vẽ rãnh vây + máng sáng thay icon `Icons.album` ở màn nghe Kho di sản
+- Màn Đăng nhập có header thương hiệu (logo + tên app chữ display)
+
+### Giao diện — sửa lỗi thật
+- **3 chỗ chữ gần như tàng hình ở light mode trong màn Sáng tạo** (lời bài hát, hướng dẫn vần, banner giai điệu khoá dùng màu dark-theme viết cứng) — giờ theo theme
+- Note "không đặt lại mật khẩu" màn Đăng nhập không còn hộp vàng sáng lùn trong dark mode
+- Sidebar và pill trạng thái server dùng đúng token theme (trước đây lặp palette viết cứng ngoài AppTheme)
+- TabBar pill ở Học hát/Phục dựng và spinner trong nút so sánh dùng `onPrimary`; card engine offline Quản trị dùng `statusDanger` thay `redAccent`
+- Thống nhất widget kit có sẵn: EmptyState (Lịch sử/Sáng tạo/Kho lưu trữ/Mời/Tài khoản), ErrorPanel (Đăng nhập/Sáng tạo/Mời/Tài khoản), `statusColor()` và ChartPalette dùng một nguồn duy nhất
+
+### Chuyển động (motion) — từ số 0 lên hệ trọn vẹn
+- Page transitions chuẩn nền tảng (Cupertino trên macOS/iOS, fade-up Android/Windows/Linux)
+- **Skeleton loader nhấp nháy thay 10 chỗ spinner trần** (Kho di sản, Sáng tạo, Quản trị ×4 — Tổng quan/Kho/Bài học/Crash — Bảo mật, Phục dựng, danh sách bài học Học hát, player đang nạp)
+- Stagger entrance cho lưới Trang chủ (danh sách dài chỉ dùng skeleton — không stagger từng dòng để tránh phát lại animation khi cuộn)
+- Chart: tooltip chạm tới tay, trục Hz/giây chuẩn hoá, lưới mảnh — một helper chung cho cả 5 biểu đồ
+
+### Responsive, a11y, i18n
+- `AppBreakpoints` hằng số chung thay 3 mốc phân tán 720/860/900
+- Nút chạm tối thiểu 44dp (nút Phục dựng trong danh sách, nút hủy tác vụ, switch đếm nhập bỏ scale 0.85, nút VI/theme sidebar thu gọn)
+- Semantics + Tooltip cho công tắc luyến láy (trước đây là GestureDetector trần)
+- Label dropdown giọng/tông độ/tâm trạng dịch sang tiếng Anh cho user EN — **value gửi máy chủ giữ nguyên chuỗi Việt (API không đổi)**
+
+### Vận hành
+- Dọn dẹp định kỳ **giữ lại marker `.gitkeep`** (3 marker storage/heritage bị maintenance xoá mất trước đây — đã khôi phục + test ghim)
+- Bump version `0.0.3-beta` → `0.0.3` (FastAPI title, /health extended, app, smoke assert)
+
+### Kiểm định
+- pytest **296/296** trên venv có basic-pitch (thêm 1 test `.gitkeep` survives cleanup); parity venv Python 3.9 không còn import được app (code cần ≥3.10 — tình trạng có trước, không thuộc đợt này)
+- flutter analyze **0** · flutter test **90/90** (+9: 3 test màu cứng light/dark, 1 render motif + đĩa nhựa, 4 test 360dp cho Sáng tạo/Phục dựng/Học hát/Quản trị, 1 test label i18n)
+- Build web release OK
+
 ## 0.0.3-beta (2026-11-09)
 
 > Đợt vá nền tảng ổn định: chấm dứt triệt để lỗi "chết im lặng" khi ký âm đồng thời (NK3), trả nợ UI trần lưu trữ đã hứa ở 0.0.2, và siết endpoint tác vụ không còn nhận đường dẫn file từ client.
@@ -24,6 +61,11 @@
 
 ### Hạn chế đã biết (trung thực)
 - Helper predict nếu kẹt cứng trong native code (hiếm) sẽ giữ engine ở trạng thái 503 cho tới khi thread đó tự kết thúc hoặc server khởi động lại; trạng thái này lộ ra ở `/health` extended qua `basic_pitch_stalled` để giám sát
+
+### Bảo mật — đợt săn vá 2026-11-10 (bổ sung sau bản beta)
+- Vá: F-pwd1 · F-rl1 (rate-limit) · F-race + 3 đường IDOR chặn (B1/B2/B3) · guard mạo danh admin (impersonation-guard) · hardening epoch-equality / early-abort / race-serialized
+- Thêm 4 bộ test khóa mới: test_idor_locks · test_nk3_resilience · test_rate_limit_locks · test_upload_surface_locks
+- pytest sau đợt này: **295/295 (0 skip)** · flutter test 81/81 · basic 45/45 · Kill-chain 43/43 · Final assault 42.2k hits=0
 
 ## 0.0.2 (chính thức) (2026-11-08)
 

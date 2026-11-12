@@ -7,6 +7,7 @@ import '../services/server_config.dart';
 import '../services/theme_provider.dart';
 import 'app_logo.dart';
 import 'content_max_width.dart';
+import '../core/constants/app_constants.dart';
 
 class NavigationDestinationItem {
   final IconData icon;
@@ -46,7 +47,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width >= 860;
+    final isDesktop = width >= AppBreakpoints.desktop;
     final locale = context.watch<LocaleProvider>();
     final theme = context.watch<ThemeProvider>();
     final server = context.watch<ServerConfig>();
@@ -73,7 +74,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     ServerConfig server,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final sidebarBg = isDark ? const Color(0xFF131120) : const Color(0xFFF0ECF7);
+    final sidebarBg = Theme.of(context).colorScheme.surfaceContainerHighest;
     final borderColor = Theme.of(context).colorScheme.outline;
 
     return Row(
@@ -298,7 +299,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                           IconButton(
                             iconSize: 18,
                             padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                             icon: Text(locale.isVietnamese ? 'VI' : 'EN', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                             tooltip: locale.strings.languageTitle,
                             onPressed: () => locale.toggleLanguage(),
@@ -307,7 +308,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                           IconButton(
                             iconSize: 18,
                             padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                             icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
                             tooltip: locale.strings.themeModeTitle,
                             onPressed: () => theme.toggleTheme(context),
@@ -359,8 +360,9 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF1B192C) : const Color(0xFFE6E1F0),
+                              color: Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.6)),
                             ),
                             child: Row(
                               children: [

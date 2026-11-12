@@ -18,6 +18,10 @@ import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/error_panel.dart';
+import '../../widgets/heritage_motif.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class CreationScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -407,7 +411,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             _buildTabBar(context),
             Expanded(
               child: _loadingTunes
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const SkeletonList(itemCount: 5, itemHeight: 92)
                   : TabBarView(
                       controller: _tabController,
                       children: [
@@ -428,19 +432,16 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.deepPurple.withAlpha(220),
-            AppTheme.primaryPurple.withAlpha(180),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: AppTheme.brandGradient,
         border: Border(
           bottom: BorderSide(color: AppTheme.imperialGold.withValues(alpha: 0.2), width: 1),
         ),
       ),
-      child: Row(
+      child: HeritageMotif(
+        color: Colors.white,
+        opacity: 0.09,
+        radius: 0,
+        child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -467,6 +468,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.3,
                     color: Colors.white,
+                    fontFamily: AppTheme.displayFontFamily,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -481,6 +483,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -567,7 +570,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           ),
           if (_errorTab2 != null) ...[
             const SizedBox(height: 8),
-            Text(_errorTab2!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 13)),
+            ErrorPanel(message: _errorTab2!),
           ],
           if (_taskTab2 != null) ...[
             const SizedBox(height: 14),
@@ -755,24 +758,27 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 ),
               ),
               if (hasOrnaments)
-                GestureDetector(
-                  onTap: () => setState(() => _showOrnaments = !_showOrnaments),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _showOrnaments
-                          ? AppTheme.primaryPurple.withAlpha(120)
-                          : _surfaceVariant,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
+                Tooltip(
+                  message: _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showOrnaments = !_showOrnaments),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
                         color: _showOrnaments
-                            ? AppTheme.primaryPurpleLight
-                            : _outline,
+                            ? AppTheme.primaryPurple.withAlpha(120)
+                            : _surfaceVariant,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _showOrnaments
+                              ? AppTheme.primaryPurpleLight
+                              : _outline,
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
-                      style: TextStyle(fontSize: 11, color: _onSurface),
+                      child: Text(
+                        _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
+                        style: TextStyle(fontSize: 11, color: _onSurface),
+                      ),
                     ),
                   ),
                 ),
@@ -788,10 +794,10 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             ),
             child: SelectableText(
               displayLyrics.isNotEmpty ? displayLyrics : strings.creationNoLyrics,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 height: 1.6,
-                color: Color(0xFFE2DCED),
+                color: _onSurface,
                 fontFamily: 'monospace',
               ),
             ),
@@ -872,13 +878,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               Expanded(
                 child: _dropdownField(strings.creationVocalLabel, _vocalTab1, ['Nữ', 'Nam', 'Không lời'], (v) {
                   setState(() => _vocalTab1 = v);
-                }),
+                }, display: strings.vocalChoiceLabel),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _dropdownField(strings.creationTempoLabel, _tempoTab1, ['Chậm', 'Vừa', 'Nhanh'], (v) {
                   setState(() => _tempoTab1 = v);
-                }),
+                }, display: strings.tempoChoiceLabel),
               ),
             ],
           ),
@@ -926,7 +932,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           ),
           if (_errorTab1 != null) ...[
             const SizedBox(height: 8),
-            Text(_errorTab1!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 13)),
+            ErrorPanel(message: _errorTab1!),
           ],
         ],
       ),
@@ -941,7 +947,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2D163D),
+        color: AppTheme.deepPurple,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.imperialGold.withAlpha(160)),
       ),
@@ -968,7 +974,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           const SizedBox(height: 4),
           Text(
             strings.creationLockedMelodyDesc,
-            style: TextStyle(fontSize: 12, color: _onSurfaceVariant, height: 1.4),
+            style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.78), height: 1.4),
           ),
         ],
       ),
@@ -1002,7 +1008,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             item.rhymeGuide.isNotEmpty
                 ? item.rhymeGuide
                 : strings.creationRhymeGuideDefault(item.bpm?.toStringAsFixed(0)),
-            style: const TextStyle(fontSize: 12.5, color: Color(0xFFD1D5DB), height: 1.4),
+            style: TextStyle(fontSize: 12.5, color: _onSurface, height: 1.4),
           ),
           const SizedBox(height: 10),
           Text(
@@ -1122,13 +1128,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               Expanded(
                 child: _dropdownField(strings.creationVocalLabel, _vocalTab2, ['Nữ', 'Nam'], (v) {
                   setState(() => _vocalTab2 = v);
-                }),
+                }, display: strings.vocalChoiceLabel),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _dropdownField(strings.creationMoodLabel, _moodTab2, ['Trữ tình', 'Thiết tha', 'Tươi vui', 'Hào sảng'], (v) {
                   setState(() => _moodTab2 = v);
-                }),
+                }, display: strings.moodChoiceLabel),
               ),
             ],
           ),
@@ -1138,7 +1144,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               Expanded(
                 child: _dropdownField(strings.creationTempoLabel, _tempoTab2, ['Chậm', 'Vừa', 'Nhanh'], (v) {
                   setState(() => _tempoTab2 = v);
-                }),
+                }, display: strings.tempoChoiceLabel),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1210,7 +1216,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     );
   }
 
-  Widget _dropdownField(String label, String value, List<String> items, ValueChanged<String> onChanged) {
+  Widget _dropdownField(
+    String label,
+    String value,
+    List<String> items,
+    ValueChanged<String> onChanged, {
+    String Function(String)? display,
+  }) {
     return DropdownButtonFormField<String>(
       key: ValueKey('$label-$value'),
       initialValue: value,
@@ -1225,7 +1237,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         for (final item in items)
           DropdownMenuItem(
             value: item,
-            child: Text(item, style: const TextStyle(fontSize: 12.5)),
+            child: Text(display != null ? display(item) : item, style: const TextStyle(fontSize: 12.5)),
           ),
       ],
       onChanged: (v) {
@@ -1236,37 +1248,15 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
   Widget _buildEmptyTunesState() {
     final strings = context.watch<LocaleProvider>().strings;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.music_off_rounded, size: 48, color: _onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              strings.creationEmptyTunesTitle,
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _onSurface),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              strings.creationEmptyTunesDesc,
-              style: TextStyle(fontSize: 12.5, color: _onSurfaceVariant, height: 1.4),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: Text(strings.creationReloadData),
-              onPressed: () {
-                setState(() => _loadingTunes = true);
-                _loadInitialData();
-              },
-            ),
-          ],
-        ),
-      ),
+    return EmptyState(
+      icon: Icons.music_off_rounded,
+      title: strings.creationEmptyTunesTitle,
+      desc: strings.creationEmptyTunesDesc,
+      ctaLabel: strings.creationReloadData,
+      onCta: () {
+        setState(() => _loadingTunes = true);
+        _loadInitialData();
+      },
     );
   }
 }

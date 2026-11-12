@@ -9,7 +9,9 @@ import '../../services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
+import '../../widgets/app_logo.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/error_panel.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -222,23 +224,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         ),
                       ],
                       if (_error != null) ...[
-                        Card(
-                          color: scheme.errorContainer,
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              children: [
-                                Icon(Icons.error_outline, color: scheme.onErrorContainer),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
-                                ),
-                              ],
-                            ),
-                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: ErrorPanel(message: _error!),
                         ),
                       ],
+                      _buildBrandHeader(strings),
                       SizedBox(
                         height: 480,
                         child: TabBarView(
@@ -448,6 +439,31 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     }
   }
 
+  Widget _buildBrandHeader(AppStrings strings) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        children: [
+          const AppLogo(size: 64),
+          const SizedBox(height: 10),
+          Text(
+            strings.appTitle,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: AppTheme.goldReadable(context),
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            strings.appSubtitle,
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLoginTab(AppStrings strings) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -483,9 +499,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.amber.shade50,
+            color: AppTheme.statusWarning.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.amber.shade300),
+            border: Border.all(color: AppTheme.statusWarning.withValues(alpha: 0.35)),
           ),
           child: Row(
             children: [
@@ -494,7 +510,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               Expanded(
                 child: Text(
                   strings.authNoResetNote,
-                  style: const TextStyle(fontSize: 11, color: Colors.brown),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    height: 1.4,
+                  ),
                 ),
               ),
             ],

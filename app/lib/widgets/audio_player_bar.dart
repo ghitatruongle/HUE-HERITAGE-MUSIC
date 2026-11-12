@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:provider/provider.dart';
+
+import 'skeleton_loader.dart';
 
 import '../services/locale_provider.dart';
 import 'error_panel.dart';
@@ -225,13 +227,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
     if (!_ready) {
       return const SizedBox(
         height: 56,
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
+        child: Center(child: SkeletonLoader(height: 44, width: 260, radius: 10)),
       );
     }
     final strings = context.read<LocaleProvider>().strings;

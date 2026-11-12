@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/status_colors.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -125,23 +127,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           if (entries.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.history_toggle_off, size: 64, color: scheme.onSurfaceVariant.withValues(alpha: 0.4)),
-                      const SizedBox(height: 16),
-                      Text(
-                        strings.emptyHistory,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              child: EmptyState(icon: Icons.history_toggle_off, title: strings.emptyHistory),
             )
           else
             SliverPadding(
@@ -222,12 +208,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _statusChip(String status, LocaleProvider locale) {
-    final color = switch (status) {
-      'done' => AppTheme.statusSuccess,
-      'error' => AppTheme.statusDanger,
-      'running' => AppTheme.statusInfo,
-      _ => Theme.of(context).colorScheme.onSurfaceVariant,
-    };
+    final color = statusColor(context, status);
     final label = switch (status) {
       'done' => locale.strings.historyStatusDone,
       'error' => locale.strings.historyStatusError,

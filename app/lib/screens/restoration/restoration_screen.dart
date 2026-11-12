@@ -9,6 +9,7 @@ import '../../api/api_client.dart';
 import '../../api/endpoints/heritage_api.dart';
 import '../../api/endpoints/restoration_api.dart';
 import '../../api/endpoints/sing_api.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/compare_result.dart';
 import '../../models/heritage_item.dart';
@@ -21,6 +22,7 @@ import '../../widgets/audio_player_bar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/compare_chart.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class RestorationScreen extends StatefulWidget {
   const RestorationScreen({super.key});
@@ -316,10 +318,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               controller: _tabController,
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
-                color: AppTheme.primaryPurple,
+                color: Theme.of(context).colorScheme.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
-              labelColor: Colors.white,
+              labelColor: Theme.of(context).colorScheme.onPrimary,
               unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
               labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               tabs: [
@@ -393,7 +395,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
   Widget _buildDspRestorationTab(dynamic strings) {
     final width = MediaQuery.of(context).size.width;
-    final isDesktop = width >= 900;
+    final isDesktop = width >= AppBreakpoints.desktop;
     final borderColor = Theme.of(context).colorScheme.outline;
 
     if (!isDesktop) {
@@ -488,7 +490,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       future: _itemsFuture,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const SkeletonList(itemCount: 7, itemHeight: 68);
         }
         if (snap.hasError) {
           return ErrorPanel(message: '${strings.errorPrefix}: ${ApiClient.describe(snap.error!)}', onRetry: _reloadItems);
@@ -523,8 +525,8 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                 ),
                 trailing: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    minimumSize: Size.zero,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    minimumSize: const Size(44, 44),
                     side: const BorderSide(color: AppTheme.amberGold),
                   ),
                   icon: const Icon(Icons.auto_fix_high, size: 14, color: AppTheme.amberGold),
@@ -764,7 +766,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         const SizedBox(height: 18),
         LayoutBuilder(
           builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 720;
+            final isWide = constraints.maxWidth >= AppBreakpoints.medium;
             final cardA = Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -918,7 +920,14 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           child: FilledButton.icon(
             style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14)),
             icon: _isComparing
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                  )
                 : const Icon(Icons.compare_arrows, size: 20),
             label: Text(strings.compareRunBtn, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             onPressed: _isComparing ? null : _runCrossComparison,

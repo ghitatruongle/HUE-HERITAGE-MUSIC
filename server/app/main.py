@@ -335,7 +335,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.3-beta",
+        version="0.0.3",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -381,8 +381,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.3-beta",
-            "stage": "0.0.3-beta",
+            "version": "0.0.3",
+            "stage": "0.0.3",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio

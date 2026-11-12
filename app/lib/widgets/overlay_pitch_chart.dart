@@ -57,16 +57,10 @@ class OverlayPitchChart extends StatelessWidget {
           maxX: maxX,
           minY: 0,
           maxY: maxY * 1.1,
-          gridData: const FlGridData(show: true, drawVerticalLine: false),
+          gridData: ChartPalette.styledGrid(context),
           borderData: FlBorderData(show: true, border: Border.all(color: theme.dividerColor)),
-          titlesData: const FlTitlesData(
-            leftTitles: AxisTitles(
-              axisNameWidget: Text('Hz', style: TextStyle(fontSize: 10)),
-            ),
-            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          ),
+          titlesData: ChartPalette.styledTitles(context, axisName: 'Hz'),
+          lineTouchData: ChartPalette.styledTouch(context),
           lineBarsData: [
             LineChartBarData(
               spots: ref,

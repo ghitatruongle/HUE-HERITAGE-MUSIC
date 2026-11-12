@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
+import '../../widgets/error_panel.dart';
 
 class InviteManagerSection extends StatefulWidget {
   const InviteManagerSection({super.key});
@@ -109,9 +110,9 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
         if (_loading && _invites.isEmpty)
           const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
         else if (_hasError && _invites.isEmpty)
-          Text(
-            strings.authInviteLoadFail,
-            style: const TextStyle(fontSize: 12, color: AppTheme.statusDanger),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: ErrorPanel(message: strings.authInviteLoadFail, onRetry: _loading ? null : _reload),
           )
         else ...[
           if (_invites.isEmpty)

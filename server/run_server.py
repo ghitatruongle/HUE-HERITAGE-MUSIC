@@ -1,5 +1,7 @@
 import uvicorn
 
+from app.config import settings
+
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
@@ -7,4 +9,5 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         proxy_headers=False,
+        limit_concurrency=settings.uvicorn_limit_concurrency,
     )

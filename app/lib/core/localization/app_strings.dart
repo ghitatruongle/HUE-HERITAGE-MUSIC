@@ -435,6 +435,35 @@ class AppStrings {
   String get authNoResetNote => isVi
       ? 'Quên mật khẩu? Liên hệ quản trị viên để được đặt lại (bạn sẽ nhận mật khẩu tạm).'
       : 'Forgot your password? Contact the administrator for a reset (you will receive a temporary password).';
+
+  String vocalChoiceLabel(String value) => isVi
+      ? value
+      : switch (value) {
+          'Nữ' => 'Female',
+          'Nam' => 'Male',
+          'Không lời' => 'Instrumental',
+          _ => value,
+        };
+
+  String tempoChoiceLabel(String value) => isVi
+      ? value
+      : switch (value) {
+          'Chậm' => 'Slow',
+          'Vừa' => 'Medium',
+          'Nhanh' => 'Fast',
+          _ => value,
+        };
+
+  String moodChoiceLabel(String value) => isVi
+      ? value
+      : switch (value) {
+          'Trữ tình' => 'Lyrical',
+          'Thiết tha' => 'Soulful',
+          'Tươi vui' => 'Cheerful',
+          'Hào sảng' => 'Heroic',
+          _ => value,
+        };
+
   String get authStorageWarning => isVi
       ? 'Máy này chưa có kho bảo mật (keyring/libsecret trên Linux) nên không lưu được phiên đăng nhập. Hãy cài libsecret hoặc dùng Chế độ Khách.'
       : 'This machine has no secure keyring (libsecret on Linux), so sign-in cannot be saved. Install libsecret or use Guest Mode.';
