@@ -1,6 +1,113 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
-## 0.0.4-preview (2026-11-13)
+## 0.0.4 (chính thức) (2026-11-14)
+
+> Đợt "dạy học hát trọn vẹn + chốt hạ dọn nợ": karaoke theo timing âm học thật của bản mẫu, chấm điểm theo từng từ, so sánh take, chuỗi ngày luyện tập; song ngữ trọn lời gợi ý chấm điểm; web có đủ VU meter + tự dừng im lặng + xem trước giọng; knob backlog cho bão tải.
+
+### Dạy học — timing thật (thay chia đều thời lượng)
+- **Timing từng câu lời từ âm học của bản mẫu**: `line_times` tính từ các khung có giọng (F0 > 0) của contour bản mẫu — câu nào gắn vào cụm giọng tương ứng, ranh giới câu là điểm giữa khoảng lặng giữa hai cụm; câu chưa khớp được cụm thì chia đều **trong vùng có giọng** (không còn trải lời lên phần im lặng đầu/cuối câu). Server tính lúc build bài học bằng contour full-res (32ms/frame), lưu vào cache; bài học cũ chưa có `line_times` được tính lại khi trả API từ contour cache (không phải rebuild cache)
+- **Karaoke khi thu dùng timing thật**: dòng đang hát bôi đậm theo cửa sổ câu thật + vạch ranh giới câu (nét đứt) trên đường tham chiếu; mất `line_times` thì tự quay về chia đều (fallback, không vỡ)
+- **Chấm theo từng từ**: dải từ của câu tô màu theo verdict của nốt rơi vào cửa sổ từ (xám = không có dữ liệu nốt), tooltip từ hiển thị verdict + cents + onset ms
+- **Đếm nhập (count-in) bài học đã dùng BPM thật của bài** từ trước — bản này giữ nguyên và kiểm chứng; thang âm vẫn 60 BPM (thang âm không có BPM riêng)
+
+### Song ngữ trọn lời gợi ý chấm điểm
+- Server trả thêm **mã có cấu trúc**: `hint_codes` từng nốt (pitch_high/pitch_low/pitch_slightly_high/pitch_slightly_low/onset_late/onset_early/hold_longer/vibrato_good/unclear_voice/ref_unclear_here/note_not_in_ref), `verdict_counts` + `summary_codes` ở metrics (chấm lesson lẫn thang âm đều có) — text tiếng Việt giữ nguyên làm fallback cho client cũ
+- Client tự ghép lời gợi ý VI/EN từ mã + số liệu đã parse (cents, ms) — hết cảnh user EN nhìn text Việt; áp cho tooltip nốt, summary chấm câu, thang âm
+- Mã nguồn logic dịch/tách tách thành `teaching_utils.dart` (thuần Dart, có test riêng)
+
+### So sánh take + tiến độ luyện tập
+- **Điểm từng take được lưu lại** (3 take/câu) — chọn take nào hiện đúng kết quả đã chấm của take đó, có hàng "Điểm từng take: T3: 86.2 · T4: 71.5" để so A/B; take chưa chấm thì chấm lại như cũ
+- **Chuỗi ngày luyện (streak)**: đếm ngày luyện liên tiếp (hôm nay hoặc hôm qua về trước), tổng số lần luyện, biểu đồ 7 ngày gần nhất — tính từ lịch luyện tập máy chủ (mọi bài học) hoặc lịch cục bộ khi không đăng nhập
+
+### Web parity học hát
+- **VU meter hoạt động trên web**: bản ghi âm web (pcm16bits → MicRecorderDelegate) có `getAmplitude` dBFS thật — poll 200ms (desktop 120ms) thay cho timer 1s cũ; sửa lại khẳng định cũ "web không có getAmplitude" ở mục 0.0.4-preview (đo lại trong source record_web 2.1.3: có, trả dBFS thật)
+- **Tự dừng im lặng chạy cả web**: cùng ngưỡng -35 dB / 1.2s với desktop
+- **Xem trước giọng trên web**: `LocalPitch.analyze` chạy trên take bytes (giới hạn 10s để nhẹ máy) — trước đây chỉ desktop
+
+### Hạ tầng tải
+- Knob `UVICORN_BACKLOG` (mặc định 2048) cho `run_server.py`, `deploy_lan.sh` và plist launchd — Linux VPS hưởng lợi khi bão tải; **macOS bị kernel cap `kern.ipc.somaxconn=128`** (đã đo ở bien-ban-kiem-dinh-0.0.1: `--backlog 8192` không giúp gì) — ghi chú vận hành đầy đủ trong `.env.example` (kèm cách chỉnh shedding theo cỡ server)
+
+### Kiểm toán nợ cũ (audit 0.0.0) — chốt trạng thái
+- **A13 (hướng dẫn bảo mật deploy LAN): ĐÃ ĐÓNG** — phát hành trong 0.0.1-alpha với mã B12 (README mục "Triển khai an toàn" + SETUP.md "Lưu ý bảo mật")
+- **S11 (email chỉ @gmail.com): ĐÃ ĐÓNG** — 0.0.1 chính thức đổi sang validate email regex chuẩn, ghi trong CHANGELOG 0.0.1
+- **S15 (`instrumental: true` cứng trong payload engine): GIỮ NGUYÊN CÓ CHỦ ĐÍCH** — chống phantom vocal theo quy tắc 8, chỉ mở khi model dot2.3 hoàn thành (`server/app/ai/ace_step_engine.py`)
+- **Nhóm 3B (tách màn khổng lồ): ĐÃ ĐÓNG** — 0.0.1-beta tách `TaskResultCard`/`InviteManagerSection`/`AccountManagerSection`/`ScalePracticeCard`
+- **Nhóm 3D (mã mời one-time): ĐÃ ĐÓNG** — 0.0.1-alpha (W1–W9) + harden race 0.0.1
+- **Nhóm 3E (signed URL tải audio công khai): ĐÃ ĐÓNG** — 0.0.1-alpha + mở rộng scope visibility 0.0.2
+- Nhóm 3A/3C: không tìm thấy định nghĩa trong repo (chỉ còn trong handoff/session cũ) — ghi nhận trung thực, không thể triage nếu không có bản audit gốc
+
+### Vá sau review vòng 1 (2026-11-14) — 3 TRUNG + 5 NHỎ đã vá, 3 NHỎ không-vá-có-lý
+- **Xem trước giọng gắn theo take** (`_takePreviewNo` + `_previewTakeMatches`): chuyển take trong hàng A/B không còn hiện nhầm đường pitch của take khác — preview chỉ hiện khi take đang chọn đúng là take được phân tích
+- **Web "đang phân tích giọng..." + defer**: web analyze chuyển sang sau-khi-paint (state hiển thị trước, tính sau qua microtask có guard epoch + try/catch + dọn flag) — hết khựng UI ngay khi bấm dừng mà không biết app đang làm gì; desktop giữ nguyên `compute` isolate
+- **Streak chuẩn múi giờ**: server lưu `created_at` UTC (chứng minh bằng snippet: stored=CURRENT_TIMESTAMP=UTC ≠ localtime+7h) — client giờ cộng `DateTime.now().timeZoneOffset` khi parse để chốt ngày theo lịch người dùng, test hermetic với offset inject (không phụ thuộc TZ máy test)
+- **line_times bó anchor khi nhiều câu**: câu đầu/cuối bó vào cụm được chọn làm anchor (không còn tính cả cụm nhỏ đã loại nằm trước câu 1); giữ nguyên phủ trọn vùng có giọng cho trường hợp 1 câu — test ghim riêng với fixture có cụm nhỏ 0.1s trước cụm thật
+- `lesson_detail`: chỉ tính lại `line_times` khi cache **không có key** (`lt is None`) — section vô lời không còn recompute mỗi request
+- Dọn biểu thức phòng thủ thừa trong `section_line_times` (`max(ws, min(ws, we))` → `ws`) — bất biến ws≤we do các cụm rời nhau và anchor có thứ tự
+- **my-progress 1 request/grade**: fetch all (limit 400) rồi filter theo bài học phía client, thay 2 request liên tiếp khi mở bài + khi chấm
+- `.env.example`: ghi chú launchd — đổi `ProgramArguments` của plist cần bootout/bootstrap lại (kickstart -k không nạp args mới)
+- **Không vá có lý do**: NHỎ-3 (fallback line_times thô hơn trên cache cũ — bài build mới đã full-res, cache cũ tự sửa khi rebuild bài học; ép rebuild sẽ vỡ case audio-đã-xóa-cache-còn) và NHỎ-5 (ghép note→từ theo midpoint — đổi sang overlap-ratio là churn không rõ lợi ích, giữ + ghi chú thiết kế) và NHỎ-8 (kernel cap macOS âm thầm — đã ghi docs trong .env.example, không có cách cảnh báo runtime gọn)
+
+### ⭐ REVIEW BẢO MẬT LẦN CUỐI 0.0.4 (2026-11-14, [D16]) — 0 LỖ HỔNG MỞ
+- **Lớp 1 — đối chiếu vá↔test (4 vá · 14/14 test khóa PASS)**: ① register timing-oracle → dummy-hash trên failure path ↔ `test_pwdhunt_005_locks` (counter hash deterministic) ② change-password TOCTOU → CAS atomic ↔ `test_race_005_locks` (8-luồng 1-winner + stale 401 + unit stale-reject) ③ nested-JSON RecursionError → depth-guard 64 + handler ↔ `test_dos_005_locks` (4000 tầng → 400 · 30 tầng vẫn qua · handler tồn tại) ④ 429 differential → uniformize 17 site ↔ `test_ratelimit_005_locks` (3 nguồn đồng nhất + source-scan + atomic race) · cộng `test_token_005_locks` (4 test TTL/cross-sign/sliding/unlock-window)
+- **Lớp 2 — quét lại toàn bộ bề mặt (46/46 nhóm OK + IDOR mini)**: auth gates 5 · SQLI spot 4 · XSS door + headers 4 · signed-URL giả + body 50MB + nested-depth 3 · 429 uniform 2 nguồn · practice-midi đoán mò · **IDOR admin_only tái-tạo + xác nhận visibility + attacker 404/404** · admin invariants 3 (admins==1 · account 'admin'=0 · integrity ok)
+- **Lớp 3 — bằng chứng sống**: pytest **355/355** · **0 Traceback** sandbox · zone check sạch · staged=0 · 14 campaign trước đó toàn CLEAN (chi tiết từng campaign trong memory sổ cái)
+
+### Rate-limit bypass raid 005 (2026-11-14) — 8/8 PASS · uniformize toàn bộ 429
+- **Đo được — không bypass**: xoay 150 username → 0×200, boundary 401→429 sạch tại ngưỡng IP-bucket (~120) không trượt · xoay **7 vector IP-header** (XFF đơn/chain, X-Real-IP, True-Client-IP, Forwarded, X-Originating-IP, Client-IP) sau bucket nóng → **toàn 429** (`_client_ip` chỉ đọc socket host) · pre-gate unlock: boundary **401×5 → 429×20 sạch** (2 tầng: pre-gate 20 + failure-bucket 5) · **40 luồng đồng thời khi bucket đầy → toàn 429** (`hit_and_allow` atomic lock — không slip) · unlock bằng user → 403, anon → 401, **đúng MK khi pre-gate 429 → vẫn 429** (không đường VIP)
+- **Lỗ hổng differential ĐÃ VÁ**: 429 từ các nguồn có **3 nhóm wording khác nhau** ("too many requests, slow down" / "too many failed attempts…" / "too many concurrent…" + "live streams" + dấu ";" — lộ bucket nào chạm) → **uniformize 17 điểm raise** về hằng số `RATE_LIMIT_DETAIL = "too many requests"` + header `Retry-After: 30` đồng nhất (rate_limit.py), security_log giữ chi tiết phía server; đo lại: **1 biến thể duy nhất**
+- **Test khóa mới** (`test_ratelimit_005_locks.py`, +3): body 429 từ 3 nguồn (login-flood/unlock/change-password) đồng nhất · source-scan mọi điểm raise 429 phải dùng hằng số (bắt regression) · `hit_and_allow` 200 luồng đồng thời limit 20 → **đúng 20 lượt qua** (atomic)
+
+### Vá sau DoS-raid 005 (2026-11-14) — 1 lỗ hổng thật: nested-JSON gây 500 RecursionError
+- **Tái hiện**: POST `/api/task` với JSON lồng 4000 tầng → **500** (`RecursionError: maximum recursion depth exceeded` trong traceback — json/pydantic parse nổ recursion trên body không giới hạn độ sâu)
+- **Vá 2 lớp**: ① **depth pre-check** trong `BodyLimitMiddleware` — mọi body `application/json` được scan O(n) đo nesting, **>64 tầng → 400 "json nesting too deep"** trước khi vào route (bảo vệ mọi JSON route, nesting 30 tầng hợp lệ vẫn qua) ② **exception handler `RecursionError` toàn cục → 400** (phòng thủ các nhánh parse khác)
+- **Đo lại sau vá**: nested 4000 → **400** · nesting 30 → vẫn 200 · CPU-flood login 40 luồng × 45s (81.945 req PBKDF2) → **0 5xx** (lockout 429 giữ) · SSE hold 8 kết nối × 30s — probe đọc trong lúc giữ 4/4 200 max 26ms (SSE async + limit 8/client + deadline 960s) · 6 transcribe DSP đồng thời (dồn worker pool) → 0 5xx, shed đúng inflight guard, **tự hồi phục** · 50MB stream → 413 trong 0.1s · health toàn bão 5-28ms
+- **Test khóa mới** (`test_dos_005_locks.py`, +3): nested 4000 → 400 + "nesting" · nesting 30 vẫn qua · RecursionError handler tồn tại toàn cục
+
+### FINAL ASSAULT 005 (2026-11-14, [D15]) — 9/9 PASS · TỔ CHỨC HACKER THẤT BẠI
+- 10 team × 3 đợt × 90s = **28.582 req** đa hình thức đồng thời (SQLI/XSS/CSRF/BRUTE/IDOR/DoS/ABUSE-revoke-churn/HEADER-XFF + health-watch 3s + nền tải thật): **breach=0 · 5xx-thật=0 · health-fail=0** xuyên suốt
+- Bất biến sau chiến dịch: admins==1==ghitatruongle · users chỉ tăng từ đăng ký hợp lệ · items không mất · PRAGMA integrity ok · **0 Traceback** · admin login 200 cuối
+
+### Token & session raid 005 (2026-11-14) — 20/20 PASS live + 4/4 test khóa — 0 lỗ hổng, khóa cơ chế sliding đo được
+- **TTL đo được**: parse token payload thật — user **72.00h**, admin **8.00h** (±1 phút); sửa expires/epoch trong token → 401 (sig binds cả hai)
+- **Token reuse**: sau change-password cả 2 token cũ chết ngay (epoch) · sau revoke-all cả 2 token chết + login lại OK
+- **Sliding session — cơ chế đo được**: `/api/auth/me` **re-mint token sliding** (expires tính lại từ thời điểm gọi, 72.00h, epoch giữ nguyên) — session sống khi user active; bất invariant khóa: **token đã-slide cũng chết sau revoke-all/change-password** (epoch kill phủ sliding) · /me không bump epoch (không tự nâng quyền)
+- **Ký chéo token ↔ signed-URL bị từ chối cả 2 chiều**: token-sig làm URL `s` → 401 · URL-sig làm Bearer → 401 (payload HMAC khác format: `id.expires.epoch` vs `path.expires.scope`) — unit `verify_path` trực tiếp
+- **Step-up unlock**: unlock mở window admin-create 200 · **hết window (monkeypatch 1s) → 403 "admin reauth required"** (window mặc định 600s)
+- Test khóa mới `test_token_005_locks.py` (+4)
+
+### Vá sau Race-raid 005 (2026-11-14) — 1 lỗ hổng TOCTOU change-password (stale-read)
+- **Tái hiện**: 9 luồng change-password đồng thời (owner + 8 "attacker" cùng biết MK cũ) — **9/9 thành công** vì mỗi request verify `old_password` trên **snapshot hash cũ** rồi ghi đè lẫn nhau (last-writer-wins) → MK cuối là của luồng commit chậm nhất, **owner bị khóa khỏi account của chính mình** (login OwnerNew 401) — kịch bản thực: owner đổi MK để thu hồi quyền attacker → attacker đua cùng lúc → thu hồi thất bại 50/50
+- **Vá — CAS atomic** (`crud.change_password_cas`): một câu `UPDATE users SET password_hash=:new, must_change_password=0, token_epoch=token_epoch+1 WHERE id=:id AND password_hash=:old_hash` — verify + write + bump epoch trong 1 statement; `rowcount=0` → 401 "wrong password" (stale snapshot bị từ chối) + log `change_password_stale_race`
+- **Đo lại sau vá**: 8 luồng đồng thời → **đúng 1×200**, 7 stale → 401 · epoch=+1 chính xác (không mất increments) · MK winner login 200 · MK luồng thua KHÔNG thành MK thực · cả 2 token cũ chết · write-storm 24 luồng × 45s (register/task/upload/crash-report/task-list) → **0 5xx-thật, 0 'database is locked'** (WAL + busy_timeout=30s), integrity_check ok
+- **Race đã chặn sẵn (đo được)**: register trùng username/email 12 luồng → đúng 1 winner (`_invite_lock` + IntegrityError fallback) · upload cùng sha 12 luồng → đúng 1 item (unique sha256 + IntegrityError→dedup) — không cần vá thêm
+- **Test khóa mới** (`test_race_005_locks.py`, +2): CAS từ chối stale old_hash + epoch tăng đúng · 8-luồng đồng thời đúng 1 winner + MK luồng thua không thành MK thực + token cũ chết
+- **Cập nhật test cũ** `test_beta_accounts.test_parallel_change_password_all_old_tokens_die`: assertion "tất cả 200" khẳng định hành vi last-writer-wins (chính là lớp lỗi vừa vá) → đổi sang contract CAS (1 winner + thua 400/401), giữ nguyên invariant cốt lõi "chỉ 1 token sống sót + token gốc chết"
+
+### Vá sau PWD-hunt 005 (2026-11-14) — 1 lỗ hổng thật: register timing-oracle username enumeration
+- **Gốc**: register dup-username/email trả 409 **trước** khi `hash_password` chạy (chỉ path thành công làm PBKDF2 600k) → dup ~1ms vs tạo mới ~48ms → **timing delta 47ms cho phép dò username** (login đã có dummy-verify từ trước — register thiếu)
+- **Vá**: failure path của `_validate_registration` giờ chạy **dummy `hash_password(p)`** trước khi raise — mọi nhánh lỗi đều tốn cùng lượng PBKDF2 như tạo mới; đo lại thật: delta **47.1ms → 0.5ms**
+- **Test khóa mới** (`test_pwdhunt_005_locks.py`, +2): ① dup-username/dup-email phải vẫn chạy hash (counter monkeypatch — deterministic, không assert timing flaky) ② chain admin-create: không reauth-unlock → 403 "admin reauth required" · unlock sai MK 4 lần → 401/429 · unlock đúng → tạo được; vi-policy <12 ký tự bị chặn
+- **Sự cố test-isolation đã xử lý**: fixture file mới để lại `ghitatruongle` password khác trong DB session dùng chung → `_mk_admin` của `test_rate_limit_locks` login fail; vá scoped teardown (chỉ xoá user mình tạo), full suite xanh trở lại
+
+### Kiểm định
+- pytest **341/341** (340 → +1: clamp anchor với cụm nhỏ trước cụm thật) · flutter analyze **0** · flutter test **123/123** (121 → +2: utcOffset dịch ngày đúng cho offset ±h) · zone check 0 đụng · secrets/IP scan diff = 0 · staged = 0 — **chưa commit/push**
+- **Chiến dịch ổn định trên server cô lập (2026-11-14)**: verify_beta3 **TOÀN XANH exit 0** — SMOKE **39/0** · DSP-STORM (restore/analyze/compare/transcribe) **5xx=0** health max 308ms RSS peak ~1080MB · STABILITY **6/6 SẠCH** (re-login · practice_sessions · mẫu nghệ nhân · bài học · **P6 restart giữa bão** · **0 Traceback**)
+- **Soak 900s 20VU** (`stability_soak.py --soak-seconds 900`): P1 upload-matrix SẠCH · P2 link-storm 120 link sha256 khớp SẠCH · P3 mixed **OK=134.628 · 4xx=0 · 5xx=0 · ex=0 · p50 73ms · p95 316ms** · RSS 316→721→367MB (178 mẫu, không rò) · health max 363ms 0/179 lỗi · P4 **kill -9 giữa upload hồi phục 1.1s · 10/10 file nguyên vẹn** · log server **0 Traceback**
+- **Parity engine-optional**: venv basic-pitch **341/341** · venv stub không basic-pitch (PYTHONPATH stub ImportError) **340 passed + 1 skip** đúng mô-típ — điểm DSP teaching mới (timing/hint codes) không đòi engine nặng
+- **Giao diện**: analyze **0** · flutter **123/123** — gồm `ui_render_matrix_003` (11 test = **11 màn × 7 kích thước × 2 theme = 154 render 0 exception**), `i18n_bounded_003` (quét toàn bộ screens/widgets), `theme_contrast_test` (WCAG × 2 theme), `ui_hardening_003`
+- **MEGA LOAD 24k→29.5k × 4 hình thái — ĐẠT (orchestrator durable `~/hue_mega_005.py`, token mint thật 29.500 user/env)**:
+  - **BURST 24k stagger=0**: 27.977 req · 200:448 · 503-shed 12.142 (**5xx-thật=0**) · health rechecks 5-12ms · RSS 194MB
+  - **BURST 29.5k**: 32.536 req · 503-shed 6.770 · **5xx-thật=0** · health 5-12ms · RSS 202MB
+  - **SAWTOOTH 5 răng ×12s (24k→8k→29.5k→6k→24k ≈ 175k req)**: **5xx-thật=0 cả 5 răng** · health recheck ngay/+3s/+8s/+15s/+30s = 25 mẫu toàn 200, max **479ms** (< 500) · RSS ≤ 234MB
+  - **RESTART GIỮA ĐỈNH**: kill -9 giây 12 của burst 29.5k → **markers 2/2 sha256 nguyên vẹn** · login mega00000 =200 · SAU-RESTART burst 29.5k **5xx-thật=0**, health 5-12ms · đo recovery riêng (respawn cùng port, client storm vẫn chạy): **kill → health 200 = 14.31s** (nghẽn accept queue bởi storm client còn chạy — somaxconn=128 trap đã ghi; sau khi storm tắt, health 5-14ms)
+  - **COLD-SPIKE (env durable mới, không warmup, thẳng 29.5k)**: **5xx-thật=0** · shed 29.4% · health 13-17ms · RSS 180MB
+  - **BARE env (SHED_CONCURRENCY=2500, không --limit-concurrency — chỉ qua env, 0 sửa code)**: BURST 24k **5xx-thật=0** · **shed% bare 21.7% < prod 43.4%** — shedding co giãn theo ENV, cùng code (chứng env-tunable) · health 12-17ms
+  - **RSS trần 400MB: max 234MB** · lỗi client (ConnectError 10-25k/bão) là phía client — somaxconn=128 trap đã ghi, KHÔNG phải 5xx server
+  - **Env audit**: **43 field Settings 100% env-tunable** (pydantic-settings BaseSettings, gồm núm mới `uvicorn_backlog`); 3 kênh áp dụng: `run_server.py` (limit_concurrency + backlog), `deploy_lan.sh` (--limit-concurrency/--backlog từ env), `.env.example` (37 entry) — không sửa code khi đổi cỡ server; shedding trả **503 + Retry-After** (`main.py:237`), max_in_flight = `settings.shed_concurrency` (`:373`)
+
+
+
+## 0.0.4-preview (2026-11-13) — đã phát hành
 
 > Đợt "fix lỗi + tăng tốc": vá 8 lỗi thật (nổi bật nhất là MIDI ký âm bị velocity 1 — gần câm), tăng tốc phân tích âm thanh (cache bản mẫu chấm điểm nhanh ~20 lần), và hoàn thiện tính năng **học hát Ca Huế** — hướng dẫn ngay trong lúc thu (đường tham chiếu + lời bôi đậm theo nhịp), hiển thị đủ điểm chấm, tự động chấm sau thu.
 

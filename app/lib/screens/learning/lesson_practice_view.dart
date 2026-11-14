@@ -21,6 +21,7 @@ import '../../services/app_lifecycle_service.dart';
 import '../../services/download_helper.dart';
 import '../../services/file_saver.dart';
 import '../../services/local_pitch.dart';
+import '../../services/teaching_utils.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/history_service.dart';
@@ -70,6 +71,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   final Map<int, bool> _looping = {};
   final Map<int, List<_TakeRec>> _takes = {};
   final Map<int, int> _selectedTake = {};
+  final Map<int, Map<int, PracticeResult>> _takeResults = {};
   Future<void>? _stopUiLock;
 
   double _speed = 1.0;
@@ -90,8 +92,11 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   DateTime? _lastVoiceAt;
   int _takeCounter = 0;
   LocalPitchResult? _takePreview;
+  int? _takePreviewNo;
+  bool _analyzingPreview = false;
 
   List<ProgressEntry> _serverProgress = [];
+  List<ProgressEntry> _allProgress = [];
   bool _serverProgressAvailable = false;
 
   List<ScaleInfo> _scales = [];
@@ -237,6 +242,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         String? p = result.path;
         Uint8List? takeBytes;
         LocalPitchResult? preview;
+        int newTakeNo = 0;
         if (result.started && result.mode == RecordingMode.section && p != null) {
           if (kIsWeb) {
             try {
@@ -256,6 +262,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         if (!mounted) {
           return;
         }
+        var webAnalyze = false;
         setState(() {
         _vuLevel.value = -60;
         _recStartAt = null;
@@ -276,19 +283,53 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             final takes = _takes[result.sectionIndex] ?? <_TakeRec>[];
             _takeCounter++;
             takes.add(_TakeRec(takeBytes, _takeCounter));
+            newTakeNo = _takeCounter;
             while (takes.length > 3) {
-              takes.removeAt(0);
+              final removed = takes.removeAt(0);
+              _takeResults[result.sectionIndex]?.remove(removed.no);
             }
             _takes[result.sectionIndex] = takes;
             _selectedTake[result.sectionIndex] = takes.length - 1;
           }
-          _takePreview = preview;
+          if (preview != null && newTakeNo > 0) {
+            _takePreview = preview;
+            _takePreviewNo = newTakeNo;
+          }
+          if (kIsWeb && takeBytes != null && preview == null && newTakeNo > 0) {
+            _analyzingPreview = true;
+            webAnalyze = true;
+          }
         }
         if (result.started && result.mode == RecordingMode.scale) {
           _scalePath = p;
           _scaleResult = null;
         }
       });
+        if (webAnalyze && takeBytes != null) {
+          final epoch = _rec.epoch;
+          final bytes = takeBytes;
+          final no = newTakeNo;
+          Future(() {
+            LocalPitchResult? p2;
+            try {
+              p2 = LocalPitch.analyze(bytes, secondsLimit: 10);
+            } catch (_) {}
+            if (!mounted) {
+              return;
+            }
+            if (epoch != _rec.epoch) {
+              setState(() => _analyzingPreview = false);
+              return;
+            }
+            setState(() {
+              _analyzingPreview = false;
+              if (p2 != null) {
+                _takePreview = p2;
+                _takePreviewNo = no;
+              }
+            });
+          });
+        }
         if (_autoGrade &&
             result.started &&
             result.mode == RecordingMode.section &&
@@ -327,7 +368,11 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       _signedSampleUrls.clear();
       _signedRefUrl = null;
       _takePreview = null;
+      _takePreviewNo = null;
+      _analyzingPreview = false;
       _serverProgress = [];
+      _allProgress = [];
+      _takeResults.clear();
       _takeCounter = 0;
     });
     try {
@@ -347,15 +392,18 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         if (signed != null) _signedSampleUrls[sampleTargets[i].index] = signed;
       }
       List<ProgressEntry> progress = [];
+      List<ProgressEntry> allProgress = [];
       bool serverOk = false;
       try {
-        progress = await api.myProgress(lessonId: lesson.id);
+        allProgress = await api.myProgress(limit: 400);
+        progress = allProgress.where((e) => e.lessonId == lesson.id).toList();
         serverOk = true;
       } catch (_) {}
       if (!mounted) return;
       setState(() {
         _detail = detail;
         _serverProgress = progress;
+        _allProgress = allProgress;
         _serverProgressAvailable = serverOk;
       });
     } catch (e) {
@@ -576,18 +624,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     _vuTimer?.cancel();
     _heardVoice = false;
     _lastVoiceAt = null;
-    if (kIsWeb) {
-      final webEpoch = _rec.epoch;
-      _vuTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted || webEpoch != _rec.epoch) return;
-        if (_recStartAt != null) {
-          _recElapsed.value = DateTime.now().difference(_recStartAt!).inMilliseconds / 1000.0;
-        }
-      });
-      return;
-    }
     final epoch = _rec.epoch;
-    _vuTimer = Timer.periodic(const Duration(milliseconds: 120), (_) async {
+    const period = kIsWeb ? Duration(milliseconds: 200) : Duration(milliseconds: 120);
+    _vuTimer = Timer.periodic(period, (_) async {
       try {
         final amp = await _rec.currentAmplitude();
         if (!mounted || epoch != _rec.epoch) return;
@@ -692,6 +731,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     setState(() {
       _error = null;
       _takePreview = null;
+      _takePreviewNo = null;
+      _analyzingPreview = false;
     });
     _recStartAt = DateTime.now();
     _recElapsed.value = 0;
@@ -740,7 +781,15 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         result = await api.practiceFile(detail.id, section.index, path!);
       }
       if (!mounted || _selected?.id != detail.id) return;
-      setState(() => _results[section.index] = result);
+      final takeNo = _selectedTakeRec(section.index)?.no;
+      setState(() {
+        _results[section.index] = result;
+        if (takeNo != null) {
+          final m = _takeResults[section.index] ?? <int, PracticeResult>{};
+          m[takeNo] = result;
+          _takeResults[section.index] = m;
+        }
+      });
       context.read<HistoryService>().add(
             HistoryEntry(
               id: HistoryService.newId(),
@@ -753,8 +802,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             ),
           );
       try {
-        final progress = await api.myProgress(lessonId: detail.id);
-        if (mounted && _selected?.id == detail.id) setState(() => _serverProgress = progress);
+        final all = await api.myProgress(limit: 400);
+        if (mounted && _selected?.id == detail.id) {
+          setState(() {
+            _allProgress = all;
+            _serverProgress = all.where((e) => e.lessonId == detail.id).toList();
+          });
+        }
       } catch (_) {}
     } catch (e) {
       if (mounted) setState(() => _error = ApiClient.describe(e));
@@ -1159,29 +1213,27 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               ),
             if (_rec.isSectionRecording && _rec.activeSection == section.index) ...[
               _buildSectionGuide(section),
-              if (!kIsWeb) ...[
-                const SizedBox(height: 8),
-                ValueListenableBuilder<double>(
-                  valueListenable: _vuLevel,
-                  builder: (context, vu, _) => Row(
-                    children: [
-                      const Icon(Icons.fiber_manual_record, color: AppTheme.statusDanger, size: 12),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: LinearProgressIndicator(
-                          value: ((vu + 60) / 60).clamp(0.0, 1.0),
-                          minHeight: 8,
-                          color: scheme.primary,
-                          backgroundColor: scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+              const SizedBox(height: 8),
+              ValueListenableBuilder<double>(
+                valueListenable: _vuLevel,
+                builder: (context, vu, _) => Row(
+                  children: [
+                    const Icon(Icons.fiber_manual_record, color: AppTheme.statusDanger, size: 12),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: LinearProgressIndicator(
+                        value: ((vu + 60) / 60).clamp(0.0, 1.0),
+                        minHeight: 8,
+                        color: scheme.primary,
+                        backgroundColor: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      const SizedBox(width: 6),
-                      Text('${vu.toStringAsFixed(0)} dB', style: const TextStyle(fontSize: 10.5)),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text('${vu.toStringAsFixed(0)} dB', style: const TextStyle(fontSize: 10.5)),
+                  ],
                 ),
-              ],
+              ),
             ],
             if (recorded && _takes[section.index]?.isNotEmpty == true) ...[
               const SizedBox(height: 8),
@@ -1194,10 +1246,19 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                       label: Text(strings.practiceTakeChip(_takes[section.index]![i].no),
                           style: const TextStyle(fontSize: 11)),
                       selected: (_selectedTake[section.index] ?? 0) == i,
-                      onSelected: (_) => setState(() => _selectedTake[section.index] = i),
+                      onSelected: (_) => setState(() {
+                        _selectedTake[section.index] = i;
+                        final stored = _takeResults[section.index]?[_takes[section.index]![i].no];
+                        if (stored != null) {
+                          _results[section.index] = stored;
+                        } else {
+                          _results.remove(section.index);
+                        }
+                      }),
                     ),
                 ],
               ),
+              _buildTakeScoreRow(section),
               AudioPlayerBar(bytes: _selectedTakeRec(section.index)?.bytes),
             ] else if (recorded && !kIsWeb && _recordPaths[section.index] != null) ...[
               const SizedBox(height: 8),
@@ -1210,7 +1271,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               ),
               AudioPlayerBar(filePath: _recordPaths[section.index]),
             ],
-            if (_takePreview != null && recorded && result == null) _buildTakePreview(section),
+            if (_takePreview != null && recorded && result == null && _previewTakeMatches(section)) _buildTakePreview(section),
+            if (_analyzingPreview && recorded && result == null) _buildAnalyzingRow(),
             if (recorded && result == null && _practicingSection != section.index)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -1221,6 +1283,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               _buildResultSummary(result, section),
               const SizedBox(height: 8),
               OverlayPitchChart(result: result),
+              _buildWordScore(result, section),
               if (result.notes.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Wrap(
@@ -1229,7 +1292,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   children: [
                     for (final n in result.notes)
                       Tooltip(
-                        message: n.hint.isNotEmpty ? '${_verdictLabel(n.verdictCode)}: ${n.hint}' : _verdictLabel(n.verdictCode),
+                        message: _noteTooltip(n),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(20),
                           onTap: n.refEnd > n.refStart ? () => _playRefSegment(n.refStart, n.refEnd, section) : null,
@@ -1293,6 +1356,110 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     }
   }
 
+  String _noteTooltip(PracticeNote n) {
+    final hint = noteHintText(n.hintCodes, n.errCents, n.onsetErrMs, n.vibrato, n.hint, strings);
+    if (hint.isNotEmpty) return '${_verdictLabel(n.verdictCode)}: $hint';
+    return _verdictLabel(n.verdictCode);
+  }
+
+  bool _previewTakeMatches(LessonSection section) {
+    final takes = _takes[section.index];
+    if (takes == null || takes.isEmpty || _takePreviewNo == null) return false;
+    final idx = (_selectedTake[section.index] ?? takes.length - 1).clamp(0, takes.length - 1);
+    return takes[idx].no == _takePreviewNo;
+  }
+
+  Widget _buildAnalyzingRow() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 6),
+          Text(strings.practiceAnalyzingPreview, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTakeScoreRow(LessonSection section) {    final results = _takeResults[section.index];
+    if (results == null || results.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final entries = results.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(strings.practiceCompareTakes, style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+          for (final e in entries)
+            Text(
+              'T${e.key}: ${e.value.metrics.score.toStringAsFixed(1)}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: e.value.metrics.score >= 80
+                    ? AppTheme.statusSuccess
+                    : (e.value.metrics.score >= 60 ? AppTheme.statusWarning : AppTheme.statusDanger),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWordScore(PracticeResult result, LessonSection section) {
+    if (section.lyrics.isEmpty || result.notes.isEmpty) return const SizedBox.shrink();
+    final words = wordScores(section, result.notes);
+    if (words.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(strings.practiceWordScoreTitle, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 4,
+            runSpacing: 3,
+            children: [
+              for (final w in words)
+                Tooltip(
+                  message: w.verdictCode.isEmpty
+                      ? strings.practiceWordMissing
+                      : '${_verdictLabel(w.verdictCode)} · ${w.errCents > 0 ? '+' : ''}${w.errCents.toStringAsFixed(0)}c · ${w.onsetErrMs.toStringAsFixed(0)}ms',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: w.verdictCode.isEmpty
+                          ? scheme.onSurfaceVariant.withAlpha(25)
+                          : _verdictColor(w.verdictCode),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      w.word,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: w.verdictCode.isEmpty ? scheme.onSurfaceVariant : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   List<FlSpot> _guideSpots(LessonSection section) {
     final detail = _detail;
     final spots = <FlSpot>[];
@@ -1323,6 +1490,10 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final lines = section.lyrics.isEmpty
         ? <String>[]
         : section.lyrics.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final boundaries = <double>[
+      for (final lt in section.lineTimes)
+        if (lt.start - section.start > 0.01) lt.start - section.start,
+    ];
     final palette = ChartPalette.of(context);
     var maxY = spots.isEmpty ? 1.0 : spots.map((s) => s.y).reduce(math.max);
     return Padding(
@@ -1360,6 +1531,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                         verticalLines: [
                           if (elapsed > 0 && elapsed <= maxX)
                             VerticalLine(x: elapsed, color: scheme.primary, strokeWidth: 1.2),
+                          for (final bx in boundaries)
+                            VerticalLine(x: bx, color: scheme.onSurfaceVariant.withAlpha(90), strokeWidth: 0.8, dashArray: const [3, 3]),
                         ],
                       ),
                       lineBarsData: [
@@ -1380,8 +1553,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             ValueListenableBuilder<double>(
               valueListenable: _recElapsed,
               builder: (context, elapsed, _) {
-                final lineDur = lines.isNotEmpty ? section.duration / lines.length : section.duration;
-                final current = lineDur > 0 ? (elapsed / lineDur).floor().clamp(0, lines.length - 1) : 0;
+                final current = currentLineIndex(
+                  lineTimes: section.lineTimes,
+                  lineCount: lines.length,
+                  duration: section.duration,
+                  elapsed: elapsed,
+                  offset: section.start,
+                );
                 return Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Column(
@@ -1553,10 +1731,19 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               ),
             ),
           ),
-        if (m.summaryHint.isNotEmpty)
+        if (m.summaryHint.isNotEmpty || m.summaryCodes.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(m.summaryHint, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+            child: Text(
+              summaryHintText(
+                verdictCounts: m.verdictCounts,
+                summaryCodes: m.summaryCodes,
+                missingNotes: m.missingNotes,
+                fallback: m.summaryHint,
+                strings: strings,
+              ),
+              style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+            ),
           ),
       ],
     );
@@ -1592,6 +1779,19 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         ? serverEntries.take(5).map((e) => e.score).toList()
         : history.take(5).map((e) => e.score ?? 0).toList();
     final avg = avgList.length >= 2 ? (avgList.reduce((a, b) => a + b) / avgList.length).toStringAsFixed(1) : null;
+    final dates = <DateTime>[];
+    if (_serverProgressAvailable) {
+      final utcOffset = DateTime.now().timeZoneOffset;
+      for (final e in _allProgress) {
+        final d = parsePracticeDate(e.createdAt, utcOffset: utcOffset);
+        if (d != null) dates.add(d);
+      }
+    } else {
+      for (final e in context.read<HistoryService>().entries) {
+        if (e.kind == 'practice') dates.add(e.at);
+      }
+    }
+    final stats = practiceStatsFromDates(dates, DateTime.now());
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -1607,6 +1807,42 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 const Spacer(),
                 if (avg != null)
                   Text('${strings.practiceAvg5}: $avg', style: const TextStyle(fontSize: 12, color: AppTheme.statusSuccess)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text(
+                  stats.streakDays > 0 ? strings.practiceStreakDays(stats.streakDays) : strings.practiceNoPracticeYet,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: stats.streakDays > 0 ? AppTheme.goldReadable(context) : scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(strings.practicePracticeCount(stats.totalPractices), style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                const Spacer(),
+                Text(strings.practiceWeekLabel, style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                for (var i = 0; i < 7; i++) ...[
+                  Expanded(
+                    child: Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: stats.last7Counts[i] > 0
+                            ? scheme.primary.withAlpha(60 + math.min(195, stats.last7Counts[i] * 65))
+                            : scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  if (i < 6) const SizedBox(width: 3),
+                ],
               ],
             ),
             const SizedBox(height: 8),

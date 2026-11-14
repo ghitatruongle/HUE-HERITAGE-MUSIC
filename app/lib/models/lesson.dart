@@ -31,6 +31,13 @@ class Lesson {
       );
 }
 
+class SectionLine {
+  final double start;
+  final double end;
+
+  const SectionLine(this.start, this.end);
+}
+
 class LessonSection {
   final int index;
   final double start;
@@ -39,6 +46,7 @@ class LessonSection {
   final String lyrics;
   final bool hasSample;
   final String sampleUrl;
+  final List<SectionLine> lineTimes;
 
   LessonSection({
     required this.index,
@@ -48,6 +56,7 @@ class LessonSection {
     required this.lyrics,
     this.hasSample = false,
     this.sampleUrl = '',
+    this.lineTimes = const [],
   });
 
   static LessonSection fromJson(Map<String, dynamic> j) => LessonSection(
@@ -58,7 +67,22 @@ class LessonSection {
         lyrics: j['lyrics']?.toString() ?? '',
         hasSample: j['has_sample'] == true,
         sampleUrl: j['sample_url']?.toString() ?? '',
+        lineTimes: _lineTimes(j['line_times']),
       );
+
+  static List<SectionLine> _lineTimes(raw) {
+    if (raw is! List) return const [];
+    final out = <SectionLine>[];
+    for (final e in raw) {
+      if (e is Map) {
+        out.add(SectionLine(
+          double.tryParse(e['start']?.toString() ?? '0') ?? 0,
+          double.tryParse(e['end']?.toString() ?? '0') ?? 0,
+        ));
+      }
+    }
+    return out;
+  }
 }
 
 class LessonDetail {
@@ -146,6 +170,7 @@ class ScalePerformanceNote {
   final String verdict;
   final String verdictCode;
   final String hint;
+  final List<String> hintCodes;
 
   ScalePerformanceNote({
     required this.name,
@@ -154,6 +179,7 @@ class ScalePerformanceNote {
     required this.verdict,
     required this.verdictCode,
     required this.hint,
+    this.hintCodes = const [],
   });
 
   static ScalePerformanceNote fromJson(Map<String, dynamic> j) => ScalePerformanceNote(
@@ -163,6 +189,7 @@ class ScalePerformanceNote {
         verdict: j['verdict']?.toString() ?? '',
         verdictCode: j['verdict_code']?.toString() ?? '',
         hint: j['hint']?.toString() ?? '',
+        hintCodes: PracticeResult._codeList(j['hint_codes']),
       );
 }
 
@@ -177,6 +204,8 @@ class ScalePractice {
   final List<ScaleNoteHit> notes;
   final List<ScalePerformanceNote> performance;
   final String summaryHint;
+  final Map<String, int> verdictCounts;
+  final List<String> summaryCodes;
 
   ScalePractice({
     required this.score,
@@ -189,6 +218,8 @@ class ScalePractice {
     this.transpose = 0,
     this.performance = const [],
     this.summaryHint = '',
+    this.verdictCounts = const {},
+    this.summaryCodes = const [],
   });
 
   static ScalePractice fromJson(Map<String, dynamic> j) {
@@ -214,6 +245,21 @@ class ScalePractice {
         }
       }
     }
+    final counts = <String, int>{};
+    final rawCounts = j['verdict_counts'];
+    if (rawCounts is Map) {
+      rawCounts.forEach((k, v) {
+        final n = int.tryParse(v.toString());
+        if (n != null) counts[k.toString()] = n;
+      });
+    }
+    final summaryCodes = <String>[];
+    final rawSummaryCodes = j['summary_codes'];
+    if (rawSummaryCodes is List) {
+      for (final c in rawSummaryCodes) {
+        summaryCodes.add(c.toString());
+      }
+    }
     return ScalePractice(
       score: double.tryParse(j['score']?.toString() ?? '0') ?? 0,
       scaleName: j['scale_name']?.toString() ?? '',
@@ -225,6 +271,8 @@ class ScalePractice {
       transpose: int.tryParse(j['transpose']?.toString() ?? '0') ?? 0,
       performance: perf,
       summaryHint: j['summary_hint']?.toString() ?? '',
+      verdictCounts: counts,
+      summaryCodes: summaryCodes,
     );
   }
 }
@@ -243,6 +291,8 @@ class PracticeMetrics {
   final int missingNotes;
   final String referenceQuality;
   final String summaryHint;
+  final Map<String, int> verdictCounts;
+  final List<String> summaryCodes;
 
   PracticeMetrics({
     required this.score,
@@ -258,6 +308,8 @@ class PracticeMetrics {
     this.missingNotes = 0,
     this.referenceQuality = '',
     this.summaryHint = '',
+    this.verdictCounts = const {},
+    this.summaryCodes = const [],
   });
 }
 
@@ -268,6 +320,7 @@ class PracticeNote {
   final String verdict;
   final String verdictCode;
   final String hint;
+  final List<String> hintCodes;
   final double onsetErrMs;
   final double refStart;
   final double refEnd;
@@ -280,6 +333,7 @@ class PracticeNote {
     required this.verdict,
     this.verdictCode = '',
     this.hint = '',
+    this.hintCodes = const [],
     this.onsetErrMs = 0,
     this.refStart = 0,
     this.refEnd = 0,
@@ -310,8 +364,12 @@ class PracticeResult {
     this.reference = '',
   });
 
-  static PracticeResult fromJson(Map<String, dynamic> j) {
-    final m = j['metrics'];
+  static List<String> _codeList(raw) {
+    if (raw is! List) return const [];
+    return raw.map((e) => e.toString()).toList();
+  }
+
+  static PracticeResult fromJson(Map<String, dynamic> j) {    final m = j['metrics'];
     double score = 0;
     double pitch = 0;
     double time = 0;
@@ -325,6 +383,8 @@ class PracticeResult {
     int missing = 0;
     String quality = '';
     String hint = '';
+    final counts = <String, int>{};
+    final summaryCodes = <String>[];
     if (m is Map) {
       score = double.tryParse(m['score']?.toString() ?? '0') ?? 0;
       pitch = double.tryParse(m['pitch_score']?.toString() ?? '0') ?? 0;
@@ -339,6 +399,19 @@ class PracticeResult {
       missing = int.tryParse(m['missing_notes']?.toString() ?? '0') ?? 0;
       quality = m['reference_quality']?.toString() ?? '';
       hint = m['summary_hint']?.toString() ?? '';
+      final rawCounts = m['verdict_counts'];
+      if (rawCounts is Map) {
+        rawCounts.forEach((k, v) {
+          final n = int.tryParse(v.toString());
+          if (n != null) counts[k.toString()] = n;
+        });
+      }
+      final rawCodes = m['summary_codes'];
+      if (rawCodes is List) {
+        for (final c in rawCodes) {
+          summaryCodes.add(c.toString());
+        }
+      }
     }
     final sample = j['sample'];
     final warped = j['user_warped'];
@@ -364,6 +437,7 @@ class PracticeResult {
             verdict: n['verdict']?.toString() ?? '',
             verdictCode: n['verdict_code']?.toString() ?? '',
             hint: n['hint']?.toString() ?? '',
+            hintCodes: _codeList(n['hint_codes']),
             onsetErrMs: double.tryParse(n['onset_err_ms']?.toString() ?? '0') ?? 0,
             refStart: double.tryParse(n['ref_start']?.toString() ?? '0') ?? 0,
             refEnd: double.tryParse(n['ref_end']?.toString() ?? '0') ?? 0,
@@ -392,6 +466,8 @@ class PracticeResult {
         missingNotes: missing,
         referenceQuality: quality,
         summaryHint: hint,
+        verdictCounts: counts,
+        summaryCodes: summaryCodes,
       ),
       refTimes: times,
       refF0: ref,

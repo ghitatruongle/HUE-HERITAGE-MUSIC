@@ -204,6 +204,8 @@ def empty_result():
             "vibrato_rate": 0.0,
             "score": 0.0,
             "summary_hint": "",
+            "verdict_counts": {},
+            "summary_codes": [],
         },
         "sample": {"times": [], "f0": []},
         "user_warped": {"times": [], "f0": []},
@@ -245,28 +247,38 @@ def _note_stats(times, f0, note):
 
 def _hint_for(err, onset_ms, dur_ratio, stats, voiced):
     parts = []
+    codes = []
     a = abs(err)
     if a > MINOR_CENTS:
         if err > 0:
+            codes.append("pitch_high")
             parts.append(f"Cao hơn {a:.0f} cents — hát trầm xuống")
         else:
+            codes.append("pitch_low")
             parts.append(f"Thấp hơn {a:.0f} cents — hát cao lên")
     elif a > OK_CENTS:
         if err > 0:
+            codes.append("pitch_slightly_high")
             parts.append(f"Hơi cao {a:.0f} cents")
         else:
+            codes.append("pitch_slightly_low")
             parts.append(f"Hơi thấp {a:.0f} cents")
     if onset_ms > ONSET_TOLERANCE_MS:
+        codes.append("onset_late")
         parts.append(f"Vào trễ {onset_ms:.0f}ms")
     elif onset_ms < -ONSET_TOLERANCE_MS:
+        codes.append("onset_early")
         parts.append(f"Vào sớm {abs(onset_ms):.0f}ms")
     if dur_ratio < 0.6:
+        codes.append("hold_longer")
         parts.append("Giữ nốt dài hơn")
     if stats is not None and stats["vibrato"] and a <= MINOR_CENTS:
+        codes.append("vibrato_good")
         parts.append("Rền đẹp — giữ chất này")
     if not voiced:
+        codes.append("unclear_voice")
         parts.append("Chưa rõ giọng — thu gần mic hơn")
-    return "; ".join(parts)
+    return "; ".join(parts), codes
 
 
 def _filter_transition_notes(notes, min_dur=0.15, near_cents=250.0):
@@ -495,6 +507,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
                 "verdict": VERDICT_TEXT["unclear"],
                 "verdict_code": "unclear",
                 "hint": "Bản mẫu không rõ nốt ở đoạn này" if ref_poor else "Nốt này không có trong bản mẫu",
+                "hint_codes": ["ref_unclear_here"] if ref_poor else ["note_not_in_ref"],
                 "onset_err_ms": 0.0,
                 "ref_start": 0.0,
                 "ref_end": 0.0,
@@ -511,7 +524,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
         dur_ratio = (nt["end"] - nt["start"]) / max(1e-3, rn["end"] - rn["start"])
         stats = _note_stats(u_times, u_f0, nt)
         code = verdict_code(err)
-        hint = _hint_for(err, onset_ms, dur_ratio, stats, True)
+        hint, hint_codes = _hint_for(err, onset_ms, dur_ratio, stats, True)
         notes_out.append({
             "midi": nt["midi"],
             "start": nt["start"],
@@ -520,6 +533,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
             "verdict": VERDICT_TEXT[code],
             "verdict_code": code,
             "hint": hint,
+            "hint_codes": hint_codes,
             "onset_err_ms": onset_ms,
             "ref_start": round(min(ref_window), 3) if ref_window else 0.0,
             "ref_end": round(max(ref_window), 3) if ref_window else 0.0,
@@ -580,18 +594,32 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
     off_count = sum(1 for n in notes_out if n["verdict_code"] in ("off", "octave"))
     minor_count = sum(1 for n in notes_out if n["verdict_code"] == "minor")
     unclear_count = sum(1 for n in notes_out if n["verdict_code"] == "unclear")
+    verdict_counts = {
+        "ok": ok_count,
+        "minor": minor_count,
+        "off": off_count,
+        "octave": sum(1 for n in notes_out if n["verdict_code"] == "octave"),
+        "unclear": unclear_count,
+    }
+    summary_codes = []
     hint_bits = []
     if ref_poor:
+        summary_codes.append("ref_poor")
         hint_bits.append("Bản mẫu không rõ từng nốt — chấm cao độ và đều giọng")
     if ok_count:
+        summary_codes.append("ok_count")
         hint_bits.append(f"{ok_count} nốt chuẩn")
     if minor_count:
+        summary_codes.append("minor_count")
         hint_bits.append(f"{minor_count} nốt lệch nhẹ")
     if off_count:
+        summary_codes.append("off_count")
         hint_bits.append(f"{off_count} nốt lệch cao độ")
     if unclear_count:
+        summary_codes.append("unclear_count")
         hint_bits.append(f"{unclear_count} nốt chưa khớp được")
     if missing:
+        summary_codes.append("missing_count")
         hint_bits.append(f"thiếu {missing} nốt so với mẫu")
     summary_hint = ", ".join(hint_bits) if hint_bits else ""
 
@@ -623,6 +651,8 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
             "vibrato_rate": vibrato_rate,
             "score": score,
             "summary_hint": summary_hint,
+            "verdict_counts": verdict_counts,
+            "summary_codes": summary_codes,
         },
         "sample": {"times": st, "f0": sf},
         "user_warped": {"times": st, "f0": wf},

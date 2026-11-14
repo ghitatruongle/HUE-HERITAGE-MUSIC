@@ -5,6 +5,7 @@ import asyncio
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
 from ..database.session import acquire_write_slot, get_db
 from ..database import crud
@@ -116,7 +117,7 @@ async def upload_heritage(
                 detail=f"storage quota exceeded: {used // (1024 * 1024)}MB used of {settings.user_storage_quota_mb}MB",
             )
     if not user_inflight.try_acquire(user_inflight.user_key("heritage-upload", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         path, digest, _fresh = await asyncio.to_thread(
             heritage_service.save_upload_payload, data, file.filename or "audio.wav"

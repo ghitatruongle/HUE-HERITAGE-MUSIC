@@ -8,6 +8,7 @@ import time
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
 from ..config import settings
 from ..database.session import get_db
@@ -185,7 +186,7 @@ def _practice_slot_acquire(user_id: Optional[str]) -> None:
         return
     current = _PRACTICE_INFLIGHT.get(user_id, 0)
     if current >= PRACTICE_MAX_INFLIGHT_PER_USER:
-        raise HTTPException(status_code=429, detail="too many concurrent practice requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     _PRACTICE_INFLIGHT[user_id] = current + 1
 
 
@@ -250,10 +251,18 @@ def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail=str(e))
     lyrics_text = (item.lyrics_with_ornaments or item.lyrics or "").strip()
     sha = item.sha256 or item.id
+    contour = lesson.get("contour") or {}
+    c_times = contour.get("times", [])
+    c_f0 = contour.get("f0", [])
     for s in lesson.get("sections", []):
         has_sample = manager.lesson_sample_path(sha, s["index"]).exists()
         s["has_sample"] = has_sample
         s["sample_url"] = f"/api/lessons/{lesson_id}/sections/{s['index']}/sample.wav" if has_sample else ""
+        sec_lines = [ln for ln in (s.get("lyrics") or "").splitlines() if ln.strip()]
+        lt = s.get("line_times")
+        if lt is None:
+            lt = lesson_service.section_line_times(c_times, c_f0, s["start"], s["end"], sec_lines)
+        s["line_times"] = lt
     lesson.update(
         {
             "lyrics": lyrics_text,

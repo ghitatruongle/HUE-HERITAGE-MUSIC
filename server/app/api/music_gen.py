@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
 from ..config import settings
 from ..database.session import get_db
@@ -333,7 +334,7 @@ async def gen_task_events(request: Request, task_id: str):
     key = user_id or (request.client.host if request.client else "unknown")
     with _SSE_LOCK:
         if _SSE_ACTIVE.get(key, 0) >= _SSE_LIMIT_PER_CLIENT:
-            raise HTTPException(status_code=429, detail="too many live streams")
+            raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
         _SSE_ACTIVE[key] = _SSE_ACTIVE.get(key, 0) + 1
 
     async def stream():

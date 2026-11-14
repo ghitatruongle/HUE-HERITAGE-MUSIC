@@ -17,6 +17,8 @@
         <string>--no-proxy-headers</string>
         <string>--limit-concurrency</string>
         <string>512</string>
+        <string>--backlog</string>
+        <string>2048</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/songthani/hueheritagemusic/server</string>

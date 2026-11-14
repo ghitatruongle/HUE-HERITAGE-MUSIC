@@ -23,7 +23,7 @@ else
     . ./.env
     set +a
   fi
-  nohup ../.venv-mac312/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers --limit-concurrency "${UVICORN_LIMIT_CONCURRENCY:-512}" > /tmp/hue_logs/lan_server.log 2>&1 & disown
+  nohup ../.venv-mac312/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers --limit-concurrency "${UVICORN_LIMIT_CONCURRENCY:-512}" --backlog "${UVICORN_BACKLOG:-2048}" > /tmp/hue_logs/lan_server.log 2>&1 & disown
   sleep 4
   cd ..
 fi

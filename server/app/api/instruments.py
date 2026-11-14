@@ -7,6 +7,7 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database.session import get_db
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 from ..database import crud
 from ..services import instrument_service, user_inflight
 from ..storage import manager
@@ -26,7 +27,7 @@ async def detect_instruments(request: Request, file: UploadFile = File(...), use
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
     if not user_inflight.try_acquire(user_inflight.user_key("instruments", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         return await asyncio.to_thread(instrument_service.detect, data)
     except ValueError:

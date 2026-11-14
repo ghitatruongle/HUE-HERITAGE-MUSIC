@@ -6,6 +6,10 @@ _lock = threading.Lock()
 _hits: dict = defaultdict(deque)
 
 
+RATE_LIMIT_DETAIL = "too many requests"
+RATE_LIMIT_HEADERS = {"Retry-After": "30"}
+
+
 def hit_and_allow(key: str, limit: int, window_seconds: float = 60.0) -> bool:
     now = time.time()
     with _lock:

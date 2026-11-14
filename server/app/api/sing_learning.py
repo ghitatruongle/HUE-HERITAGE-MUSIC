@@ -2,6 +2,7 @@ from typing import Optional
 import asyncio
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
 from ..services import pitch_service, compare_service, user_inflight
 from ..storage import manager
@@ -21,7 +22,7 @@ async def analyze_pitch(request: Request, file: UploadFile = File(...), user_id:
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
     if not user_inflight.try_acquire(user_inflight.user_key("pitch", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         try:
             samples, sr = await asyncio.to_thread(pitch_service.read_mono_wav, data)
@@ -54,7 +55,7 @@ async def compare_sing(request: Request, sample: UploadFile = File(...), user: U
     if len(s_data) > MAX_BYTES or len(u_data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
     if not user_inflight.try_acquire(user_inflight.user_key("compare", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         try:
             return await asyncio.to_thread(compare_service.compare, s_data, u_data)

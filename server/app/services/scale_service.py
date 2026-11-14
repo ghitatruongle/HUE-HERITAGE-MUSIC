@@ -152,6 +152,7 @@ def practice_scale(scale_id: str, data: bytes, transpose: int = 0) -> dict:
             "verdict": nt["verdict"],
             "verdict_code": nt["verdict_code"],
             "hint": nt["hint"],
+            "hint_codes": nt.get("hint_codes", []),
         })
 
     legacy_hits = []
@@ -175,5 +176,7 @@ def practice_scale(scale_id: str, data: bytes, transpose: int = 0) -> dict:
         "notes": legacy_hits,
         "performance": perf,
         "summary_hint": metrics["summary_hint"],
+        "verdict_counts": metrics.get("verdict_counts", {}),
+        "summary_codes": metrics.get("summary_codes", []),
         "voiced_frames": len(voiced),
     }

@@ -6,6 +6,7 @@ import math
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
 from ..database.session import get_db, SessionLocal
 from ..database import crud
@@ -47,7 +48,7 @@ async def transcribe(
     if not math.isfinite(bpm) or bpm < 1 or bpm > 300:
         raise HTTPException(status_code=400, detail="bad bpm")
     if not user_inflight.try_acquire(user_inflight.user_key("transcribe", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     cached = False
     try:
         digest = await asyncio.to_thread(manager.sha256_bytes, data)
@@ -172,7 +173,7 @@ async def evaluate_transcription(
     user_id: Optional[str] = Depends(require_user),
 ):
     if not user_inflight.try_acquire(user_inflight.user_key("evaluate", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         data = await file.read()
         if len(data) == 0:

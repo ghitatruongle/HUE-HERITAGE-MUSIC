@@ -148,6 +148,33 @@ class AppStrings {
   String get verdictOff => isVi ? 'Lệch cao độ' : 'Off pitch';
   String get verdictOctave => isVi ? 'Sai quãng tám' : 'Octave off';
   String get verdictUnclear => isVi ? 'Không rõ' : 'Unclear';
+  String practiceHintPitchHigh(int cents) => isVi ? 'Cao hơn $cents cents — hát trầm xuống' : 'Too high by $cents cents — sing lower';
+  String practiceHintPitchLow(int cents) => isVi ? 'Thấp hơn $cents cents — hát cao lên' : 'Too low by $cents cents — sing higher';
+  String practiceHintPitchSlightlyHigh(int cents) => isVi ? 'Hơi cao $cents cents' : 'Slightly high $cents cents';
+  String practiceHintPitchSlightlyLow(int cents) => isVi ? 'Hơi thấp $cents cents' : 'Slightly low $cents cents';
+  String practiceHintOnsetLate(int ms) => isVi ? 'Vào trễ $ms ms' : 'Late by $ms ms';
+  String practiceHintOnsetEarly(int ms) => isVi ? 'Vào sớm $ms ms' : 'Early by $ms ms';
+  String get practiceHintHoldLonger => isVi ? 'Giữ nốt dài hơn' : 'Hold the note longer';
+  String get practiceHintVibratoGood => isVi ? 'Rền đẹp — giữ chất này' : 'Nice vibrato — keep this quality';
+  String get practiceHintUnclearVoice => isVi ? 'Chưa rõ giọng — thu gần mic hơn' : 'Voice unclear — sing closer to the mic';
+  String get practiceHintRefUnclearHere => isVi ? 'Bản mẫu không rõ nốt ở đoạn này' : 'Reference unclear here';
+  String get practiceHintNoteNotInRef => isVi ? 'Nốt này không có trong bản mẫu' : 'This note is not in the reference';
+  String practiceHintCountOk(int n) => isVi ? '$n nốt chuẩn' : '$n notes in tune';
+  String practiceHintCountMinor(int n) => isVi ? '$n nốt lệch nhẹ' : '$n slightly off';
+  String practiceHintCountOff(int n) => isVi ? '$n nốt lệch cao độ' : '$n notes off pitch';
+  String practiceHintCountUnclear(int n) => isVi ? '$n nốt chưa khớp được' : '$n unmatched notes';
+  String practiceHintCountMissing(int n) => isVi ? 'thiếu $n nốt so với mẫu' : '$n notes missing vs reference';
+  String get practiceHintSummaryRefPoor => isVi
+      ? 'Bản mẫu không rõ từng nốt — chấm cao độ và đều giọng'
+      : 'Master sample unclear — graded on pitch and steadiness';
+  String get practiceWordScoreTitle => isVi ? 'Chấm theo từ' : 'Word-by-word score';
+  String get practiceWordMissing => isVi ? 'Thiếu' : 'Missing';
+  String practiceStreakDays(int n) => isVi ? 'Chuỗi $n ngày liên tiếp' : '$n-day streak';
+  String practicePracticeCount(int n) => isVi ? '$n lần luyện' : '$n practices';
+  String get practiceWeekLabel => isVi ? '7 ngày gần nhất' : 'Last 7 days';
+  String get practiceNoPracticeYet => isVi ? 'Chưa luyện ngày nào' : 'No practice yet';
+  String get practiceCompareTakes => isVi ? 'Điểm từng take' : 'Score per take';
+  String get practiceAnalyzingPreview => isVi ? 'Đang phân tích giọng...' : 'Analyzing voice...';
   String get practiceAutoGrade => isVi ? 'Tự chấm sau thu' : 'Auto-grade';
   String get practiceGuideTitle => isVi
       ? 'Hướng dẫn khi thu — hát theo đường tham chiếu và lời bôi đậm'

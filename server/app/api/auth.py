@@ -17,7 +17,9 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database.session import acquire_write_slot, get_db, SessionLocal
 from ..database import crud
+from .. import rate_limit
 from .. import rate_limit, security_log
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
 logger = logging.getLogger(__name__)
 
@@ -377,21 +379,25 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
 
     if not rate_limit.hit_and_allow(f"register-ip:{_client_ip(request)}", max(1, settings.register_ip_rate_limit)):
         security_log.security_event("register_ip_flood", ip=_client_ip(request))
-        raise HTTPException(status_code=429, detail="too many requests, slow down")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
 
     fail_key = f"regfail:{_client_ip(request)}"
     if _ip_failures_exceeded(_register_ip_failures, fail_key, max(1, settings.register_failure_ip_limit)):
         security_log.security_event("register_failures_ip_limited", ip=_client_ip(request))
-        raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
 
     key = f"register:{_client_ip(request)}:{u.lower()}"
     if _attempts_exceeded(key):
         security_log.security_event("register_rate_limited", ip=_client_ip(request), username=u)
-        raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     with _invite_lock:
         try:
             _validate_registration(db, u, e, p, c)
         except HTTPException as exc:
+            try:
+                hash_password(p)
+            except Exception:
+                pass
             _record_failure(key)
             _record_ip_failure(_register_ip_failures, fail_key)
             security_log.security_event("register_failed", ip=_client_ip(request), username=u, detail=exc.detail)
@@ -437,7 +443,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     )
     if not ip_allowed and not is_admin_truong:
         security_log.security_event("login_ip_flood", ip=_client_ip(request))
-        raise HTTPException(status_code=429, detail="too many requests, slow down")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     ident_key = str(user.id) if user else login_id.lower()
     key = f"login:{_client_ip(request)}:{ident_key}"
     password_ok = _uniform_verify(req.password, user.password_hash if user else None)
@@ -448,7 +454,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         security_log.security_event("login_failed", ip=_client_ip(request), identifier=login_id)
         if locked:
             security_log.security_event("login_rate_limited", ip=_client_ip(request), identifier=login_id)
-            raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
+            raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
         raise HTTPException(status_code=401, detail="wrong credentials")
     if getattr(user, "active", 1) == 0:
         security_log.security_event("login_blocked_disabled", ip=_client_ip(request), identifier=login_id)
@@ -579,12 +585,15 @@ def change_password(req: ChangePasswordRequest, request: Request, db: Session = 
         locked = _ip_failures_exceeded(_auth_failures, chg_key, AUTH_FAILURE_LIMIT)
         security_log.security_event("change_password_failed", user_id=user.id, username=user.username)
         if locked:
-            raise HTTPException(status_code=429, detail="too many attempts; try again later")
+            raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
         raise HTTPException(status_code=401, detail="wrong password")
     _clear_failures(f"chg:{_client_ip(request)}:{user.id}")
-    crud.update_user_password(db, user.id, hash_password(req.new_password))
-    crud.set_must_change_password(db, user.id, False)
-    new_epoch = crud.bump_token_epoch(db, user.id)
+    new_epoch = crud.change_password_cas(db, user.id, user.password_hash, hash_password(req.new_password))
+    if new_epoch is None:
+        security_log.security_event("change_password_stale_race", user_id=user.id, username=user.username)
+        chg_key = f"chg:{_client_ip(request)}:{user.id}"
+        _record_ip_failure(_auth_failures, chg_key)
+        raise HTTPException(status_code=401, detail="wrong password")
     security_log.security_event("password_changed", user_id=user.id, username=user.username)
     db.refresh(user)
     user.token_epoch = new_epoch
@@ -641,7 +650,7 @@ def admin_unlock(req: AdminUnlockRequest, request: Request, db: Session = Depend
     unlock_ident_key = f"unlock-ident:{admin_id}"
     if not rate_limit.hit_and_allow(f"unlock-try:{_client_ip(request)}", 20):
         security_log.security_event("admin_unlock_rate_limited", admin=admin_id, ip=_client_ip(request))
-        raise HTTPException(status_code=429, detail="too many requests, slow down")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     user = crud.get_user_by_id(db, admin_id)
     if user and _uniform_verify(req.password, user.password_hash):
         with _auth_failures_lock:
@@ -654,7 +663,7 @@ def admin_unlock(req: AdminUnlockRequest, request: Request, db: Session = Depend
     ip_exceeded = _ip_failures_exceeded(_admin_unlock_failures, unlock_key, _ADMIN_UNLOCK_FAILURE_LIMIT)
     if ident_exceeded or ip_exceeded:
         security_log.security_event("admin_unlock_rate_limited", admin=admin_id, ip=_client_ip(request))
-        raise HTTPException(status_code=429, detail="too many failed attempts, try again later")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     _record_ip_failure(_admin_unlock_failures, unlock_key)
     _record_ip_failure(_admin_unlock_failures, unlock_ident_key)
     security_log.security_event("admin_unlock_failed", admin=admin_id, ip=_client_ip(request))

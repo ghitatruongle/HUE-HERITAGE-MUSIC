@@ -19,6 +19,62 @@ CONTOUR_HOP = 512
 CONTOUR_MAX_POINTS = 400
 SILENCE_GAP_SECONDS = 0.7
 SECTION_SR = 16000
+LINE_GAP_MAX = 0.45
+LINE_MIN_SEG = 0.12
+
+
+def _voiced_segments(times, f0, start, end):
+    segs = []
+    cur = None
+    for t, f in zip(times, f0):
+        if f > 0 and start - 0.05 <= t <= end + 0.05:
+            if cur is None:
+                cur = [t, t]
+            else:
+                cur[1] = t
+        elif cur is not None:
+            segs.append(cur)
+            cur = None
+    if cur is not None:
+        segs.append(cur)
+    merged = []
+    for a, b in segs:
+        if merged and a - merged[-1][1] < LINE_GAP_MAX:
+            merged[-1][1] = b
+        else:
+            merged.append([a, b])
+    return [(s[0], s[1]) for s in merged if s[1] - s[0] >= LINE_MIN_SEG]
+
+
+def section_line_times(times, f0, start, end, lines):
+    lines = [ln for ln in (lines or []) if ln and ln.strip()]
+    if not lines or end - start < 0.4:
+        return []
+    n = len(lines)
+    segs = _voiced_segments(times, f0, start, end)
+    if not segs:
+        return []
+    if len(segs) < n:
+        a0 = segs[0][0]
+        b0 = segs[-1][1]
+        span = (b0 - a0) / n
+        return [{"start": round(a0 + i * span, 3), "end": round(a0 + (i + 1) * span, 3)} for i in range(n)]
+    order = sorted(range(len(segs)), key=lambda k: segs[k][1] - segs[k][0], reverse=True)[:n]
+    anchors = sorted(order)
+    windows = []
+    for i, k in enumerate(anchors):
+        a = segs[k][0]
+        b = segs[k][1]
+        ws = start if i == 0 else (segs[anchors[i - 1]][1] + a) / 2.0
+        we = end if i == n - 1 else (b + segs[anchors[i + 1]][0]) / 2.0
+        if n > 1:
+            ws = max(ws, segs[anchors[0]][0], start)
+            we = min(we, segs[anchors[-1]][1], end)
+        else:
+            ws = max(ws, segs[0][0], start)
+            we = min(we, segs[-1][1], end)
+        windows.append({"start": round(ws, 3), "end": round(we, 3)})
+    return windows
 
 
 def lessons_dir():
@@ -185,6 +241,7 @@ def build_lesson(item: HeritageItem) -> dict:
         wav_path = sec_dir / f"{idx:02d}.wav"
         if not wav_path.exists() or _wav_sample_rate(wav_path) != SECTION_SR:
             _write_wav16(wav_path, samples[int(a * sr):int(b * sr)], sr)
+        sec_lines = [ln for ln in lyrics_parts[idx].splitlines() if ln.strip()]
         payload_sections.append(
             {
                 "index": idx,
@@ -192,6 +249,7 @@ def build_lesson(item: HeritageItem) -> dict:
                 "end": b,
                 "duration": round(b - a, 2),
                 "lyrics": lyrics_parts[idx],
+                "line_times": section_line_times(times, f0, a, b, sec_lines),
             }
         )
     payload = {

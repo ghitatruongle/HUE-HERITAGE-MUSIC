@@ -30,12 +30,12 @@ class LocalPitch {
   static const double fMax = 1000;
   static const int maxSeconds = 20;
 
-  static LocalPitchResult? analyze(Uint8List bytes) {
+  static LocalPitchResult? analyze(Uint8List bytes, {int? secondsLimit}) {
     final parsed = _parsePcm16(bytes);
     if (parsed == null) return null;
     final samples = parsed.$1;
     final sr = parsed.$2;
-    final limit = math.min(samples.length, sr * maxSeconds);
+    final limit = math.min(samples.length, sr * (secondsLimit ?? maxSeconds));
     final points = <LocalPitchPoint>[];
     final lmin = math.max(1, (sr / fMax).floor());
     final lmax = math.min((sr / fMin).floor(), frameSize - 1);

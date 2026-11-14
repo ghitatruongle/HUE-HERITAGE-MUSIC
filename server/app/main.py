@@ -17,6 +17,7 @@ from .api.router import api_router
 from .database.session import init_db, SessionLocal
 from .database import crud
 from . import rate_limit
+from .rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
 AUDIO_SUFFIXES = (
     ".mp3",
@@ -135,9 +136,9 @@ class HeavyRateLimitMiddleware:
 
                     security_log.security_event("heavy_rate_limited", bucket=bucket, path=path)
                     response = JSONResponse(
-                        {"detail": "too many requests, slow down"},
+                        {"detail": RATE_LIMIT_DETAIL},
                         status_code=429,
-                        headers={"Retry-After": "30"},
+                        headers=RATE_LIMIT_HEADERS,
                     )
                     await response(scope, receive, send)
                     return
@@ -182,6 +183,26 @@ class BodyLimitMiddleware:
                 if not msg.get("more_body"):
                     break
             elif msg["type"] == "http.disconnect":
+                return
+        ct = b""
+        for hname, hvalue in scope.get("headers", []):
+            if hname == b"content-type":
+                ct = hvalue.lower()
+                break
+        if b"json" in ct:
+            depth = 0
+            max_depth = 0
+            for ch in body:
+                if ch in (0x7B, 0x5B):
+                    depth += 1
+                    if depth > max_depth:
+                        max_depth = depth
+                elif ch in (0x7D, 0x5D):
+                    if depth > 0:
+                        depth -= 1
+            if max_depth > 64:
+                response = JSONResponse({"detail": "json nesting too deep"}, status_code=400)
+                await response(scope, receive, send)
                 return
         sent = {"done": False}
 
@@ -350,7 +371,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.4-preview",
+        version="0.0.4",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -390,6 +411,10 @@ def create_app() -> FastAPI:
             detail = [{"msg": "invalid request body"}]
         return JSONResponse(status_code=422, content={"detail": detail})
 
+    @application.exception_handler(RecursionError)
+    async def recursion_safe_handler(request, exc):
+        return JSONResponse(status_code=400, content={"detail": "malformed body: nesting too deep"})
+
     application.include_router(api_router, prefix="/api")
 
     @application.on_event("startup")
@@ -409,8 +434,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.4-preview",
-            "stage": "0.0.4-preview",
+            "version": "0.0.4",
+            "stage": "0.0.4",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio

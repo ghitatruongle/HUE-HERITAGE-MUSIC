@@ -330,6 +330,23 @@ def update_user_password(db: Session, user_id: str, password_hash: str):
     return user
 
 
+def change_password_cas(db: Session, user_id: str, old_hash: str, new_hash: str):
+    from sqlalchemy import text
+
+    result = db.execute(
+        text(
+            "UPDATE users SET password_hash = :nh, must_change_password = 0, "
+            "token_epoch = token_epoch + 1 WHERE id = :uid AND password_hash = :oh"
+        ),
+        {"nh": new_hash, "uid": user_id, "oh": old_hash},
+    )
+    db.commit()
+    if result.rowcount != 1:
+        return None
+    row = db.execute(text("SELECT token_epoch FROM users WHERE id = :uid"), {"uid": user_id}).first()
+    return int(row[0]) if row else None
+
+
 def create_invite_code(db: Session, code: str, note: str = ""):
     from ..database.models import InviteCode
     row = InviteCode(code=code, note=note)

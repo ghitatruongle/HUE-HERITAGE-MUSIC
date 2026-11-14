@@ -6,6 +6,7 @@ import '../../models/lesson.dart';
 import '../../api/endpoints/lesson_api.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
+import '../../services/teaching_utils.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/common_button.dart';
 
@@ -143,10 +144,19 @@ class ScalePracticeCard extends StatelessWidget {
                   '${strings.practiceScorePitch}: ${result!.pitchScore.toStringAsFixed(0)} · ${strings.practiceScoreRhythm}: ${result!.rhythmScore.toStringAsFixed(0)} · ${strings.practiceScoreStability}: ${result!.stabilityScore.toStringAsFixed(0)}',
                   style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
                 ),
-                if (result!.summaryHint.isNotEmpty)
+                if (result!.summaryHint.isNotEmpty || result!.summaryCodes.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text(result!.summaryHint, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    child: Text(
+                      summaryHintText(
+                        verdictCounts: result!.verdictCounts,
+                        summaryCodes: result!.summaryCodes,
+                        missingNotes: 0,
+                        fallback: result!.summaryHint,
+                        strings: strings,
+                      ),
+                      style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                    ),
                   ),
                 const SizedBox(height: 6),
                 if (result!.performance.isNotEmpty) ...[
@@ -158,7 +168,7 @@ class ScalePracticeCard extends StatelessWidget {
                     children: [
                       for (final p in result!.performance)
                         Tooltip(
-                          message: p.hint.isNotEmpty ? p.hint : p.verdict,
+                          message: noteHintText(p.hintCodes, p.errCents, p.onsetErrMs, false, p.hint.isNotEmpty ? p.hint : p.verdict, strings),
                           child: Chip(
                             backgroundColor: _verdictColor(p.verdictCode, context),
                             label: Text(

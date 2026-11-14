@@ -276,12 +276,20 @@ def test_parallel_change_password_all_old_tokens_die(client):
     for t in threads:
         t.join()
 
-    assert all(code == 200 for code, _ in outcomes)
+    winners = [(code, new_tok) for code, new_tok in outcomes if code == 200]
+    losers = [code for code, _ in outcomes if code != 200]
+    assert len(winners) == 1, (
+        f"CAS change-password: 5 luồng đồng thời phải đúng 1 winner "
+        f"(stale old-hash bị từ chối 401), outcomes={outcomes}"
+    )
+    assert all(code in (400, 401) for code in losers), f"thua cuộc phải 400/401: {losers}"
 
     epochs = set()
-    for _, new_tok in outcomes:
+    for _, new_tok in winners:
         r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {new_tok}"})
         if r.status_code == 200:
             epochs.add(new_tok)
     surviving = len(epochs)
     assert surviving == 1, f"{surviving} token sống sót sau race (phải chỉ còn 1 token cuối)"
+    r_old = client.get("/api/auth/me", headers={"Authorization": f"Bearer {tok}"})
+    assert r_old.status_code == 401, "token gốc phải chết sau epoch bump"

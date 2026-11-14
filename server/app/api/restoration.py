@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 from ..database.session import SessionLocal, get_db
 from ..database import crud
 from ..database.models import HeritageItem
@@ -67,7 +68,7 @@ async def restore_upload(request: Request, file: UploadFile = File(...), user_id
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="file too large")
     if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         report = await asyncio.to_thread(run_restore, data, "")
         db = SessionLocal()
@@ -98,7 +99,7 @@ def restore_item(item_id: str, request: Request, db: Session = Depends(get_db), 
     except OSError:
         raise HTTPException(status_code=404, detail="file missing")
     if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
-        raise HTTPException(status_code=429, detail="too many concurrent requests")
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         report = run_restore(data, item.id)
         db2 = SessionLocal()

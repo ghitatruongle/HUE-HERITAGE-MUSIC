@@ -10,4 +10,5 @@ if __name__ == "__main__":
         reload=True,
         proxy_headers=False,
         limit_concurrency=settings.uvicorn_limit_concurrency,
+        backlog=settings.uvicorn_backlog,
     )

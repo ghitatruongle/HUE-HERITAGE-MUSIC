@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     reference_segmentation: str = "v2"
     web_dir: Path = BASE_DIR / "app" / "build" / "web"
     uvicorn_limit_concurrency: int = 512
+    uvicorn_backlog: int = 2048
     db_pool_size: int = 64
     db_max_overflow: int = 160
     restored_retention_days: int = 30
