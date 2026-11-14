@@ -47,11 +47,18 @@ def _write_wav16(path, samples, sr):
             w.setnchannels(1)
             w.setsampwidth(2)
             w.setframerate(sr)
-            frames = bytearray()
-            for s in samples:
-                v = int(max(-1.0, min(1.0, float(s))) * 32767.0)
-                frames += v.to_bytes(2, "little", signed=True)
-            w.writeframes(bytes(frames))
+            try:
+                import numpy as _np
+
+                arr = _np.clip(_np.asarray(samples, dtype=_np.float64), -1.0, 1.0)
+                frames = (arr * 32767.0).astype("<i2").tobytes()
+            except Exception:
+                frames = bytearray()
+                for s in samples:
+                    v = int(max(-1.0, min(1.0, float(s))) * 32767.0)
+                    frames += v.to_bytes(2, "little", signed=True)
+                frames = bytes(frames)
+            w.writeframes(frames)
         tmp.replace(path)
     except Exception:
         try:
@@ -250,11 +257,12 @@ def get_lesson(item: HeritageItem) -> Optional[dict]:
 def lesson_summary(item: HeritageItem) -> Optional[dict]:
     if _audio_path(item) is None:
         return None
-    cached = _lesson_cache_path(item)
+    cache_ready = _lesson_cache_path(item).exists()
+    sec_dir = lessons_dir() / (item.sha256 or item.id)
     count = 0
-    if cached.exists():
+    if cache_ready and sec_dir.exists():
         try:
-            count = len(json.loads(cached.read_text(encoding="utf-8")).get("sections", []))
+            count = len(list(sec_dir.glob("[0-9][0-9].wav")))
         except Exception:
             count = 0
     return {

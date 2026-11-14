@@ -402,8 +402,11 @@ def list_tasks(db: Session, kind: str = "", status: str = "", limit: int = 100, 
     return query.order_by(Task.created_at.desc()).limit(limit).all()
 
 
-def fail_stale_running_tasks(db: Session, reason: str = "interrupted by server restart"):
-    stale = db.query(Task).filter(Task.status == "running").all()
+def fail_stale_running_tasks(db: Session, reason: str = "interrupted by server restart", include_pending: bool = False):
+    statuses = ["running"]
+    if include_pending:
+        statuses.extend(["pending", "queued"])
+    stale = db.query(Task).filter(Task.status.in_(statuses)).all()
     for task in stale:
         task.status = "error"
         task.error = reason

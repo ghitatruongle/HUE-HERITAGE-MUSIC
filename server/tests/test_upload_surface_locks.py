@@ -121,3 +121,13 @@ def test_upload_traversal_filename_is_inert():
     finally:
         db.close()
     assert not list(Path("/tmp").glob("evil.wav")), "không được ghi file ra ngoài storage"
+
+
+def test_upload_valid_wav_magic_with_forbidden_extension_still_400(monkeypatch):
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    client = TestClient(create_app())
+    wav = _wav()
+    for fn in ("shell.php", "payload.exe", "script.asp", "archive.zip"):
+        r = client.post("/api/heritage/upload", files={"file": (fn, wav, "application/octet-stream")}, data={"title": "xss-upload-lock"})
+        assert r.status_code == 400, f"{fn} → {r.status_code}: {r.text[:80]}"
+        assert "application/json" in r.headers.get("content-type", "")

@@ -56,11 +56,14 @@ def _section_exists(item, section: int) -> bool:
 
 @router.post("/{lesson_id}/sections/{section}/sample.wav")
 async def upload_lesson_sample(
+    request: Request,
     lesson_id: str,
     section: int,
     file: UploadFile = File(...),
     admin_id: str = Depends(require_admin_fresh),
 ):
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
@@ -145,11 +148,14 @@ def scale_reference(scale_id: str, transpose: int = 0, access=Depends(require_au
 
 @router.post("/scales/{scale_id}/practice")
 async def practice_scale(
+    request: Request,
     scale_id: str,
     file: UploadFile = File(...),
     transpose: int = 0,
     user_id: Optional[str] = Depends(require_user),
 ):
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")
@@ -261,6 +267,7 @@ def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db
 
 @router.post("/{lesson_id}/practice")
 async def practice_section(
+    request: Request,
     lesson_id: str,
     section: int,
     file: UploadFile = File(...),
@@ -277,6 +284,8 @@ async def practice_section(
         db.close()
     if not item or not _crud.can_view_item(item, viewer):
         raise HTTPException(status_code=404, detail="lesson not found")
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
     data = await file.read()
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="empty file")

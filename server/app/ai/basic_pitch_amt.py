@@ -95,6 +95,10 @@ def _freq_from_midi(midi: int) -> float:
     return round(440.0 * (2.0 ** ((midi - 69) / 12.0)), 1)
 
 
+def velocity_from_amplitude(amplitude) -> int:
+    return max(1, min(127, int(round(127.0 * float(amplitude)))))
+
+
 def transcribe(samples, sr: int) -> list:
     global _stalled, _stalled_thread, _stalled_tmp
     import os
@@ -111,6 +115,18 @@ def transcribe(samples, sr: int) -> list:
     _selfheal()
     model = _load()
     audio = np.clip(np.asarray(samples, dtype=np.float32), -1.0, 1.0)
+    target_sr = 22050
+    if sr != target_sr:
+        try:
+            import math as _math
+
+            from scipy.signal import resample_poly as _resample_poly
+
+            g = _math.gcd(target_sr, int(sr))
+            audio = _resample_poly(audio.astype(np.float64), target_sr // g, int(sr) // g).astype(np.float32)
+            sr = target_sr
+        except Exception:
+            pass
     pcm = (audio * 32767.0).astype("<i2")
     fd, tmp_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
@@ -160,7 +176,7 @@ def transcribe(samples, sr: int) -> list:
                 pass
     notes = []
     for ev in note_events:
-        start, end, midi, velocity = float(ev[0]), float(ev[1]), int(ev[2]), int(ev[3])
+        start, end, midi, amplitude = float(ev[0]), float(ev[1]), int(ev[2]), float(ev[3])
         if end - start < 0.03:
             continue
         notes.append({
@@ -168,7 +184,7 @@ def transcribe(samples, sr: int) -> list:
             "freq": _freq_from_midi(midi),
             "start": round(start, 3),
             "end": round(end, 3),
-            "velocity": max(1, min(127, velocity)),
+            "velocity": velocity_from_amplitude(amplitude),
         })
     notes.sort(key=lambda n: (n["start"], n["midi"]))
     return notes

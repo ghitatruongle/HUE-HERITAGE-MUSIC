@@ -48,18 +48,28 @@ async def transcribe(
         raise HTTPException(status_code=400, detail="bad bpm")
     if not user_inflight.try_acquire(user_inflight.user_key("transcribe", user_id)):
         raise HTTPException(status_code=429, detail="too many concurrent requests")
+    cached = False
     try:
+        digest = await asyncio.to_thread(manager.sha256_bytes, data)
         try:
-            notes, used, engine_error = await asyncio.to_thread(
-                media_pipeline.extract_notes, data, bpm, engine
-            )
-        except ValueError:
-            raise HTTPException(status_code=400, detail="wav decode failed")
-        except basic_pitch_amt.EngineBusy as e:
-            raise HTTPException(status_code=503, detail=str(e))
+            hit = await asyncio.to_thread(media_pipeline.load_cached_notes, digest, bpm, engine)
+        except Exception:
+            hit = None
+        if hit is not None:
+            notes, used, engine_error = hit
+            cached = True
+        else:
+            try:
+                notes, used, engine_error = await asyncio.to_thread(
+                    media_pipeline.extract_notes, data, bpm, engine
+                )
+            except ValueError:
+                raise HTTPException(status_code=400, detail="wav decode failed")
+            except basic_pitch_amt.EngineBusy as e:
+                raise HTTPException(status_code=503, detail=str(e))
+            await asyncio.to_thread(media_pipeline.save_cached_notes, digest, bpm, engine, notes, used, engine_error)
     finally:
         user_inflight.release(user_inflight.user_key("transcribe", user_id))
-    digest = manager.sha256_bytes(data)
     item = None
     if heritage_id:
         db = SessionLocal()
@@ -74,7 +84,7 @@ async def transcribe(
         finally:
             db.close()
     _, stem, mid, xm = await asyncio.to_thread(
-        media_pipeline.write_artifacts, data, notes, bpm, file.filename or "hue"
+        media_pipeline.write_artifacts, data, notes, bpm, file.filename or "hue", digest
     )
     if item:
         db = SessionLocal()
@@ -94,6 +104,7 @@ async def transcribe(
     result = {
         "label": LABEL,
         "engine": used,
+        "cached": cached,
         "filename": file.filename,
         "bpm": bpm,
         "sha": digest,
@@ -160,28 +171,33 @@ async def evaluate_transcription(
     engine: str = Form("basic_pitch"),
     user_id: Optional[str] = Depends(require_user),
 ):
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="file too large")
-    if not math.isfinite(bpm) or bpm <= 0 or bpm > 300:
-        raise HTTPException(status_code=400, detail="bad bpm")
+    if not user_inflight.try_acquire(user_inflight.user_key("evaluate", user_id)):
+        raise HTTPException(status_code=429, detail="too many concurrent requests")
     try:
-        items = json.loads(truth)
-    except Exception:
-        raise HTTPException(status_code=400, detail="bad truth")
-    if not amt_eval.valid_truth(items):
-        raise HTTPException(status_code=400, detail="bad truth")
-    try:
-        notes, used, _ = await asyncio.to_thread(
-            media_pipeline.extract_notes, data, bpm, engine
-        )
-    except ValueError:
-        raise HTTPException(status_code=400, detail="wav decode failed")
-    except basic_pitch_amt.EngineBusy as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    pred = [{"midi": n["midi"], "start": n["start"], "end": n["end"]} for n in notes]
-    result = amt_eval.evaluate(pred, items)
-    result["engine"] = used
-    return result
+        data = await file.read()
+        if len(data) == 0:
+            raise HTTPException(status_code=400, detail="empty file")
+        if len(data) > MAX_BYTES:
+            raise HTTPException(status_code=413, detail="file too large")
+        if not math.isfinite(bpm) or bpm <= 0 or bpm > 300:
+            raise HTTPException(status_code=400, detail="bad bpm")
+        try:
+            items = json.loads(truth)
+        except Exception:
+            raise HTTPException(status_code=400, detail="bad truth")
+        if not amt_eval.valid_truth(items):
+            raise HTTPException(status_code=400, detail="bad truth")
+        try:
+            notes, used, _ = await asyncio.to_thread(
+                media_pipeline.extract_notes, data, bpm, engine
+            )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="wav decode failed")
+        except basic_pitch_amt.EngineBusy as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        pred = [{"midi": n["midi"], "start": n["start"], "end": n["end"]} for n in notes]
+        result = amt_eval.evaluate(pred, items)
+        result["engine"] = used
+        return result
+    finally:
+        user_inflight.release(user_inflight.user_key("evaluate", user_id))

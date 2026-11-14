@@ -39,11 +39,27 @@ def resample_16k(samples, sr):
     n_out = int(round(len(arr) * UNIFORM_SR / sr))
     if n_out <= 0:
         return [], UNIFORM_SR
-    idx = np.linspace(0.0, max(0, len(arr) - 1), num=n_out)
-    lo = np.floor(idx).astype(np.int64)
-    hi = np.minimum(lo + 1, len(arr) - 1)
-    frac = idx - lo
-    out = arr[lo] * (1.0 - frac) + arr[hi] * frac
+    out = None
+    try:
+        import math as _math
+
+        from scipy.signal import resample_poly as _resample_poly
+
+        g = _math.gcd(UNIFORM_SR, int(sr))
+        out = _resample_poly(arr, UNIFORM_SR // g, int(sr) // g)
+    except Exception:
+        out = None
+    if out is None:
+        idx = np.linspace(0.0, max(0, len(arr) - 1), num=n_out)
+        lo = np.floor(idx).astype(np.int64)
+        hi = np.minimum(lo + 1, len(arr) - 1)
+        frac = idx - lo
+        out = arr[lo] * (1.0 - frac) + arr[hi] * frac
+    if len(out) > n_out:
+        out = out[:n_out]
+    elif len(out) < n_out:
+        tail = np.full(n_out - len(out), out[-1] if len(out) else 0.0, dtype=np.float64)
+        out = np.concatenate([out, tail])
     return out.tolist(), UNIFORM_SR
 
 

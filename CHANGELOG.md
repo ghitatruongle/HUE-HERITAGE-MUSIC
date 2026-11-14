@@ -1,5 +1,71 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.4-preview (2026-11-13)
+
+> Đợt "fix lỗi + tăng tốc": vá 8 lỗi thật (nổi bật nhất là MIDI ký âm bị velocity 1 — gần câm), tăng tốc phân tích âm thanh (cache bản mẫu chấm điểm nhanh ~20 lần), và hoàn thiện tính năng **học hát Ca Huế** — hướng dẫn ngay trong lúc thu (đường tham chiếu + lời bôi đậm theo nhịp), hiển thị đủ điểm chấm, tự động chấm sau thu.
+
+### Sửa lỗi thật
+- **MIDI ký âm velocity = 1 (gần câm)**: basic-pitch trả amplitude 0..1 nhưng code cắt `int()` thành 0 — giờ quy đổi đúng `round(127 × amplitude)` như chính basic-pitch làm (`velocity_from_amplitude`)
+- **Nút "Chấm điểm"/"Chấm lại" biến mất ở các câu cũ** sau khi thu câu khác (gating theo 1 biến duy nhất) — giờ theo từng câu, có take/kết quả là chấm được
+- **Mọi câu thu chung 1 file tạm `/tmp/hue_practice.wav`** — giờ mỗi lần thu một file riêng theo câu + mốc thời gian (hết rủi ro gửi nhầm audio câu khác)
+- **Nút "Phân tích" bật được đang khi đang thu** ở tab nghe (phân tích file dở) — giờ khoá khi đang thu
+- **3 endpoint upload bài học đọc whole-body trước khi check 15MB** — thêm pre-check `Content-Length` như transcribe (lớp 2 bên dưới BodyLimit middleware)
+- **Ký âm không có cache theo sha** — gửi lại cùng file chạy lại toàn bộ inference; giờ có sidecar notes `{sha}_{bpm}.notes.json` (response thêm `"cached": true` khi trúng)
+- **SHA-256 15MB chạy trên event loop** + hash trùng lần 2 trong write_artifacts — chuyển vào thread + truyền digest đi
+- **Task "pending/queued" chết khi restart không được dọn** — recovery sweep thêm khi chạy chế độ inline (RQ giữ nguyên hành vi)
+
+### Tăng tốc phân tích âm thanh (server)
+- **Cache contour bản mẫu chấm điểm**: practice/compare không còn phân tích lại audio mẫu bất biến mỗi lần — benchmark thật: **0.49s → 0.02s (~×20)** cho bản mẫu 12s, điểm số bất biến; cache theo (sha-bài-học, câu, mtime+size file mẫu) tự vô hiệu khi admin upload mẫu mới, tối đa 32 mục
+- `_write_wav16` (build bài học) vectorize numpy: loop per-sample 400k lần → 7ms
+- `onset_trim` vectorize: 320k mẫu → 5.6ms (trước đây loop Python per-sample)
+- `rms`/`zero_crossing_rate`/`spectrum` (features) vectorize numpy + cache Hann window; có test so khớp với phép tính tay
+- **Resample có lọc chống chồng phổ** (`scipy.resample_poly` thay nội suy tuyến tính) khi hạ 44.1k→16k — chính xác hơn cho giọng hát, không chỉ nhanh hơn
+- Basic-pitch: pre-resample 22050 trước khi ghi WAV tạm (librosa không phải resample nữa); knob `BASIC_PITCH_WARMUP=1` để nạp model ngay khi khởi động server (mặc định tắt, .env.example có hướng dẫn)
+- `GET /api/lessons` hết parse cả JSON cache (kèm contour 400 điểm) từng bài chỉ để lấy số câu — đếm từ thư mục WAV section
+- Knob mới env-tunable: `HEAVY_INFLIGHT_PER_USER` (mặc định 2); endpoint `/api/music/evaluate` có gate inflight (trước đây không có); dọn knob chết `DATASETS_DIR`
+
+### Tăng tốc giao diện học hát (client)
+- **Hết rebuild toàn màn hình 8 lần/giây khi thu**: VU meter chuyển sang `ValueNotifier` + `ValueListenableBuilder` (timer 120ms không còn `setState` cả trang)
+- `LocalPitch` (phân tích giọng trên máy): **nội suy parabolic** khớp chuẩn server (trước đây lệch tới ~40 cents do chọn lag nguyên) + tái dùng buffer
+- Ký URL mẫu nghe mở song song (`Future.wait`) thay N+1 tuần tự; **thanh tiến độ upload** khi chấm điểm (onProgress của API trước đây bỏ trống)
+- Chart xem trước take giới hạn 300 điểm
+
+### Hoàn thiện học hát Ca Huế
+- **Hướng dẫn trong lúc thu**: đường tham chiếu của câu + lời karaoke bôi đậm theo nhịp thu (mô hình chia đều theo thời lượng — mô phỏng, chưa có timing từng câu chữ thật)
+- **Hiển thị đủ điểm chấm**: số nốt khớp/thiếu, cảnh báo "bản mẫu không rõ — đang chấm với bản gốc nhiễu" khi `referenceQuality=poor` (trước đây parse mà không dùng)
+- **Verdict từng nốt dịch song ngữ** theo mã (`ok/minor/off/octave/unclear`) — lời gợi ý chi tiết vẫn là text server tiếng Việt (hạn chế đã biết)
+- **Tự động chấm sau khi thu** (tùy chọn tắt/mở, mặc định tắt) + đếm nhập trước thu thang âm
+- Bỏ cap 24 nốt chip; tooltip nốt hiển thị verdict đã dịch + gợi ý
+
+### Kiểm định
+- pytest **320/320** (mốc 0.0.3 = 305 → +15: velocity, cache roundtrip/invalidation, pre-check 413, recovery task, cache reference ×5, resample anti-alias, write_wav16, summary, inflight)
+- flutter analyze **0** · flutter test **107/107** (+4: parabolic 220Hz/330Hz, WAV hỏng → null, key i18n mới)
+- Benchmark DSP thật: compare **×19.7** · onset_trim 5.6ms/320k mẫu · write_wav16 7ms/400k mẫu · resample anti-alias 53ms/441k mẫu
+- Probe live trên sân tập :8003 với code mới: **8/8 PASS** (cache trúng lần 2 + notes identical · body 16MB → 413 · evaluate guard · health) · **0 Traceback** · `integrity_check=ok`
+
+### Vá sau review vòng 1 (2026-11-13) — 2 TRUNG + 7 NHỎ
+- **Cache ký âm tách key theo bpm chính xác + engine** (`{bpm:g}_{engine}`): bpm 60.5/60.7 không còn ăn nhầm cache của nhau, engine yêu cầu được tôn trọng (trước đây key `int(bpm)` làm 60.5 trả notes quantize theo 60; artifacts giữ nguyên key cũ — hành vi có sẵn)
+- **Ghi notes cache atomic** (tmp + replace, pattern lesson cache) + log warning khi lỗi thay vì nuốt im lặng
+- **Key cache bản mẫu chấm điểm = sha256 bytes** thay mtime+size (diệt TOCTOU stat-sau-read; chi phí hash ~40ms « 0.5s DSP)
+- **`_reference_state` khóa theo key khi tính**: 4 thread cùng mẫu mới chỉ tính 1 lần (lock-map có trần 256, test 4-thread ghim `estimate_f0` gọi đúng 1 lần)
+- Resample: pad cuối lặp mẫu cuối thay zero (tránh click nếu resample_poly trả ngắn — nhánh phòng thủ)
+- `lesson_summary` chỉ đếm glob WAV khi cache JSON đã có (hết trạng thái "đếm dở trong lúc build")
+- Client: guard `mounted` cho `_uploadProgress` (finally + onProgress) — hết throw ValueNotifier-sau-dispose khi rời màn giữa chừng; `_stopEverything` guard `!mounted` sau các await player (gốc thật của race — stop-handler đã có sẵn guard `!mounted` tại :244, nhận xét review vòng 1 về chỗ này đã được sửa lại)
+- Client: dọn file take cũ trong /tmp (xóa file đường-path trước khi `_recordPaths` ghi đè sau khi take mới đọc bytes thành công; xóa nốt toàn bộ khi dispose)
+- Auto-grade chỉ nộp take **≥ 2 giây** (bản thu cắt sớm bởi tự-dừng-im-lặng không tự chấm)
+- Web: timer 1s cập nhật `_recElapsed` → karaoke + vạch tiến độ hoạt động cả trên web (VU meter vẫn ẩn — không có getAmplitude trên web)
+- Dọn unused import trong test ghim
+
+### Hạn chế đã biết (trung thực)
+- Lời gợi ý chấm điểm chi tiết (`hint` từng nốt, `summary_hint`) vẫn là tiếng Việt từ server — chỉ nhãn verdict được dịch; bản dịch đầy đủ cần server trả mã có cấu trúc (bản sau)
+- Karaoke khi thu chia đều thời lượng theo số dòng lời — chưa có timing từng câu chữ thật
+- Web: không có VU meter/tự-dừng-im-lặng/xem-trước-giọng (phần trước đã ghi — giữ nguyên); hướng dẫn khi thu trên web hoạt động với timer 1s (mượt ít hơn desktop)
+- Cache transcribe/notes sống theo retention `practice_midi_retention_days` (7 ngày, cùng thư mục artifact) — hết hạn là tính lại; artifact `.mid`/`.musicxml` vẫn trùng key cho bpm lẻ (hành vi có sẵn từ trước, không đổi trong đợt này để không hỏng artifact cũ)
+- `HEAVY_INFLIGHT_PER_USER` áp mỗi (loại × user) — một user vẫn có thể chạy song song nhiều loại DSP khác nhau (thiết kế cũ, giữ nguyên)
+- `int | None` trong `user_inflight.py` đòi Python ≥3.10 — nền đã yêu cầu ≥3.10 từ trước (`security_log.py`), không phải lỗi mới
+- venv Python 3.9 không import được app (tình trạng có trước từ 0.0.3)
+- N6 glít metronome phần còn lại phụ thuộc nền tảng (giữ nguyên từ 0.0.2)
+
 ## 0.0.3 (chính thức) (2026-11-11)
 
 > Bản chính thức của chuỗi 0.0.3: nền beta đã kiểm định trọn vẹn + đợt đại tu ĐỒ HOẠ & GIAO DIỆN — bản sắc "cung đình Huế" bằng font riêng và hoạ tiết vẽ code, hệ chuyển động trọn vẹn, dọn sạch màu cứng và thống nhất bộ widget. Không thêm tính năng mới, không đổi cấu trúc điều hướng.

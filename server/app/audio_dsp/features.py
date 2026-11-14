@@ -12,6 +12,9 @@ def zero_crossing_rate(samples):
     n = len(samples)
     if n < 2:
         return 0.0
+    if np is not None:
+        arr = np.asarray(samples)
+        return float(np.count_nonzero((arr[:-1] < 0) != (arr[1:] < 0)) / (n - 1))
     c = 0
     for i in range(1, n):
         if (samples[i - 1] < 0) != (samples[i] < 0):
@@ -22,10 +25,30 @@ def zero_crossing_rate(samples):
 def rms(samples):
     if len(samples) == 0:
         return 0.0
+    if np is not None:
+        arr = np.asarray(samples, dtype=np.float64)
+        return float(math.sqrt(float(np.dot(arr, arr)) / len(arr)))
     return math.sqrt(sum(s * s for s in samples) / len(samples))
 
 
+_HANN_CACHE: dict = {}
+
+
+def _hann_np(size):
+    w = _HANN_CACHE.get(size)
+    if w is None:
+        w = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(size) / size)
+        _HANN_CACHE[size] = w
+    return w
+
+
 def spectrum(samples, size=2048):
+    if np is not None:
+        arr = np.asarray(samples[:size], dtype=np.float64)
+        seg = np.zeros(size, dtype=np.float64)
+        seg[: len(arr)] = arr
+        spec = np.fft.rfft(seg * _hann_np(size))
+        return [abs(v) for v in spec[: size // 2]]
     seg = list(samples[:size]) + [0.0] * max(0, size - len(samples))
     win = dsp_fft.hann(size)
     spec = dsp_fft.fft([seg[i] * win[i] for i in range(size)])

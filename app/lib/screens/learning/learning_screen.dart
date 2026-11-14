@@ -260,7 +260,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
         CommonButton(
           label: strings.learnAnalyzeBtn,
           loading: _busy,
-          onPressed: _filePath == null ? null : _analyze,
+          onPressed: (_filePath == null || _recording) ? null : _analyze,
         ),
         const SizedBox(height: 8),
         if (_error != null) ErrorPanel(message: _error!, onRetry: _busy ? null : _retry),

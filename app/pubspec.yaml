@@ -1,7 +1,7 @@
 name: hue_heritage_music
 description: HUE HERITAGE MUSIC - AI bảo tồn di sản âm nhạc Huế (Flutter client).
 publish_to: "none"
-version: 0.0.3+7
+version: 0.0.4+8
 
 environment:
   sdk: ">=3.6.0 <4.0.0"

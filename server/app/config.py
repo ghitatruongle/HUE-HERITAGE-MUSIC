@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///" + (BASE_DIR / "hue_heritage.db").as_posix()
     storage_dir: Path = BASE_DIR / "storage"
     models_dir: Path = BASE_DIR / "models"
-    datasets_dir: Path = BASE_DIR / "datasets"
     secret_key: str = INSECURE_DEFAULT_SECRET_KEY
     auth_required: bool = True
     token_ttl_hours: int = 24
@@ -59,6 +58,8 @@ class Settings(BaseSettings):
     worker_threads: int = 8
     basic_pitch_lock_wait_timeout: float = 90.0
     basic_pitch_run_timeout: float = 600.0
+    basic_pitch_warmup: bool = False
+    heavy_inflight_per_user: int = 2
     crash_report_retention_days: int = 30
 
 

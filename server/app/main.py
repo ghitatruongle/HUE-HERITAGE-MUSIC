@@ -6,6 +6,7 @@ import threading
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -322,20 +323,34 @@ def _maintenance_thread():
             logging.getLogger(__name__).exception("maintenance loop failed")
 
 
+def _warmup_basic_pitch():
+    import time
+
+    from .ai import basic_pitch_amt
+
+    if not basic_pitch_amt.available():
+        return
+    try:
+        time.sleep(0.5)
+        basic_pitch_amt.transcribe([0.0] * 1600, 16000)
+    except Exception:
+        logging.getLogger(__name__).warning("basic-pitch warmup skipped", exc_info=True)
+
+
 def create_app() -> FastAPI:
     _raise_fd_limit()
     _validate_secret_key()
     init_db()
     db = SessionLocal()
     try:
-        crud.fail_stale_running_tasks(db)
+        crud.fail_stale_running_tasks(db, include_pending=not settings.use_rq)
         crud.prune_old_tasks(db, settings.task_retention_days)
     finally:
         db.close()
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.3",
+        version="0.0.4-preview",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -364,6 +379,17 @@ def create_app() -> FastAPI:
             "ALLOWED_ORIGINS=* suppressed while AUTH_REQUIRED=true; "
             "set an explicit origin list to re-enable cross-origin browser access"
         )
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+
+    @application.exception_handler(RequestValidationError)
+    async def validation_error_safe_handler(request, exc):
+        try:
+            detail = jsonable_encoder(exc.errors(), custom_encoder={bytes: lambda b: b.decode("utf-8", "replace")})
+        except Exception:
+            detail = [{"msg": "invalid request body"}]
+        return JSONResponse(status_code=422, content={"detail": detail})
+
     application.include_router(api_router, prefix="/api")
 
     @application.on_event("startup")
@@ -373,6 +399,8 @@ def create_app() -> FastAPI:
         limiter = anyio.to_thread.current_default_thread_limiter()
         limiter.total_tokens = 192
         threading.Thread(target=_warmup_lessons, daemon=True).start()
+        if settings.basic_pitch_warmup:
+            threading.Thread(target=_warmup_basic_pitch, daemon=True, name="hue-bp-warmup").start()
         if settings.maintenance_interval_hours > 0:
             threading.Thread(target=_maintenance_thread, daemon=True).start()
 
@@ -381,8 +409,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.3",
-            "stage": "0.0.3",
+            "version": "0.0.4-preview",
+            "stage": "0.0.4-preview",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio

@@ -1,5 +1,7 @@
 import threading
 
+from ..config import settings
+
 _LOCK = threading.Lock()
 _INFLIGHT: dict = {}
 
@@ -12,9 +14,11 @@ def user_key(prefix: str, user_id) -> str:
     return f"{prefix}:{user_id}"
 
 
-def try_acquire(key: str, limit: int = HEAVY_INFLIGHT_PER_USER) -> bool:
+def try_acquire(key: str, limit: int | None = None) -> bool:
     if not key:
         return True
+    if limit is None:
+        limit = max(1, int(getattr(settings, "heavy_inflight_per_user", HEAVY_INFLIGHT_PER_USER)))
     with _LOCK:
         current = _INFLIGHT.get(key, 0)
         if current >= limit:

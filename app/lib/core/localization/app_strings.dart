@@ -137,6 +137,21 @@ class AppStrings {
   String get practiceSampleUnavailable => isVi ? 'Chưa tải được mẫu nghệ nhân — chạm để thử lại' : 'Could not load the master sample — tap to retry';
   String get practiceRefSample => isVi ? 'So với giọng mẫu' : 'vs master sample';
   String get practiceRefOriginal => isVi ? 'So với bản gốc' : 'vs original';
+  String get practiceRefPoorWarning => isVi
+      ? 'Bản mẫu không rõ — đang chấm với bản gốc nhiễu (cao độ + đều giọng)'
+      : 'Master sample unclear — grading against the noisy original (pitch + stability only)';
+  String practiceMatchedNotes(int matched, int missing) => isVi
+      ? (missing > 0 ? 'Khớp $matched nốt · thiếu $missing nốt' : 'Khớp $matched nốt')
+      : (missing > 0 ? 'Matched $matched notes · $missing missing' : 'Matched $matched notes');
+  String get verdictOk => isVi ? 'Chuẩn' : 'In tune';
+  String get verdictMinor => isVi ? 'Lệch nhẹ' : 'Slightly off';
+  String get verdictOff => isVi ? 'Lệch cao độ' : 'Off pitch';
+  String get verdictOctave => isVi ? 'Sai quãng tám' : 'Octave off';
+  String get verdictUnclear => isVi ? 'Không rõ' : 'Unclear';
+  String get practiceAutoGrade => isVi ? 'Tự chấm sau thu' : 'Auto-grade';
+  String get practiceGuideTitle => isVi
+      ? 'Hướng dẫn khi thu — hát theo đường tham chiếu và lời bôi đậm'
+      : 'Recording guide — follow the reference line and bolded lyric';
   String practiceTakeChip(int n) => isVi ? 'Take $n' : 'Take $n';
   String get practiceRegrade => isVi ? 'Chấm lại' : 'Re-grade';
   String get practiceSlowSpeed => isVi ? 'Tốc độ nghe' : 'Playback speed';

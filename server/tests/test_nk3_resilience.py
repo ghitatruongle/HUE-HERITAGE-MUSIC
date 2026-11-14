@@ -97,8 +97,8 @@ def test_transcribe_writes_valid_temp_wav(monkeypatch):
     monkeypatch.setattr(bp, "_load", lambda: object(), raising=False)
     notes = bp.transcribe([0.0] * 1600, 16000)
     assert notes == []
-    assert seen["frames"] == 1600
-    assert seen["rate"] == 16000
+    assert seen["frames"] == 2205
+    assert seen["rate"] == 22050
     assert seen["channels"] == 1
     assert seen["sampwidth"] == 2
 

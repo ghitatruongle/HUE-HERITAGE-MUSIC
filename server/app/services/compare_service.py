@@ -1,4 +1,6 @@
+import hashlib
 import math
+import threading
 
 from ..audio_dsp import dtw_aligner
 from ..config import settings
@@ -45,6 +47,56 @@ VERDICT_TEXT = {
     "unclear": "Không rõ",
 }
 
+_REF_CACHE: dict = {}
+_REF_CACHE_LOCK = threading.Lock()
+REF_CACHE_MAX = 32
+_REF_KEY_LOCKS: dict = {}
+_REF_KEY_LOCKS_GUARD = threading.Lock()
+REF_KEY_LOCKS_MAX = 256
+
+
+def _ref_key_lock(key):
+    with _REF_KEY_LOCKS_GUARD:
+        if len(_REF_KEY_LOCKS) >= REF_KEY_LOCKS_MAX:
+            for stale in list(_REF_KEY_LOCKS)[: REF_KEY_LOCKS_MAX // 2]:
+                _REF_KEY_LOCKS.pop(stale, None)
+        return _REF_KEY_LOCKS.setdefault(key, threading.Lock())
+
+
+def _reference_state(data, key=None):
+    if key is None:
+        key = "sha:" + hashlib.sha256(data).hexdigest()
+    with _REF_CACHE_LOCK:
+        hit = _REF_CACHE.get(key)
+    if hit is not None:
+        return hit
+    lock = _ref_key_lock(key)
+    with lock:
+        with _REF_CACHE_LOCK:
+            hit = _REF_CACHE.get(key)
+        if hit is not None:
+            return hit
+        samples, sr = pitch_service.read_mono_wav(data, max_seconds=MAX_COMPARE_SECONDS)
+        samples, sr = pitch_service.resample_16k(samples, sr)
+        times, f0 = pitch_service.estimate_f0(samples, sr, hop=256)
+        if not times:
+            state = {"has_frames": False, "valid": False, "times": [], "f0": [], "onset_a": 0.0}
+        else:
+            a, b = onset_trim(samples, sr)
+            keep = [i for i, t in enumerate(times) if a - 0.001 <= t <= b + 0.001] if b > a else []
+            state = {
+                "has_frames": True,
+                "valid": bool(keep),
+                "times": [times[i] for i in keep],
+                "f0": [f0[i] for i in keep],
+                "onset_a": a,
+            }
+        with _REF_CACHE_LOCK:
+            if len(_REF_CACHE) >= REF_CACHE_MAX:
+                _REF_CACHE.pop(next(iter(_REF_CACHE)))
+            _REF_CACHE[key] = state
+        return state
+
 
 def to_cents(freq):
     if freq <= 0:
@@ -87,6 +139,28 @@ def verdict_code(err):
 
 
 def onset_trim(samples, sr):
+    try:
+        import numpy as _np
+
+        arr = _np.asarray(samples, dtype=_np.float64)
+        if arr.size == 0:
+            return 0.0, 0.0
+        peak = float(_np.abs(arr).max())
+        if peak < 0.005:
+            return 0.0, 0.0
+        thr = peak * 0.1
+        if thr < 0.02:
+            thr = 0.02
+        idx = _np.nonzero(_np.abs(arr) >= thr)[0]
+        if idx.size == 0:
+            return 0.0, 0.0
+        a = int(idx[0])
+        b = int(idx[-1]) + 1
+        if a >= b:
+            return 0.0, 0.0
+        return round(a / sr, 3), round(b / sr, 3)
+    except Exception:
+        pass
     peak = 0.0
     for s in samples:
         v = abs(s)
@@ -556,26 +630,24 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
     }
 
 
-def compare(sample_data, user_data):
-    s_samples, s_sr = pitch_service.read_mono_wav(sample_data, max_seconds=MAX_COMPARE_SECONDS)
+def compare(sample_data, user_data, sample_key=None):
+    state = _reference_state(sample_data, sample_key)
     u_samples, u_sr = pitch_service.read_mono_wav(user_data, max_seconds=MAX_COMPARE_SECONDS)
-    s_samples, s_sr = pitch_service.resample_16k(s_samples, s_sr)
     u_samples, u_sr = pitch_service.resample_16k(u_samples, u_sr)
-    s_times, s_f0 = pitch_service.estimate_f0(s_samples, s_sr, hop=256)
     u_times, u_f0 = pitch_service.estimate_f0(u_samples, u_sr, hop=256)
-    if not s_times or not u_times:
+    if not state["has_frames"] or not u_times:
         raise ValueError("empty contour")
-    s_a, s_b = onset_trim(s_samples, s_sr)
+    if not state["valid"]:
+        return empty_result()
     u_a, u_b = onset_trim(u_samples, u_sr)
-    if s_b <= s_a or u_b <= u_a:
+    if u_b <= u_a:
         return empty_result()
-    s_keep = [i for i, t in enumerate(s_times) if s_a - 0.001 <= t <= s_b + 0.001]
     u_keep = [i for i, t in enumerate(u_times) if u_a - 0.001 <= t <= u_b + 0.001]
-    if not s_keep or not u_keep:
+    if not u_keep:
         return empty_result()
-    s_times = [s_times[i] for i in s_keep]
-    s_f0 = [s_f0[i] for i in s_keep]
+    s_times = state["times"]
+    s_f0 = state["f0"]
     u_times = [u_times[i] for i in u_keep]
     u_f0 = [u_f0[i] for i in u_keep]
-    start_off = round(u_a - s_a, 3)
+    start_off = round(u_a - state["onset_a"], 3)
     return compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=start_off * 1000.0)

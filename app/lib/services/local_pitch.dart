@@ -39,6 +39,7 @@ class LocalPitch {
     final points = <LocalPitchPoint>[];
     final lmin = math.max(1, (sr / fMax).floor());
     final lmax = math.min((sr / fMin).floor(), frameSize - 1);
+    final norms = Float64List(lmax - lmin + 1);
     for (int pos = 0; pos + frameSize <= limit; pos += hop) {
       var energy = 0.0;
       for (int i = 0; i < frameSize; i++) {
@@ -52,7 +53,6 @@ class LocalPitch {
         continue;
       }
       double best = 0;
-      final norms = Float64List(lmax - lmin + 1);
       for (int lag = lmin; lag <= lmax; lag++) {
         var corr = 0.0;
         for (int i = 0; i + lag < frameSize; i++) {
@@ -85,7 +85,21 @@ class LocalPitch {
         points.add(LocalPitchPoint(t, 0));
         continue;
       }
-      points.add(LocalPitchPoint(t, sr / (lmin + pick)));
+      double lagF = (lmin + pick).toDouble();
+      if (pick > 0 && pick < norms.length - 1) {
+        final y0 = norms[pick - 1];
+        final y1 = norms[pick];
+        final y2 = norms[pick + 1];
+        final den = y0 - 2 * y1 + y2;
+        if (den < -1e-12) {
+          final delta = 0.5 * (y0 - y2) / den;
+          if (delta >= -1.0 && delta <= 1.0) {
+            lagF += delta;
+          }
+        }
+      }
+      if (lagF < 1.0) lagF = 1.0;
+      points.add(LocalPitchPoint(t, sr / lagF));
     }
     final fixed = _spikeFix(points);
     return LocalPitchResult(limit / sr, sr, fixed);
