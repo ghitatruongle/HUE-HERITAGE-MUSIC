@@ -6,8 +6,8 @@ try:
 except Exception:
     np = None
 
-BAND_RATIO = 0.12
-MIN_BAND = 10
+BAND_RATIO = 0.25
+MIN_BAND = 16
 GAP_COST = 0.5
 _BIG = 1e18
 

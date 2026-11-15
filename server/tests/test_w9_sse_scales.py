@@ -51,7 +51,10 @@ def test_scale_practice_scores_on_scale(monkeypatch):
     monkeypatch.setattr(settings, "auth_required", False, raising=False)
     monkeypatch.setattr(settings, "secret_key", "dev-insecure-secret-key", raising=False)
     client = TestClient(create_app())
-    data = _scale_tone_wav([261.63, 293.66, 349.23, 392.0, 440.0])
+    from app.services import scale_service
+
+    tones = scale_service.SCALES["bac"]["frequencies"][:5]
+    data = _scale_tone_wav(tones)
     r = client.post(
         "/api/lessons/scales/bac/practice",
         files={"file": ("scale.wav", data, "audio/wav")},

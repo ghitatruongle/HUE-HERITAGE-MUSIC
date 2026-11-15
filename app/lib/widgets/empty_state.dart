@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
 
 class EmptyState extends StatelessWidget {
   final IconData icon;
@@ -21,7 +22,7 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -32,6 +33,7 @@ class EmptyState extends StatelessWidget {
               decoration: BoxDecoration(
                 color: scheme.primaryContainer.withValues(alpha: 0.5),
                 shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.goldReadable(context).withValues(alpha: 0.4), width: 1.2),
               ),
               child: Icon(icon, size: 30, color: scheme.primary),
             ),

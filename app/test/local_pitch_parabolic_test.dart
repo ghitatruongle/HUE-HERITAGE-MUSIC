@@ -58,6 +58,18 @@ void main() {
     expect(LocalPitch.analyze(bad), isNull);
   });
 
+  test('LocalPitch.analyzeChunked đồng bộ kết quả với analyze', () async {
+    final wav = sineWav(220.0, 1.5);
+    final sync = LocalPitch.analyze(wav)!;
+    final chunked = (await LocalPitch.analyzeChunked(wav))!;
+    expect(chunked.points.length, sync.points.length);
+    for (var i = 0; i < sync.points.length; i++) {
+      expect(chunked.points[i].t, closeTo(sync.points[i].t, 1e-9));
+      expect(chunked.points[i].f0, closeTo(sync.points[i].f0, 0.1));
+    }
+    expect(chunked.meanF0, closeTo(220.0, 5.0));
+  });
+
   test('AppStrings 0.0.4-preview: key mới có cho cả VI/EN', () {
     const vi = AppStrings('vi');
     const en = AppStrings('en');

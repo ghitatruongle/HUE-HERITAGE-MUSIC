@@ -94,9 +94,11 @@ def test_compare_sharp_pitch_minor_verdict():
 def test_compare_octave_error_flagged():
     ref = _tone_wav([220.0, 330.0], tone_len=1.2)
     r = compare_service.compare(ref, _tone_wav([440.0, 660.0], tone_len=1.2))
-    codes = [n["verdict_code"] for n in r["notes"]]
-    assert "octave" in codes
-    assert any(n["verdict"] == "Sai quãng tám" for n in r["notes"])
+    notes = r["notes"]
+    assert notes and all(n["octave_diff"] for n in notes)
+    assert all(n["verdict_code"] in ("ok", "minor") for n in notes)
+    assert all("octave_diff" in n["hint_codes"] for n in notes)
+    assert any("quãng tám" in n["hint"] for n in notes)
 
 
 def test_compare_vibrato_rewarded_not_punished():

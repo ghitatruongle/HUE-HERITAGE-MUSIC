@@ -30,9 +30,9 @@ def main():
         salt = _s.token_hex(16)
         digest = hashlib.pbkdf2_hmac("sha256", b"AdminPass99!", salt.encode(), 600000).hex()
         cur.execute(
-            "INSERT INTO users (id, username, email, password_hash, role, active, token_epoch, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO users (id, username, email, password_hash, role, active, token_epoch, must_change_password, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
             (str(_u.uuid4()), "ghitatruongle", "admin@gmail.com",
-             f"pbkdf2$600000${salt}${digest}", "admin", 1, 0, datetime.now().isoformat()),
+             f"pbkdf2$600000${salt}${digest}", "admin", 1, 0, 0, datetime.now().isoformat()),
         )
 
     codes = []

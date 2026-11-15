@@ -12,12 +12,14 @@ import '../../api/endpoints/sing_api.dart';
 import '../../models/pitch_data.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/app_lifecycle_service.dart';
+import '../../services/recording_controller.dart';
 import '../../services/history_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/heritage_motif.dart';
 import '../../widgets/pitch_contour_chart.dart';
 import '../../widgets/error_panel.dart';
 import 'lesson_practice_view.dart';
@@ -105,6 +107,10 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   Future<void> _toggle() async {
     if (_recording) {
       await _stopAndKeep();
+      return;
+    }
+    if (RecordingController.anyBusy) {
+      setState(() => _error = strings.practiceBusySection);
       return;
     }
     final ok = await _recorder.hasPermission();
@@ -203,27 +209,13 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
     strings = context.watch<LocaleProvider>().strings;
     return Column(
       children: [
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: TabBar(
-            controller: _tabController,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicator: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            dividerColor: Colors.transparent,
-            labelColor: scheme.onPrimary,
-            unselectedLabelColor: scheme.onSurfaceVariant,
-            tabs: [
-              Tab(icon: const Icon(Icons.graphic_eq), text: strings.listenTabTitle),
-              Tab(icon: const Icon(Icons.school), text: strings.practiceTabTitle),
-            ],
-          ),
+        ImperialTabBar(
+          controller: _tabController,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          tabs: [
+            Tab(icon: const Icon(Icons.graphic_eq), text: strings.listenTabTitle),
+            Tab(icon: const Icon(Icons.school), text: strings.practiceTabTitle),
+          ],
         ),
         Expanded(
           child: TabBarView(

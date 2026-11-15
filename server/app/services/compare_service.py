@@ -9,7 +9,7 @@ from . import pitch_service, amt_service
 MAX_POINTS = 300
 MAX_COMPARE_SECONDS = 35.0
 REF_SMOOTH_WINDOW = 17
-REF_DELTA_CENTS = 80.0
+REF_DELTA_CENTS = 100.0
 REF_MIN_DUR = 0.12
 REF_MERGE_GAP = 0.09
 REF_MERGE_CENTS = 120.0
@@ -18,8 +18,8 @@ REF_ABSORB_CENTS = 200.0
 WEIGHT_PITCH = 0.5
 WEIGHT_RHYTHM = 0.3
 WEIGHT_STABILITY = 0.2
-OK_CENTS = 20.0
-MINOR_CENTS = 50.0
+OK_CENTS = 35.0
+MINOR_CENTS = 65.0
 OCTAVE_LOW = 1050.0
 OCTAVE_HIGH = 1350.0
 ONSET_TOLERANCE_MS = 120.0
@@ -46,6 +46,15 @@ VERDICT_TEXT = {
     "octave": "Sai quãng tám",
     "unclear": "Không rõ",
 }
+
+OCTAVE_HINT = "Hát lệch quãng tám so với bản mẫu — hãy hát cùng quãng với mẫu"
+
+
+class CompareEmptyError(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 _REF_CACHE: dict = {}
 _REF_CACHE_LOCK = threading.Lock()
@@ -436,21 +445,21 @@ def _match_note_sequences(ref_notes, user_notes):
     return pairs
 
 
-def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
+def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0, octave_normalize=True, include_warped_full=False):
     if not s_times or not u_times:
-        return empty_result()
+        raise CompareEmptyError("no_voice", "empty pitch contour")
     s_smooth = pitch_service.smooth_series(s_f0, 7)
     u_smooth = pitch_service.smooth_series(u_f0, 7)
     path, dist = dtw_aligner.dtw(s_smooth, u_smooth)
     if not path:
-        return empty_result()
+        raise CompareEmptyError("align_failed", "dtw produced no path")
     errs = []
     offs = []
     warp = {}
     for i, j in path:
-        a = s_f0[i]
-        b = u_f0[j]
-        warp.setdefault(i, []).append(b)
+        a = s_smooth[i]
+        b = u_smooth[j]
+        warp.setdefault(i, []).append(u_f0[j])
         if a > 0 and b > 0:
             errs.append(abs(to_cents(b) - to_cents(a)))
             offs.append(abs(u_times[j] - s_times[i]))
@@ -503,7 +512,8 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
                 "midi": nt["midi"],
                 "start": nt["start"],
                 "end": nt["end"],
-                "err_cents": 0.0,
+                "err_cents": None,
+                "octave_diff": False,
                 "verdict": VERDICT_TEXT["unclear"],
                 "verdict_code": "unclear",
                 "hint": "Bản mẫu không rõ nốt ở đoạn này" if ref_poor else "Nốt này không có trong bản mẫu",
@@ -517,6 +527,9 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
         rn = ref_notes[r_idx]
         matched += 1
         err = round(to_cents(nt["freq"]) - to_cents(rn["freq"]), 1)
+        octave_diff = octave_normalize and OCTAVE_LOW <= abs(err) <= OCTAVE_HIGH
+        if octave_diff:
+            err = round(err - 1200.0 * (1.0 if err > 0 else -1.0), 1)
         onset_ms = 0.0
         if ref_window:
             onset_ms = round((min(ref_window) - rn["start"]) * 1000.0, 1)
@@ -525,11 +538,15 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
         stats = _note_stats(u_times, u_f0, nt)
         code = verdict_code(err)
         hint, hint_codes = _hint_for(err, onset_ms, dur_ratio, stats, True)
+        if octave_diff:
+            hint_codes = ["octave_diff"] + hint_codes
+            hint = f"{OCTAVE_HINT}; {hint}" if hint else OCTAVE_HINT
         notes_out.append({
             "midi": nt["midi"],
             "start": nt["start"],
             "end": nt["end"],
             "err_cents": err,
+            "octave_diff": octave_diff,
             "verdict": VERDICT_TEXT[code],
             "verdict_code": code,
             "hint": hint,
@@ -543,7 +560,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
         weighted_err += w * abs(err)
         weight_sum += w
         if stats is not None:
-            mads.append(stats["mad"])
+            mads.append(stats["mad"] * (0.4 if stats["vibrato"] else 1.0))
             if stats["vibrato"]:
                 vibrato_count += 1
                 vibrato_rates.append(stats["rate"])
@@ -580,14 +597,16 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
 
     ornament = round(100.0 * vibrato_count / n_user, 1) if n_user else 0.0
     vibrato_rate = round(sum(vibrato_rates) / len(vibrato_rates), 2) if vibrato_rates else 0.0
+    ornament_bonus = min(5.0, ornament * 0.1)
 
     if ref_poor:
-        score = clamp_score(pitch_score * WEIGHT_PITCH + rhythm_score * WEIGHT_RHYTHM + stability_score * WEIGHT_STABILITY)
+        score = clamp_score(pitch_score * WEIGHT_PITCH + rhythm_score * WEIGHT_RHYTHM + stability_score * WEIGHT_STABILITY + ornament_bonus)
     else:
         denom = max(1, max(n_user, n_ref))
         score = clamp_score(
             pitch_score * WEIGHT_PITCH + rhythm_score * WEIGHT_RHYTHM + stability_score * WEIGHT_STABILITY
             - SCORE_MISSING_PENALTY * (unmatched + missing) / denom
+            + ornament_bonus
         )
 
     ok_count = sum(1 for n in notes_out if n["verdict_code"] == "ok")
@@ -631,7 +650,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
     _, wf = downsample(s_times, warped)
 
     notes_out.sort(key=lambda n: n["start"])
-    return {
+    result = {
         "metrics": {
             "reference_quality": reference_quality,
             "mean_abs_cents": mean_cents,
@@ -658,26 +677,54 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0):
         "user_warped": {"times": st, "f0": wf},
         "notes": notes_out,
     }
+    if include_warped_full:
+        result["user_warped_full"] = {"times": [round(t, 3) for t in s_times], "f0": warped}
+    return result
 
 
-def compare(sample_data, user_data, sample_key=None):
+def wav_duration_seconds(data):
+    import io as _io
+    import wave as _wave
+
+    try:
+        with _wave.open(_io.BytesIO(data), "rb") as w:
+            fr = w.getframerate() or 1
+            return round(w.getnframes() / fr, 2)
+    except Exception:
+        return None
+
+
+def compare(sample_data, user_data, sample_key=None, include_warped_full=False):
     state = _reference_state(sample_data, sample_key)
     u_samples, u_sr = pitch_service.read_mono_wav(user_data, max_seconds=MAX_COMPARE_SECONDS)
     u_samples, u_sr = pitch_service.resample_16k(u_samples, u_sr)
     u_times, u_f0 = pitch_service.estimate_f0(u_samples, u_sr, hop=256)
-    if not state["has_frames"] or not u_times:
-        raise ValueError("empty contour")
+    if u_sr and len(u_samples) < int(u_sr * 0.05):
+        raise CompareEmptyError("too_short", "user audio shorter than 50 ms")
+    if not state["has_frames"]:
+        raise CompareEmptyError("reference_invalid", "reference audio has no pitch frames")
     if not state["valid"]:
-        return empty_result()
+        raise CompareEmptyError("reference_invalid", "reference audio too quiet to trim")
+    if not u_times:
+        raise CompareEmptyError("no_voice", "no pitch frames detected in user audio")
+    uploaded_seconds = wav_duration_seconds(user_data)
+    analyzed_seconds = round(len(u_samples) / u_sr, 2) if u_sr else 0.0
+    truncated = bool(uploaded_seconds is not None and analyzed_seconds and uploaded_seconds > analyzed_seconds + 0.05)
     u_a, u_b = onset_trim(u_samples, u_sr)
     if u_b <= u_a:
-        return empty_result()
+        raise CompareEmptyError("too_quiet", "user audio amplitude too low to analyze")
     u_keep = [i for i, t in enumerate(u_times) if u_a - 0.001 <= t <= u_b + 0.001]
     if not u_keep:
-        return empty_result()
+        raise CompareEmptyError("no_voice", "no voiced frames after trim")
     s_times = state["times"]
     s_f0 = state["f0"]
     u_times = [u_times[i] for i in u_keep]
     u_f0 = [u_f0[i] for i in u_keep]
     start_off = round(u_a - state["onset_a"], 3)
-    return compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=start_off * 1000.0)
+    result = compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=start_off * 1000.0, include_warped_full=include_warped_full)
+    m = result.get("metrics")
+    if m is not None:
+        m["uploaded_seconds"] = uploaded_seconds
+        m["analyzed_seconds"] = analyzed_seconds
+        m["truncated"] = truncated
+    return result

@@ -6,7 +6,7 @@ class WordScore {
   final double start;
   final double end;
   final String verdictCode;
-  final double errCents;
+  final double? errCents;
   final double onsetErrMs;
 
   const WordScore({
@@ -102,7 +102,7 @@ List<WordScore> wordScores(LessonSection section, List<PracticeNote> notes) {
         start: pos,
         end: we,
         verdictCode: worst?.verdictCode ?? '',
-        errCents: worst?.errCents ?? 0,
+        errCents: worst?.errCents,
         onsetErrMs: worst?.onsetErrMs ?? 0,
       ));
       pos = we;
@@ -111,22 +111,39 @@ List<WordScore> wordScores(LessonSection section, List<PracticeNote> notes) {
   return out;
 }
 
-String noteHintText(List<String> hintCodes, double errCents, double onsetErrMs, bool vibrato, String fallback, AppStrings strings) {
+List<WordScore> serverWordScores(List<PracticeWord> words) {
+  return [
+    for (final w in words)
+      WordScore(
+        word: w.text,
+        start: w.start,
+        end: w.end,
+        verdictCode: w.verdictCode,
+        errCents: w.errCents,
+        onsetErrMs: 0,
+      ),
+  ];
+}
+
+String noteHintText(List<String> hintCodes, double? errCents, double onsetErrMs, bool vibrato, String fallback, AppStrings strings) {
   if (hintCodes.isEmpty) return fallback;
   final parts = <String>[];
   for (final c in hintCodes) {
     switch (c) {
       case 'pitch_high':
-        parts.add(strings.practiceHintPitchHigh(errCents.abs().round()));
+        if (errCents != null) parts.add(strings.practiceHintPitchHigh(errCents.abs().round()));
         break;
       case 'pitch_low':
-        parts.add(strings.practiceHintPitchLow(errCents.abs().round()));
+        if (errCents != null) parts.add(strings.practiceHintPitchLow(errCents.abs().round()));
         break;
       case 'pitch_slightly_high':
-        parts.add(strings.practiceHintPitchSlightlyHigh(errCents.abs().round()));
+        if (errCents != null) parts.add(strings.practiceHintPitchSlightlyHigh(errCents.abs().round()));
         break;
       case 'pitch_slightly_low':
-        parts.add(strings.practiceHintPitchSlightlyLow(errCents.abs().round()));
+        if (errCents != null) parts.add(strings.practiceHintPitchSlightlyLow(errCents.abs().round()));
+        break;
+      case 'octave_diff':
+        parts.add(strings.practiceHintOctaveDiff);
         break;
       case 'onset_late':
         parts.add(strings.practiceHintOnsetLate(onsetErrMs.round()));

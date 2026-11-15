@@ -80,7 +80,7 @@ Widget _wrap(Widget child, {Brightness brightness = Brightness.light}) {
 }
 
 void main() {
-  testWidgets('HeritageMotif and VinylDisc render without exceptions',
+  testWidgets('HeritageMotif and DanNguyetDisc render without exceptions',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -92,7 +92,7 @@ void main() {
                 opacity: 0.1,
                 child: SizedBox(width: 220, height: 90),
               ),
-              VinylDisc(size: 80),
+              DanNguyetDisc(size: 80),
             ],
           ),
         ),
@@ -100,7 +100,7 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(find.byType(HeritageMotif), findsOneWidget);
-    expect(find.byType(VinylDisc), findsOneWidget);
+    expect(find.byType(DanNguyetDisc), findsOneWidget);
   });
 
   testWidgets(

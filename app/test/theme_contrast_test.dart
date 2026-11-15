@@ -97,6 +97,17 @@ void main() {
     expectAA(AppTheme.imperialGoldInk, AppTheme.lightTheme.scaffoldBackgroundColor, 3.0, 'light reference gold');
   });
 
+  test('Cặp container (chữ trên nền container) đạt AA 4.5 ở cả 2 theme', () {
+    final dark = AppTheme.darkTheme.colorScheme;
+    final light = AppTheme.lightTheme.colorScheme;
+    expectAA(dark.onPrimaryContainer, dark.primaryContainer, 4.5, 'dark onPrimaryContainer');
+    expectAA(light.onPrimaryContainer, light.primaryContainer, 4.5, 'light onPrimaryContainer');
+    expectAA(dark.onSecondaryContainer, dark.secondaryContainer, 4.5, 'dark onSecondaryContainer');
+    expectAA(light.onSecondaryContainer, light.secondaryContainer, 4.5, 'light onSecondaryContainer');
+    expectAA(dark.onTertiaryContainer, dark.tertiaryContainer, 3.0, 'dark onTertiaryContainer (icon)');
+    expectAA(light.onTertiaryContainer, light.tertiaryContainer, 3.0, 'light onTertiaryContainer (icon)');
+  });
+
   test('8 màu feature home đọc được trên nền blend 14% ở cả 2 theme (≥3.0)', () {
     for (var i = 0; i < AppTheme.featureAccentsLight.length; i++) {
       final light = AppTheme.featureAccentsLight[i];
@@ -171,5 +182,39 @@ void main() {
     expectAA(light.primary, light.surfaceContainerHighest, 3.0, 'light primary bar/containerHighest');
     expectAA(dark.error, dark.surfaceContainerHighest, 3.0, 'dark error bar/containerHighest');
     expectAA(light.error, light.surfaceContainerHighest, 3.0, 'light error bar/containerHighest');
+  });
+
+  test('goldReadable đạt AA 4.5 trên surface/bg ở cả 2 theme', () {
+    expectAA(AppTheme.imperialGoldInk, AppTheme.lightSurface, 4.5, 'goldInk/lightSurface');
+    expectAA(AppTheme.imperialGoldInk, AppTheme.lightBg, 4.5, 'goldInk/lightBg');
+    expectAA(AppTheme.imperialGoldInk, AppTheme.lightSurfaceVariant, 4.5, 'goldInk/lightSurfaceVariant');
+    expectAA(AppTheme.imperialGold, AppTheme.darkSurface, 4.5, 'gold/darkSurface');
+    expectAA(AppTheme.imperialGold, AppTheme.darkBg, 4.5, 'gold/darkBg');
+    expectAA(AppTheme.imperialGold, AppTheme.darkSurfaceVariant, 4.5, 'gold/darkSurfaceVariant');
+  });
+
+  test('Chip BETA: nền goldReadable alpha-20 blend surface, chữ goldReadable đạt 3.0 ở cả 2 theme', () {
+    final dark = AppTheme.darkTheme;
+    final light = AppTheme.lightTheme;
+    const goldDark = AppTheme.imperialGold;
+    const goldLight = AppTheme.imperialGoldInk;
+    for (final (theme, gold, name) in [(dark, goldDark, 'dark'), (light, goldLight, 'light')]) {
+      final chipBg = Color.alphaBlend(gold.withAlpha(51), theme.colorScheme.surface);
+      expectAA(gold, chipBg, 3.0, '$name BETA gold/blend');
+    }
+  });
+
+  test('Màu chart user (token mới) đọc được trên surface cả 2 theme (ngưỡng 3.0)', () {
+    final dark = AppTheme.darkTheme.colorScheme;
+    final light = AppTheme.lightTheme.colorScheme;
+    expectAA(AppTheme.chartUserDark, dark.surface, 3.0, 'chartUserDark/darkSurface');
+    expectAA(AppTheme.chartUserLight, light.surface, 3.0, 'chartUserLight/lightSurface');
+    expectAA(AppTheme.chartUserDark, dark.surfaceContainerHighest, 3.0, 'chartUserDark/darkContainerHighest');
+    expectAA(AppTheme.chartUserLight, light.surfaceContainerHighest, 3.0, 'chartUserLight/lightContainerHighest');
+  });
+
+  test('amberGold chỉ hợp lệ trên nền tối (gradient/tối) — ghim ngưỡng 3.0', () {
+    expectAA(AppTheme.amberGold, AppTheme.darkSurface, 3.0, 'amberGold/darkSurface');
+    expectAA(AppTheme.amberGold, const Color(0xFF4A2B78), 3.0, 'amberGold/gradientMid');
   });
 }

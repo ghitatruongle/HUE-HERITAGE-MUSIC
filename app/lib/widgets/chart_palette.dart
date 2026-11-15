@@ -16,7 +16,7 @@ class ChartPalette {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return ChartPalette(
       reference: isDark ? AppTheme.imperialGold : AppTheme.imperialGoldInk,
-      user: isDark ? const Color(0xFF7DD3FC) : const Color(0xFF2563EB),
+      user: isDark ? AppTheme.chartUserDark : AppTheme.chartUserLight,
     );
   }
 

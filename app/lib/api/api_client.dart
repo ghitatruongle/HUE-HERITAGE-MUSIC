@@ -35,6 +35,30 @@ class ApiClient {
     }
   }
 
+  static String? errorCode(Object error) {
+    if (error is DioException) {
+      final detail = error.response?.data;
+      if (detail is Map && detail['detail'] is Map) {
+        final code = (detail['detail'] as Map)['code'];
+        if (code != null) return code.toString();
+      }
+    }
+    return null;
+  }
+
+  static const Map<String, String> _friendlyDetails = {
+    'wav decode failed': 'Tệp âm thanh không đọc được — hãy dùng tệp WAV chuẩn.',
+    'empty pitch contour (silence or unvoiced audio)': 'Không nhận ra giọng hát — hãy hát to và gần mic hơn.',
+    'empty contour': 'Không nhận được âm thanh để phân tích.',
+    'empty file': 'Tệp rỗng — hãy chọn lại tệp.',
+    'unsupported type': 'Định dạng tệp không được hỗ trợ.',
+    'file content does not match its extension': 'Nội dung tệp không khớp phần mở rộng — hãy kiểm tra lại tệp.',
+    'bad bpm': 'Nhịp BPM không hợp lệ.',
+    'too many requests': 'Quá nhiều yêu cầu cùng lúc — chờ ít phút rồi thử lại.',
+    'section not found': 'Không tìm thấy câu hát trong bài học — hãy nạp lại bài học.',
+    'lesson not found': 'Không tìm thấy bài học — hãy nạp lại danh sách.',
+  };
+
   static String describe(Object error) {
     if (error is DioException) {
       final code = error.response?.statusCode;
@@ -50,8 +74,20 @@ class ApiClient {
           if (code == 404) return 'Không tìm thấy dữ liệu trên máy chủ.';
           if (code == 413) return 'Tệp quá lớn.';
           final detail = error.response?.data;
-          if (detail is Map && detail['detail'] != null) {
-            return 'Máy chủ từ chối: ${_sanitize(detail['detail'].toString())}';
+          if (detail is Map && detail['detail'] is Map) {
+            final inner = detail['detail'] as Map;
+            final codeKey = inner['code']?.toString();
+            final message = inner['message']?.toString();
+            if (message != null && message.isNotEmpty && message != codeKey) {
+              return 'Máy chủ từ chối yêu cầu. Thử lại sau ít phút.';
+            }
+            return 'Máy chủ từ chối yêu cầu. Thử lại sau ít phút.';
+          }
+          if (detail is Map && detail['detail'] is String) {
+            final raw = (detail['detail'] as String).trim();
+            final friendly = _friendlyDetails[raw];
+            if (friendly != null) return friendly;
+            return 'Máy chủ từ chối yêu cầu. Thử lại sau ít phút.';
           }
           return 'Máy chủ trả lỗi $code.';
         default:

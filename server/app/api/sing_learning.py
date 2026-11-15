@@ -59,6 +59,8 @@ async def compare_sing(request: Request, sample: UploadFile = File(...), user: U
     try:
         try:
             return await asyncio.to_thread(compare_service.compare, s_data, u_data)
+        except compare_service.CompareEmptyError as e:
+            raise HTTPException(status_code=422, detail={"code": e.code, "message": e.message})
         except ValueError as e:
             msg = str(e)
             if "empty contour" in msg:

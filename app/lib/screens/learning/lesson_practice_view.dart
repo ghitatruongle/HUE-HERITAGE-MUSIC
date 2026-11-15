@@ -62,6 +62,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   bool _loadingLessons = false;
   bool _loadingDetail = false;
   String? _error;
+  String? _loadError;
   bool _countIn = true;
   late AppStrings strings;
 
@@ -86,6 +87,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   final ValueNotifier<double> _vuLevel = ValueNotifier<double>(-60);
   final ValueNotifier<double> _recElapsed = ValueNotifier<double>(0);
   final ValueNotifier<double?> _uploadProgress = ValueNotifier<double?>(null);
+  final ValueNotifier<int> _countInLeft = ValueNotifier<int>(0);
   DateTime? _recStartAt;
   bool _autoGrade = false;
   bool _heardVoice = false;
@@ -102,6 +104,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   List<ScaleInfo> _scales = [];
   ScaleInfo? _selectedScale;
   String? _scalePath;
+  Uint8List? _scaleBytes;
   bool _scaleBusy = false;
   ScalePractice? _scaleResult;
   int _scaleTranspose = 0;
@@ -134,6 +137,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     _vuLevel.dispose();
     _recElapsed.dispose();
     _uploadProgress.dispose();
+    _countInLeft.dispose();
     _rec.dispose();
     if (!kIsWeb) {
       for (final p in _recordPaths.values) {
@@ -188,7 +192,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   Future<void> _loadLessons() async {
     setState(() {
       _loadingLessons = true;
-      _error = null;
+      _loadError = null;
     });
     try {
       final dio = context.read<ServerConfig>().api.dio;
@@ -202,9 +206,25 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         _selectedScale = scales.isNotEmpty ? scales.first : null;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = ApiClient.describe(e));
+      if (mounted) setState(() => _loadError = _localizedError(e));
     } finally {
       if (mounted) setState(() => _loadingLessons = false);
+    }
+  }
+
+  String _localizedError(Object e) {
+    final code = ApiClient.errorCode(e);
+    switch (code) {
+      case 'too_quiet':
+        return strings.practiceErrTooQuiet;
+      case 'no_voice':
+        return strings.practiceErrNoVoice;
+      case 'too_short':
+        return strings.practiceErrTooShort;
+      case 'reference_invalid':
+        return strings.practiceErrRefInvalid;
+      default:
+        return ApiClient.describe(e);
     }
   }
 
@@ -263,56 +283,66 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           return;
         }
         var webAnalyze = false;
+        Uint8List? scaleBytesRead;
+        if (result.started && result.mode == RecordingMode.scale && p != null) {
+          try {
+            scaleBytesRead = kIsWeb ? await XFile(p).readAsBytes() : await File(p).readAsBytes();
+          } catch (_) {
+            scaleBytesRead = null;
+          }
+        }
         setState(() {
-        _vuLevel.value = -60;
-        _recStartAt = null;
-        _recElapsed.value = 0;
-        if (result.started && result.mode == RecordingMode.section) {
-          if (p != null) {
-            final stale = _recordPaths[result.sectionIndex];
-            _recordPaths[result.sectionIndex] = p;
-            if (stale != null && stale != p && takeBytes != null && !kIsWeb) {
-              unawaited(Future(() async {
-                try {
-                  await File(stale).delete();
-                } catch (_) {}
-              }));
+          _vuLevel.value = -60;
+          _recStartAt = null;
+          _recElapsed.value = 0;
+          if (result.started && result.mode == RecordingMode.section) {
+            if (p != null) {
+              final stale = _recordPaths[result.sectionIndex];
+              _recordPaths[result.sectionIndex] = p;
+              if (stale != null && stale != p && takeBytes != null && !kIsWeb) {
+                unawaited(Future(() async {
+                  try {
+                    await File(stale).delete();
+                  } catch (_) {}
+                }));
+              }
+            }
+            if (takeBytes != null) {
+              final takes = _takes[result.sectionIndex] ?? <_TakeRec>[];
+              _takeCounter++;
+              takes.add(_TakeRec(takeBytes, _takeCounter));
+              newTakeNo = _takeCounter;
+              while (takes.length > 3) {
+                final removed = takes.removeAt(0);
+                _takeResults[result.sectionIndex]?.remove(removed.no);
+              }
+              _takes[result.sectionIndex] = takes;
+              _selectedTake[result.sectionIndex] = takes.length - 1;
+              _results.remove(result.sectionIndex);
+            }
+            if (preview != null && newTakeNo > 0) {
+              _takePreview = preview;
+              _takePreviewNo = newTakeNo;
+            }
+            if (kIsWeb && takeBytes != null && preview == null && newTakeNo > 0) {
+              _analyzingPreview = true;
+              webAnalyze = true;
             }
           }
-          if (takeBytes != null) {
-            final takes = _takes[result.sectionIndex] ?? <_TakeRec>[];
-            _takeCounter++;
-            takes.add(_TakeRec(takeBytes, _takeCounter));
-            newTakeNo = _takeCounter;
-            while (takes.length > 3) {
-              final removed = takes.removeAt(0);
-              _takeResults[result.sectionIndex]?.remove(removed.no);
-            }
-            _takes[result.sectionIndex] = takes;
-            _selectedTake[result.sectionIndex] = takes.length - 1;
+          if (result.started && result.mode == RecordingMode.scale) {
+            _scalePath = p;
+            _scaleResult = null;
+            _scaleBytes = scaleBytesRead;
           }
-          if (preview != null && newTakeNo > 0) {
-            _takePreview = preview;
-            _takePreviewNo = newTakeNo;
-          }
-          if (kIsWeb && takeBytes != null && preview == null && newTakeNo > 0) {
-            _analyzingPreview = true;
-            webAnalyze = true;
-          }
-        }
-        if (result.started && result.mode == RecordingMode.scale) {
-          _scalePath = p;
-          _scaleResult = null;
-        }
-      });
+        });
         if (webAnalyze && takeBytes != null) {
           final epoch = _rec.epoch;
           final bytes = takeBytes;
           final no = newTakeNo;
-          Future(() {
+          Future(() async {
             LocalPitchResult? p2;
             try {
-              p2 = LocalPitch.analyze(bytes, secondsLimit: 10);
+              p2 = await LocalPitch.analyzeChunked(bytes, secondsLimit: 10);
             } catch (_) {}
             if (!mounted) {
               return;
@@ -353,9 +383,21 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     return done.future;
   }
 
+  Future<void> _openLessonById(String lessonId) async {
+    final matches = _lessons.where((l) => l.id == lessonId).toList();
+    if (matches.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.practiceLessonGone)));
+      }
+      return;
+    }
+    await _openLesson(matches.first);
+  }
+
   Future<void> _openLesson(Lesson lesson) async {
     await _stopEverything();
     if (!mounted) return;
+    _rec.epoch++;
     setState(() {
       _selected = lesson;
       _loadingDetail = true;
@@ -374,6 +416,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       _allProgress = [];
       _takeResults.clear();
       _takeCounter = 0;
+      _scalePath = null;
+      _scaleResult = null;
+      _scaleBytes = null;
     });
     try {
       final dio = context.read<ServerConfig>().api.dio;
@@ -676,8 +721,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     }
     final epochAtStart = _rec.epoch;
     if (_countIn) {
+      Timer? beatTimer;
       try {
-        final bpmVal = (_detail?.bpm ?? 60).round();
+        final bpmVal = (((_detail?.bpm ?? 60) * _speed).round()).clamp(30, 200);
         final chain = _metroChain.then((_) async {
           try {
             await _metronomePlayer.stop();
@@ -693,10 +739,20 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           }
         });
         try {
+          final beatMs = (60000 / (bpmVal > 0 ? bpmVal : 60)).round();
+          const beats = 4;
+          _countInLeft.value = beats;
+          var beatIdx = 0;
+          beatTimer = Timer.periodic(Duration(milliseconds: beatMs.clamp(100, 2000)), (t) {
+            beatIdx++;
+            _countInLeft.value = beats - beatIdx > 0 ? beats - beatIdx : 0;
+          });
           await _metronomePlayer.play();
           final est = (240 * 1000 / (bpmVal > 0 ? bpmVal : 60)).ceil() + 1500;
           await done.future.timeout(Duration(milliseconds: est), onTimeout: () {});
         } finally {
+          beatTimer?.cancel();
+          _countInLeft.value = 0;
           await sub.cancel();
         }
       } catch (_) {
@@ -757,7 +813,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   Future<void> _submitPractice(LessonSection section) async {
     final detail = _detail;
     if (detail == null) return;
-    final bytes = _selectedTakeRec(section.index)?.bytes;
+    final selectedTake = _selectedTakeRec(section.index);
+    final bytes = selectedTake?.bytes;
+    final takeNo = selectedTake?.no;
     final path = _recordPaths[section.index];
     if (bytes == null && path == null) return;
     setState(() {
@@ -781,7 +839,6 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         result = await api.practiceFile(detail.id, section.index, path!);
       }
       if (!mounted || _selected?.id != detail.id) return;
-      final takeNo = _selectedTakeRec(section.index)?.no;
       setState(() {
         _results[section.index] = result;
         if (takeNo != null) {
@@ -811,7 +868,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         }
       } catch (_) {}
     } catch (e) {
-      if (mounted) setState(() => _error = ApiClient.describe(e));
+      if (mounted) setState(() => _error = _localizedError(e));
     } finally {
       if (mounted) {
         _uploadProgress.value = null;
@@ -825,17 +882,17 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       final dio = context.read<ServerConfig>().api.dio;
       final url = '${dio.options.baseUrl}/api/lessons/practice-midi/${result.userMidi}';
       final name = 'luyen_tap_cau${result.sectionIndex + 1}.mid';
+      var dl = url;
+      try {
+        final raw = url.substring(url.indexOf('/api/'));
+        final res = await dio.get('/api/music/play-url', queryParameters: {'path': raw});
+        final data = res.data;
+        if (data is Map && data['url'] is String && (data['url'] as String).isNotEmpty) {
+          final signed = data['url'] as String;
+          dl = signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
+        }
+      } catch (_) {}
       if (kIsWeb) {
-        var dl = url;
-        try {
-          final raw = url.substring(url.indexOf('/api/'));
-          final res = await dio.get('/api/music/play-url', queryParameters: {'path': raw});
-          final data = res.data;
-          if (data is Map && data['url'] is String && (data['url'] as String).isNotEmpty) {
-            final signed = data['url'] as String;
-            dl = signed.startsWith('http') ? signed : '${dio.options.baseUrl}$signed';
-          }
-        } catch (_) {}
         triggerDownload(dl, name);
         return;
       }
@@ -847,7 +904,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           savePath = picked;
         } catch (_) {}
       }
-      await dio.download(url, savePath);
+      await dio.download(dl, savePath);
       final shared = Platform.isAndroid || Platform.isIOS;
       if (shared) {
         await shareDownloadedFile(savePath, name);
@@ -905,10 +962,21 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             done.complete();
           }
         });
+        Timer? beatTimer;
         try {
+          const beatMs = 1000;
+          const beats = 4;
+          _countInLeft.value = beats;
+          var beatIdx = 0;
+          beatTimer = Timer.periodic(const Duration(milliseconds: beatMs), (t) {
+            beatIdx++;
+            _countInLeft.value = beats - beatIdx > 0 ? beats - beatIdx : 0;
+          });
           await _metronomePlayer.play();
           await done.future.timeout(const Duration(seconds: 6), onTimeout: () {});
         } finally {
+          beatTimer?.cancel();
+          _countInLeft.value = 0;
           sub.cancel();
         }
       } catch (_) {
@@ -1017,6 +1085,11 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           ),
           if (_selected != null) _buildLessonHeader(),
         ],
+        if (_loadError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: ErrorPanel(message: _loadError!, onRetry: _loadLessons),
+          ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -1039,6 +1112,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               _selectedScale = s;
               _scaleResult = null;
               _scalePath = null;
+              _scaleBytes = null;
             }),
             recording: _rec.isScaleRecording,
             onToggleRecord: _toggleScaleRecord,
@@ -1047,13 +1121,17 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             recordPath: _scalePath,
             result: _scaleResult,
             transpose: _scaleTranspose,
-            onTransposeChanged: (v) => setState(() {
-              _scaleTranspose = v;
-              _scaleResult = null;
-            }),
-          ),
+              onTransposeChanged: (v) => setState(() {
+                _scaleTranspose = v;
+                _scaleResult = null;
+              }),
+            ),
+            if (_scaleResult != null && _scaleBytes != null) ...[
+              const SizedBox(height: 8),
+              AudioPlayerBar(bytes: _scaleBytes),
+            ],
+          ],
         ],
-      ],
     );
   }
 
@@ -1069,6 +1147,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             Padding(
               padding: const EdgeInsets.only(right: 6),
               child: ChoiceChip(
+                materialTapTargetSize: MaterialTapTargetSize.padded,
                 label: Text('${v}x', style: const TextStyle(fontSize: 11)),
                 selected: _speed == v,
                 onSelected: (_) => _setSpeed(v),
@@ -1170,18 +1249,39 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                     style: OutlinedButton.styleFrom(foregroundColor: AppTheme.goldReadable(context)),
                     onPressed: () => _toggleMasterSample(section),
                   ),
-                FilledButton.icon(
-                  icon: Icon(_rec.isSectionRecording && _rec.activeSection == section.index ? Icons.stop : Icons.mic, size: 16),
-                  label: Text(_rec.isSectionRecording && _rec.activeSection == section.index ? strings.practiceStopRecord : strings.practiceRecord),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _rec.isSectionRecording && _rec.activeSection == section.index ? AppTheme.statusDanger : null,
-                  ),
-                  onPressed: () => _toggleRecord(section),
+                ValueListenableBuilder<int>(
+                  valueListenable: _countInLeft,
+                  builder: (context, countLeft, _) {
+                    final sectionRecording = _rec.isSectionRecording && _rec.activeSection == section.index;
+                    final counting = countLeft > 0;
+                    return FilledButton.icon(
+                      icon: Icon(sectionRecording ? Icons.stop : Icons.mic, size: 16),
+                      label: Text(
+                        sectionRecording
+                            ? strings.practiceStopRecord
+                            : counting
+                                ? strings.practiceCountingIn(countLeft)
+                                : strings.practiceRecord,
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: sectionRecording ? AppTheme.statusDanger : null,
+                      ),
+                      onPressed: counting || _rec.arming ? null : () => _toggleRecord(section),
+                    );
+                  },
                 ),
-                CommonButton(
-                  label: strings.practiceGrade,
-                  loading: _practicingSection == section.index,
-                  onPressed: recorded && _practicingSection != section.index ? () => _submitPractice(section) : null,
+                ValueListenableBuilder<int>(
+                  valueListenable: _countInLeft,
+                  builder: (context, countLeft, _) {
+                    final sectionRecording = _rec.isSectionRecording && _rec.activeSection == section.index;
+                    return CommonButton(
+                      label: strings.practiceGrade,
+                      loading: _practicingSection == section.index,
+                      onPressed: recorded && _practicingSection != section.index && !sectionRecording && countLeft == 0 && !_rec.arming
+                          ? () => _submitPractice(section)
+                          : null,
+                    );
+                  },
                 ),
                 if (recorded && result != null)
                   OutlinedButton.icon(
@@ -1211,10 +1311,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   ),
                 ),
               ),
-            if (_rec.isSectionRecording && _rec.activeSection == section.index) ...[
+            if (_detail?.contourF0.isNotEmpty ?? false) ...[
               _buildSectionGuide(section),
               const SizedBox(height: 8),
-              ValueListenableBuilder<double>(
+            ],
+            if (_rec.isSectionRecording && _rec.activeSection == section.index) ...[
+            RepaintBoundary(
+              child: ValueListenableBuilder<double>(
                 valueListenable: _vuLevel,
                 builder: (context, vu, _) => Row(
                   children: [
@@ -1234,6 +1337,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   ],
                 ),
               ),
+            ),
             ],
             if (recorded && _takes[section.index]?.isNotEmpty == true) ...[
               const SizedBox(height: 8),
@@ -1243,6 +1347,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 children: [
                   for (var i = 0; i < _takes[section.index]!.length; i++)
                     ChoiceChip(
+                      materialTapTargetSize: MaterialTapTargetSize.padded,
                       label: Text(strings.practiceTakeChip(_takes[section.index]![i].no),
                           style: const TextStyle(fontSize: 11)),
                       selected: (_selectedTake[section.index] ?? 0) == i,
@@ -1301,14 +1406,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                             label: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (n.verdictCode == 'off' || n.verdictCode == 'octave' || n.verdictCode == 'minor')
-                                  Icon(n.errCents > 0 ? Icons.arrow_upward : Icons.arrow_downward, size: 11, color: scheme.onSurfaceVariant),
+                                if (n.errCents != null && (n.verdictCode == 'off' || n.verdictCode == 'octave' || n.verdictCode == 'minor'))
+                                  Icon(n.errCents! > 0 ? Icons.arrow_upward : Icons.arrow_downward, size: 11, color: scheme.onSurfaceVariant),
                                 if (n.verdictCode == 'ok' && n.vibrato) Icon(Icons.waves, size: 11, color: scheme.onSurfaceVariant),
                                 const SizedBox(width: 3),
                                 Text(
-                                  n.verdictCode == 'unclear'
+                                  n.verdictCode == 'unclear' || n.errCents == null
                                       ? _verdictLabel(n.verdictCode)
-                                      : '${n.errCents > 0 ? '+' : ''}${n.errCents.toStringAsFixed(0)}c',
+                                      : '${n.errCents! > 0 ? '+' : ''}${n.errCents!.toStringAsFixed(0)}c',
                                   style: const TextStyle(fontSize: 11),
                                 ),
                               ],
@@ -1387,10 +1492,12 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     );
   }
 
-  Widget _buildTakeScoreRow(LessonSection section) {    final results = _takeResults[section.index];
+  Widget _buildTakeScoreRow(LessonSection section) {
+    final results = _takeResults[section.index];
     if (results == null || results.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final entries = results.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final best = entries.reduce((a, b) => a.value.metrics.score >= b.value.metrics.score ? a : b);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Wrap(
@@ -1400,14 +1507,33 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         children: [
           Text(strings.practiceCompareTakes, style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
           for (final e in entries)
-            Text(
-              'T${e.key}: ${e.value.metrics.score.toStringAsFixed(1)}',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: e.value.metrics.score >= 80
-                    ? AppTheme.statusSuccess
-                    : (e.value.metrics.score >= 60 ? AppTheme.statusWarning : AppTheme.statusDanger),
+            InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: () => setState(() {
+                final takes = _takes[section.index];
+                if (takes != null) {
+                  final idx = takes.indexWhere((t) => t.no == e.key);
+                  if (idx >= 0) _selectedTake[section.index] = idx;
+                }
+              }),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (e.key == best.key) ...[
+                    Icon(Icons.workspace_premium, size: 12, color: AppTheme.goldReadable(context)),
+                    const SizedBox(width: 2),
+                  ],
+                  Text(
+                    'T${e.key}: ${e.value.metrics.score.toStringAsFixed(1)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: e.value.metrics.score >= 80
+                          ? AppTheme.statusSuccess
+                          : (e.value.metrics.score >= 60 ? AppTheme.statusWarning : AppTheme.statusDanger),
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
@@ -1416,8 +1542,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   }
 
   Widget _buildWordScore(PracticeResult result, LessonSection section) {
-    if (section.lyrics.isEmpty || result.notes.isEmpty) return const SizedBox.shrink();
-    final words = wordScores(section, result.notes);
+    if (section.lyrics.isEmpty) return const SizedBox.shrink();
+    final fromServer = result.words.isNotEmpty;
+    final words = fromServer ? serverWordScores(result.words) : wordScores(section, result.notes);
     if (words.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     return Padding(
@@ -1425,7 +1552,21 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(strings.practiceWordScoreTitle, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          Row(
+            children: [
+              Text(strings.practiceWordScoreTitle, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+              const SizedBox(width: 6),
+              Text(
+                strings.practiceWordTapHint,
+                style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant.withAlpha(180)),
+              ),
+            ],
+          ),
+          if (fromServer && result.wordsAlignment.isNotEmpty)
+            Text(
+              strings.practiceWordApprox,
+              style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant.withAlpha(150)),
+            ),
           const SizedBox(height: 4),
           Wrap(
             spacing: 4,
@@ -1435,20 +1576,37 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 Tooltip(
                   message: w.verdictCode.isEmpty
                       ? strings.practiceWordMissing
-                      : '${_verdictLabel(w.verdictCode)} · ${w.errCents > 0 ? '+' : ''}${w.errCents.toStringAsFixed(0)}c · ${w.onsetErrMs.toStringAsFixed(0)}ms',
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: w.verdictCode.isEmpty
-                          ? scheme.onSurfaceVariant.withAlpha(25)
-                          : _verdictColor(w.verdictCode),
+                      : w.errCents == null
+                          ? _verdictLabel(w.verdictCode)
+                          : '${_verdictLabel(w.verdictCode)} · ${w.errCents! > 0 ? '+' : ''}${w.errCents!.toStringAsFixed(0)}c · ${w.onsetErrMs.toStringAsFixed(0)}ms',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      w.word,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: w.verdictCode.isEmpty ? scheme.onSurfaceVariant : scheme.onSurface,
+                      onTap: () => unawaited(_playWordRef(section, w, absolute: fromServer)),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: w.verdictCode.isEmpty
+                              ? scheme.onSurfaceVariant.withAlpha(25)
+                              : _verdictColor(w.verdictCode),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              w.word,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: w.verdictCode.isEmpty ? scheme.onSurfaceVariant : scheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            Icon(Icons.play_arrow, size: 11, color: scheme.onSurfaceVariant),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1458,6 +1616,29 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         ],
       ),
     );
+  }
+
+  Future<void> _playWordRef(LessonSection section, WordScore w, {required bool absolute}) async {
+    final detail = _detail;
+    if (detail == null) return;
+    final gen = ++_playGen;
+    final dio = context.read<ServerConfig>().api.dio;
+    final basePath = '/api/heritage/${detail.id}/audio';
+    try {
+      var url = _signedRefUrl ?? (await _signPath(dio, basePath));
+      if (gen != _playGen) return;
+      url ??= '${dio.options.baseUrl}$basePath';
+      final startT = absolute ? w.start : section.start + w.start;
+      final endT = absolute ? w.end : section.start + w.end;
+      if (endT <= startT) return;
+      await _playSegment(
+        url,
+        clipStart: Duration(milliseconds: (startT * 1000).round()),
+        clipEnd: Duration(milliseconds: (endT * 1000).round()),
+        loop: false,
+        gen: gen,
+      );
+    } catch (_) {}
   }
 
   List<FlSpot> _guideSpots(LessonSection section) {
@@ -1511,13 +1692,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             ],
           ),
           if (spots.isNotEmpty)
-            SizedBox(
-              height: 110,
-              child: ValueListenableBuilder<double>(
-                valueListenable: _recElapsed,
-                builder: (context, elapsed, _) {
-                  final maxX = math.max(1.0, section.duration);
-                  return LineChart(
+            RepaintBoundary(
+              child: SizedBox(
+                height: 110,
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _recElapsed,
+                  builder: (context, elapsed, _) {
+                    final maxX = math.max(1.0, section.duration);
+                    return LineChart(
                     LineChartData(
                       minX: 0,
                       maxX: maxX,
@@ -1546,7 +1728,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                       ],
                     ),
                   );
-                },
+                  },
+                ),
               ),
             ),
           if (lines.isNotEmpty)
@@ -1629,9 +1812,10 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         children: [
           Text(strings.practiceTakePreview, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
           const SizedBox(height: 4),
-          SizedBox(
-            height: 130,
-            child: LineChart(
+          RepaintBoundary(
+            child: SizedBox(
+              height: 130,
+              child: LineChart(
               LineChartData(
                 minX: 0,
                 maxX: math.max(1, maxX),
@@ -1660,6 +1844,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 ],
               ),
             ),
+            ),
           ),
         ],
       ),
@@ -1672,6 +1857,22 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (m.truncated && m.uploadedSeconds != null && m.analyzedSeconds != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.content_cut, size: 12, color: AppTheme.statusWarning),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    strings.practiceTruncatedFlag(m.analyzedSeconds!, m.uploadedSeconds!),
+                    style: const TextStyle(fontSize: 10.5, color: AppTheme.statusWarning),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Row(
           children: [
             _scoreBadge(strings.practiceScoreTotal, m.score, scheme.primary),
@@ -1764,16 +1965,31 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final history = _practiceHistory();
     final serverEntries = _serverProgress;
     List<double> scores;
+    List<DateTime> pointDates;
     String sourceLabel;
     if (_serverProgressAvailable && serverEntries.isNotEmpty) {
-      scores = serverEntries.take(10).map((e) => e.score).toList().reversed.toList();
+      final es = serverEntries.take(10).toList().reversed.toList();
+      scores = es.map((e) => e.score).toList();
+      pointDates = es
+          .map((e) => parsePracticeDate(e.createdAt, utcOffset: DateTime.now().timeZoneOffset))
+          .whereType<DateTime>()
+          .toList();
       sourceLabel = strings.practiceServerProgress;
     } else {
       if (history.isEmpty) {
         return const SizedBox.shrink();
       }
-      scores = history.take(10).map((e) => e.score ?? 0).toList().reversed.toList();
+      final es = history.take(10).toList().reversed.toList();
+      scores = es.map((e) => e.score ?? 0).toList();
+      pointDates = es.map((e) => e.at).toList();
       sourceLabel = strings.practiceLocalProgress;
+    }
+    final dayOffsets = <double>[];
+    if (pointDates.length == scores.length && pointDates.isNotEmpty) {
+      final base = pointDates.first;
+      for (final d in pointDates) {
+        dayOffsets.add(d.difference(base).inMinutes / 1440.0);
+      }
     }
     final avgList = _serverProgressAvailable && serverEntries.isNotEmpty
         ? serverEntries.take(5).map((e) => e.score).toList()
@@ -1849,58 +2065,69 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             SizedBox(
               height: 90,
               child: scores.length >= 2
-                  ? _ProgressLineChart(scores: scores)
+                  ? _ProgressLineChart(scores: scores, dayOffsets: dayOffsets)
                   : Text('${strings.practiceLastScore}: ${scores.last.toStringAsFixed(1)}'),
             ),
             const SizedBox(height: 6),
             if (_serverProgressAvailable && serverEntries.isNotEmpty)
               for (final e in serverEntries.take(6))
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Row(
-                    children: [
-                      Text(
-                        e.createdAt.length >= 16 ? e.createdAt.substring(0, 16) : e.createdAt,
-                        style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          strings.practiceHistoryPhrase(_selected?.title ?? '', e.section + 1),
-                          style: const TextStyle(fontSize: 11.5),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        e.score.toStringAsFixed(1),
-                        style: const TextStyle(fontSize: 11.5, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                for (final e in history.take(6))
-                  Padding(
+                InkWell(
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () => unawaited(_openLessonById(e.lessonId)),
+                  child: Padding(
                     padding: const EdgeInsets.only(top: 3),
                     child: Row(
                       children: [
                         Text(
-                          '${e.at.day.toString().padLeft(2, '0')}/${e.at.month.toString().padLeft(2, '0')} ${e.at.hour.toString().padLeft(2, '0')}:${e.at.minute.toString().padLeft(2, '0')}',
+                          e.createdAt.length >= 16 ? e.createdAt.substring(0, 16) : e.createdAt,
                           style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            e.title,
+                            strings.practiceHistoryPhrase(_selected?.title ?? '', e.section + 1),
                             style: const TextStyle(fontSize: 11.5),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Text(
-                          (e.score ?? 0).toStringAsFixed(1),
+                          e.score.toStringAsFixed(1),
                           style: const TextStyle(fontSize: 11.5, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
                         ),
+                        Icon(Icons.chevron_right, size: 13, color: scheme.onSurfaceVariant.withAlpha(140)),
                       ],
+                    ),
+                  ),
+                )
+              else
+                for (final e in history.take(6))
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: e.detail.isNotEmpty ? () => unawaited(_openLessonById(e.detail)) : null,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${e.at.day.toString().padLeft(2, '0')}/${e.at.month.toString().padLeft(2, '0')} ${e.at.hour.toString().padLeft(2, '0')}:${e.at.minute.toString().padLeft(2, '0')}',
+                            style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              e.title,
+                              style: const TextStyle(fontSize: 11.5),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            (e.score ?? 0).toStringAsFixed(1),
+                            style: const TextStyle(fontSize: 11.5, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
+                          ),
+                          if (e.detail.isNotEmpty)
+                            Icon(Icons.chevron_right, size: 13, color: scheme.onSurfaceVariant.withAlpha(140)),
+                        ],
+                      ),
                     ),
                   ),
           ],
@@ -1912,11 +2139,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
 
 class _ProgressLineChart extends StatelessWidget {
   final List<double> scores;
+  final List<double> dayOffsets;
 
-  const _ProgressLineChart({required this.scores});
+  const _ProgressLineChart({required this.scores, this.dayOffsets = const []});
 
   @override
   Widget build(BuildContext context) {
+    final useDays = dayOffsets.length == scores.length && dayOffsets.length >= 2;
     return LineChart(
       LineChartData(
         minY: 0,
@@ -1925,7 +2154,10 @@ class _ProgressLineChart extends StatelessWidget {
         borderData: FlBorderData(show: true, border: Border.all(color: Theme.of(context).dividerColor)),
         lineBarsData: [
           LineChartBarData(
-            spots: [for (var i = 0; i < scores.length; i++) FlSpot(i.toDouble(), scores[i])],
+            spots: [
+              for (var i = 0; i < scores.length; i++)
+                FlSpot(useDays ? dayOffsets[i] : i.toDouble(), scores[i]),
+            ],
             isCurved: true,
             barWidth: 2,
             color: ChartPalette.of(context).reference,

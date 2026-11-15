@@ -109,10 +109,10 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
     return Icons.shield_outlined;
   }
 
-  Color _eventColor(String event) {
+  Color _eventColor(String event, BuildContext context) {
     if (event.contains('flood') || event.contains('rate_limited')) return AppTheme.statusDanger;
     if (event.contains('failed')) return AppTheme.statusWarning;
-    if (event.startsWith('admin_')) return AppTheme.amberGold;
+    if (event.startsWith('admin_')) return AppTheme.goldReadable(context);
     if (event.contains('success') || event.contains('changed')) return AppTheme.emeraldGreen;
     return AppTheme.statusInfo;
   }
@@ -138,7 +138,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
             children: [
-              const Icon(Icons.shield_outlined, size: 18, color: AppTheme.amberGold),
+              Icon(Icons.shield_outlined, size: 18, color: AppTheme.goldReadable(context)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -272,7 +272,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                                 );
                               }
                               final e = _events[index];
-                              final color = _eventColor(e.event);
+                              final color = _eventColor(e.event, context);
                               return Card(
                                 margin: EdgeInsets.zero,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

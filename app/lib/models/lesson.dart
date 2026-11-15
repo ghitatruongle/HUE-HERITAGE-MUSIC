@@ -165,7 +165,7 @@ class ScaleNoteHit {
 
 class ScalePerformanceNote {
   final String name;
-  final double errCents;
+  final double? errCents;
   final double onsetErrMs;
   final String verdict;
   final String verdictCode;
@@ -182,15 +182,18 @@ class ScalePerformanceNote {
     this.hintCodes = const [],
   });
 
-  static ScalePerformanceNote fromJson(Map<String, dynamic> j) => ScalePerformanceNote(
-        name: j['name']?.toString() ?? '',
-        errCents: double.tryParse(j['err_cents']?.toString() ?? '0') ?? 0,
-        onsetErrMs: double.tryParse(j['onset_err_ms']?.toString() ?? '0') ?? 0,
-        verdict: j['verdict']?.toString() ?? '',
-        verdictCode: j['verdict_code']?.toString() ?? '',
-        hint: j['hint']?.toString() ?? '',
-        hintCodes: PracticeResult._codeList(j['hint_codes']),
-      );
+  static ScalePerformanceNote fromJson(Map<String, dynamic> j) {
+    final rawErr = j['err_cents'];
+    return ScalePerformanceNote(
+      name: j['name']?.toString() ?? '',
+      errCents: rawErr == null ? null : double.tryParse(rawErr.toString()),
+      onsetErrMs: double.tryParse(j['onset_err_ms']?.toString() ?? '0') ?? 0,
+      verdict: j['verdict']?.toString() ?? '',
+      verdictCode: j['verdict_code']?.toString() ?? '',
+      hint: j['hint']?.toString() ?? '',
+      hintCodes: PracticeResult._codeList(j['hint_codes']),
+    );
+  }
 }
 
 class ScalePractice {
@@ -293,6 +296,9 @@ class PracticeMetrics {
   final String summaryHint;
   final Map<String, int> verdictCounts;
   final List<String> summaryCodes;
+  final bool truncated;
+  final double? uploadedSeconds;
+  final double? analyzedSeconds;
 
   PracticeMetrics({
     required this.score,
@@ -310,13 +316,17 @@ class PracticeMetrics {
     this.summaryHint = '',
     this.verdictCounts = const {},
     this.summaryCodes = const [],
+    this.truncated = false,
+    this.uploadedSeconds,
+    this.analyzedSeconds,
   });
 }
 
 class PracticeNote {
   final double start;
   final double end;
-  final double errCents;
+  final double? errCents;
+  final bool octaveDiff;
   final String verdict;
   final String verdictCode;
   final String hint;
@@ -330,6 +340,7 @@ class PracticeNote {
     required this.start,
     required this.end,
     required this.errCents,
+    this.octaveDiff = false,
     required this.verdict,
     this.verdictCode = '',
     this.hint = '',
@@ -339,6 +350,65 @@ class PracticeNote {
     this.refEnd = 0,
     this.vibrato = false,
   });
+
+  static PracticeNote? fromServerJson(dynamic raw) {
+    if (raw is! Map) return null;
+    final rawErr = raw['err_cents'];
+    return PracticeNote(
+      start: double.tryParse(raw['start']?.toString() ?? '0') ?? 0,
+      end: double.tryParse(raw['end']?.toString() ?? '0') ?? 0,
+      errCents: rawErr == null ? null : double.tryParse(rawErr.toString()),
+      octaveDiff: raw['octave_diff'] == true,
+      verdict: raw['verdict']?.toString() ?? '',
+      verdictCode: raw['verdict_code']?.toString() ?? '',
+      hint: raw['hint']?.toString() ?? '',
+      hintCodes: PracticeResult._codeList(raw['hint_codes']),
+      onsetErrMs: double.tryParse(raw['onset_err_ms']?.toString() ?? '0') ?? 0,
+      refStart: double.tryParse(raw['ref_start']?.toString() ?? '0') ?? 0,
+      refEnd: double.tryParse(raw['ref_end']?.toString() ?? '0') ?? 0,
+      vibrato: raw['vibrato'] == true,
+    );
+  }
+}
+
+class PracticeWord {
+  final int line;
+  final int index;
+  final String text;
+  final double start;
+  final double end;
+  final double voicedRatio;
+  final double? errCents;
+  final String verdictCode;
+  final String verdict;
+
+  PracticeWord({
+    required this.line,
+    required this.index,
+    required this.text,
+    required this.start,
+    required this.end,
+    required this.voicedRatio,
+    required this.errCents,
+    required this.verdictCode,
+    required this.verdict,
+  });
+
+  static PracticeWord? fromServerJson(dynamic raw) {
+    if (raw is! Map) return null;
+    final rawErr = raw['err_cents'];
+    return PracticeWord(
+      line: int.tryParse(raw['line']?.toString() ?? '0') ?? 0,
+      index: int.tryParse(raw['index']?.toString() ?? '0') ?? 0,
+      text: raw['text']?.toString() ?? '',
+      start: double.tryParse(raw['start']?.toString() ?? '0') ?? 0,
+      end: double.tryParse(raw['end']?.toString() ?? '0') ?? 0,
+      voicedRatio: double.tryParse(raw['voiced_ratio']?.toString() ?? '0') ?? 0,
+      errCents: rawErr == null ? null : double.tryParse(rawErr.toString()),
+      verdictCode: raw['verdict_code']?.toString() ?? '',
+      verdict: raw['verdict']?.toString() ?? '',
+    );
+  }
 }
 
 class PracticeResult {
@@ -347,6 +417,8 @@ class PracticeResult {
   final List<double> refF0;
   final List<double> userF0;
   final List<PracticeNote> notes;
+  final List<PracticeWord> words;
+  final String wordsAlignment;
   final int sectionIndex;
   final String lessonTitle;
   final String userMidi;
@@ -358,6 +430,8 @@ class PracticeResult {
     required this.refF0,
     required this.userF0,
     required this.notes,
+    this.words = const [],
+    this.wordsAlignment = '',
     required this.sectionIndex,
     required this.lessonTitle,
     this.userMidi = '',
@@ -429,23 +503,19 @@ class PracticeResult {
     final notes = <PracticeNote>[];
     if (rawNotes is List) {
       for (final n in rawNotes) {
-        if (n is Map) {
-          notes.add(PracticeNote(
-            start: double.tryParse(n['start']?.toString() ?? '0') ?? 0,
-            end: double.tryParse(n['end']?.toString() ?? '0') ?? 0,
-            errCents: double.tryParse(n['err_cents']?.toString() ?? '0') ?? 0,
-            verdict: n['verdict']?.toString() ?? '',
-            verdictCode: n['verdict_code']?.toString() ?? '',
-            hint: n['hint']?.toString() ?? '',
-            hintCodes: _codeList(n['hint_codes']),
-            onsetErrMs: double.tryParse(n['onset_err_ms']?.toString() ?? '0') ?? 0,
-            refStart: double.tryParse(n['ref_start']?.toString() ?? '0') ?? 0,
-            refEnd: double.tryParse(n['ref_end']?.toString() ?? '0') ?? 0,
-            vibrato: n['vibrato'] == true,
-          ));
-        }
+        final note = PracticeNote.fromServerJson(n);
+        if (note != null) notes.add(note);
       }
     }
+    final rawWords = j['words'];
+    final words = <PracticeWord>[];
+    if (rawWords is List) {
+      for (final w in rawWords) {
+        final word = PracticeWord.fromServerJson(w);
+        if (word != null) words.add(word);
+      }
+    }
+    final wordsAlignment = j['words_alignment']?.toString() ?? '';
     final section = j['section'];
     int sectionIndex = 0;
     if (section is Map) {
@@ -468,11 +538,16 @@ class PracticeResult {
         summaryHint: hint,
         verdictCounts: counts,
         summaryCodes: summaryCodes,
+        truncated: m is Map && m['truncated'] == true,
+        uploadedSeconds: m is Map && m['uploaded_seconds'] != null ? double.tryParse(m['uploaded_seconds'].toString()) : null,
+        analyzedSeconds: m is Map && m['analyzed_seconds'] != null ? double.tryParse(m['analyzed_seconds'].toString()) : null,
       ),
       refTimes: times,
       refF0: ref,
       userF0: user,
       notes: notes,
+      words: words,
+      wordsAlignment: wordsAlignment,
       sectionIndex: sectionIndex,
       lessonTitle: j['lesson_title']?.toString() ?? '',
       userMidi: j['user_midi']?.toString() ?? '',

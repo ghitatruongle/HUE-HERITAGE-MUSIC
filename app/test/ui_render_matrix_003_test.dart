@@ -14,6 +14,7 @@ import 'package:hue_heritage_music/screens/heritage/heritage_list_screen.dart';
 import 'package:hue_heritage_music/screens/history/history_screen.dart';
 import 'package:hue_heritage_music/screens/home/home_screen.dart';
 import 'package:hue_heritage_music/screens/learning/learning_screen.dart';
+import 'package:hue_heritage_music/screens/learning/lesson_practice_view.dart';
 import 'package:hue_heritage_music/screens/restoration/restoration_screen.dart';
 import 'package:hue_heritage_music/screens/settings/settings_screen.dart';
 import 'package:hue_heritage_music/screens/transcription/transcription_screen.dart';
@@ -28,7 +29,9 @@ import 'package:provider/provider.dart';
 const List<Size> _sizes = [
   Size(320, 640),
   Size(360, 740),
+  Size(740, 360),
   Size(600, 900),
+  Size(900, 600),
   Size(768, 1024),
   Size(1024, 768),
   Size(1280, 800),
@@ -37,10 +40,10 @@ const List<Size> _sizes = [
 
 const Map<String, dynamic> _tuneJson = {
   'id': 'matrix-1',
-  'title': 'Bai ca matrix',
-  'type': 'Ca Hue',
-  'artist': 'Nghe nhan',
-  'lyrics': 'Tinh tang',
+  'title': 'Bài ca Tình Tang — Ơ hò a í a',
+  'type': 'Ca Huế',
+  'artist': 'Nghệ nhân Ư Ơ',
+  'lyrics': 'Tình tang Ư Ơ đẫm lệ — ế ề ậ ắ ừ ớ',
   'sha256': 'abcd',
   'size': 10,
   'created_at': '2026-11-11T00:00:00Z',
@@ -100,6 +103,8 @@ Future<void> _loadBundledFonts() async {
   await be.load();
   final playfair = FontLoader('PlayfairDisplay')
     ..addFont(rootBundle.load('assets/fonts/PlayfairDisplay.ttf'));
+  playfair.addFont(rootBundle.load('assets/fonts/PlayfairDisplay-SemiBold.ttf'));
+  playfair.addFont(rootBundle.load('assets/fonts/PlayfairDisplay-Bold.ttf'));
   await playfair.load();
 }
 
@@ -178,5 +183,72 @@ void main() {
 
   testWidgets('Admin 7 kich thuoc x 2 theme', (tester) async {
     await _sweep(tester, const AdminScreen());
+  });
+
+  testWidgets('LessonPracticeView (chua chon bai) 7 kich thuoc x 2 theme', (tester) async {
+    await _sweep(tester, const LessonPracticeView());
+  });
+
+  testWidgets('Doi theme live: mau cap nhat, state khong remount, khong exception', (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(1024, 768);
+    final tp = ThemeProvider();
+    final markerKey = GlobalKey();
+    Widget screen() => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ThemeProvider>.value(value: tp),
+            ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
+          ],
+          child: ListenableBuilder(
+            listenable: tp,
+            builder: (context, _) {
+              final m = tp.mode;
+              return MaterialApp(
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: m,
+              home: Scaffold(
+                body: Center(
+                  child: Builder(
+                    builder: (themed) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          key: markerKey,
+                          width: 40,
+                          height: 40,
+                          color: Theme.of(themed).colorScheme.surface,
+                        ),
+                        Text(
+                          'Aa',
+                          style: TextStyle(color: Theme.of(themed).colorScheme.onSurface),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              );
+            },
+          ),
+        );
+    await tester.pumpWidget(screen());
+    await tester.pump();
+    final before = tester.widget<Container>(find.byKey(markerKey)).color;
+    expect(before, AppTheme.lightTheme.colorScheme.surface);
+    tp.setMode(ThemeMode.dark);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    final after = tester.widget<Container>(find.byKey(markerKey)).color;
+    expect(after, AppTheme.darkTheme.colorScheme.surface);
+    expect(after, isNot(before));
+    expect(find.byKey(markerKey), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    tp.setMode(ThemeMode.light);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tester.widget<Container>(find.byKey(markerKey)).color, AppTheme.lightTheme.colorScheme.surface);
+    expect(tester.takeException(), isNull);
   });
 }

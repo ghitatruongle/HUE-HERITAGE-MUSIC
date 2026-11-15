@@ -403,7 +403,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                         ),
                       ],
                     ),
-                    child: const VinylDisc(size: 80),
+                    child: const DanNguyetDisc(size: 80),
                   ),
                 const SizedBox(width: 20),
                 Expanded(
@@ -443,7 +443,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.music_note, size: 20, color: AppTheme.amberGold),
+                    Icon(Icons.music_note, size: 20, color: AppTheme.goldReadable(context)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -471,7 +471,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
               padding: const EdgeInsets.all(20),
               child: SelectableText(
                 item.lyrics,
-                style: const TextStyle(height: 1.8, fontSize: 14.5, fontStyle: FontStyle.italic),
+                style: const TextStyle(height: 1.8, fontSize: 14, fontStyle: FontStyle.italic),
               ),
             ),
           ),

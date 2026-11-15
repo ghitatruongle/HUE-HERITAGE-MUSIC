@@ -27,7 +27,7 @@ class AppTheme {
   static const Color primaryPurpleGlow = Color(0xFF9F75FF);
   static const Color deepPurple = Color(0xFF3B1D66);
   static const Color imperialGold = Color(0xFFD4AF37);
-  static const Color imperialGoldInk = Color(0xFF8A6A00);
+  static const Color imperialGoldInk = Color(0xFF7A5E00);
   static const Color recordDiscDark = Color(0xFF1B0E33);
 
   static Color goldReadable(BuildContext context) {
@@ -40,6 +40,9 @@ class AppTheme {
   static const Color statusWarning = Color(0xFFC26705);
   static const Color statusDanger = Color(0xFFDC2626);
   static const Color statusInfo = Color(0xFF3B82F6);
+
+  static const Color chartUserDark = Color(0xFF7DD3FC);
+  static const Color chartUserLight = Color(0xFF2563EB);
 
   static const Color darkBg = Color(0xFF0E0F17);
   static const Color darkSurface = Color(0xFF161524);
@@ -98,12 +101,12 @@ class AppTheme {
     const display = displayFontFamily;
     const body = bodyFontFamily;
     return TextTheme(
-      headlineLarge: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: textPrimary, height: 1.2, fontFamily: display),
-      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: textPrimary, height: 1.25, fontFamily: display),
-      headlineSmall: TextStyle(fontSize: 19, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display),
-      titleLarge: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display),
-      titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display),
-      titleSmall: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary, height: 1.35, fontFamily: display),
+      headlineLarge: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: textPrimary, height: 1.2, fontFamily: display, fontFamilyFallback: const [body]),
+      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: textPrimary, height: 1.25, fontFamily: display, fontFamilyFallback: const [body]),
+      headlineSmall: TextStyle(fontSize: 19, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display, fontFamilyFallback: const [body]),
+      titleLarge: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display, fontFamilyFallback: const [body]),
+      titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary, height: 1.3, fontFamily: display, fontFamilyFallback: const [body]),
+      titleSmall: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textPrimary, height: 1.35, fontFamily: display, fontFamilyFallback: const [body]),
       bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: textPrimary, height: 1.45, fontFamily: body),
       bodyMedium: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w400, color: textPrimary, height: 1.45, fontFamily: body),
       bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: textSecondary, height: 1.4, fontFamily: body),
@@ -124,6 +127,8 @@ class AppTheme {
       secondaryContainer: Color(0xFF452B00),
       onSecondaryContainer: Color(0xFFFFDDB3),
       tertiary: emeraldGreen,
+      tertiaryContainer: Color(0xFF0B3A35),
+      onTertiaryContainer: Color(0xFFB8E8DD),
       error: statusDanger,
       surface: darkSurface,
       onSurface: darkTextPrimary,
@@ -282,6 +287,8 @@ class AppTheme {
       secondaryContainer: Color(0xFFFFF3D6),
       onSecondaryContainer: Color(0xFF5A4300),
       tertiary: emeraldGreen,
+      tertiaryContainer: Color(0xFFD6F2EA),
+      onTertiaryContainer: Color(0xFF0B3A35),
       error: statusDanger,
       surface: lightSurface,
       onSurface: lightTextPrimary,

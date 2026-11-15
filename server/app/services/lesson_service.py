@@ -343,3 +343,81 @@ def section_wav(item: HeritageItem, section_index: int) -> Optional[Path]:
             if wav_path.exists():
                 return wav_path
     return None
+
+
+WORD_VOICED_MIN_RATIO = 0.2
+WORDS_ALIGNMENT = "line_voiced_word_proportional"
+
+
+def _word_windows(a, b, words):
+    weights = [max(1, len(w)) for w in words]
+    total = sum(weights)
+    spans = []
+    t = a
+    for wgt in weights:
+        dur = (b - a) * wgt / total
+        spans.append((t, t + dur))
+        t += dur
+    return spans
+
+
+def word_feedback(section, result):
+    import bisect
+
+    from . import compare_service as _cmp
+
+    if not section:
+        return []
+    lyrics = section.get("lyrics") or ""
+    lines = [ln.strip() for ln in lyrics.splitlines() if ln.strip()]
+    line_times = section.get("line_times") or []
+    warped = result.get("user_warped_full") or {}
+    w_times = warped.get("times") or []
+    w_f0 = warped.get("f0") or []
+    sample = result.get("sample") or {}
+    s_times = sample.get("times") or []
+    s_f0 = sample.get("f0") or []
+    if not lines or not line_times or not w_times or not s_times:
+        return []
+    sec_start = float(section.get("start") or 0.0)
+    words_out = []
+    for li, line in enumerate(lines):
+        if li >= len(line_times):
+            break
+        lt = line_times[li]
+        a = float(lt.get("start", 0.0))
+        b = float(lt.get("end", 0.0))
+        words = line.split()
+        if not words or b <= a:
+            continue
+        for wi, (rwa, rwb) in enumerate(_word_windows(a - sec_start, b - sec_start, words)):
+            wa = rwa + sec_start
+            wb = rwb + sec_start
+            lo = bisect.bisect_left(w_times, rwa - 1e-6)
+            hi = bisect.bisect_right(w_times, rwb + 1e-6)
+            frames = [f for f in w_f0[lo:hi] if f > 0]
+            total = hi - lo
+            ratio = round(len(frames) / total, 2) if total else 0.0
+            slo = bisect.bisect_left(s_times, rwa - 1e-6)
+            shi = bisect.bisect_right(s_times, rwb + 1e-6)
+            ref_frames = [f for f in s_f0[slo:shi] if f > 0]
+            if len(frames) >= 3 and total and ratio >= WORD_VOICED_MIN_RATIO and ref_frames:
+                u_med = sorted(frames)[len(frames) // 2]
+                r_med = sorted(ref_frames)[len(ref_frames) // 2]
+                err = round(_cmp.to_cents(u_med) - _cmp.to_cents(r_med), 1)
+                code = _cmp.verdict_code(err)
+            else:
+                err = None
+                code = "unclear"
+            words_out.append({
+                "line": li,
+                "index": wi,
+                "text": words[wi],
+                "start": round(wa, 3),
+                "end": round(wb, 3),
+                "voiced_ratio": ratio,
+                "err_cents": err,
+                "verdict_code": code,
+                "verdict": _cmp.VERDICT_TEXT[code],
+            })
+    return words_out

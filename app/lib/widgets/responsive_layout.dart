@@ -43,6 +43,7 @@ class ResponsiveScaffold extends StatefulWidget {
 
 class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
   bool _isSidebarCollapsed = false;
+  final Set<int> _visitedTabs = {};
 
   @override
   Widget build(BuildContext context) {
@@ -51,8 +52,16 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     final locale = context.watch<LocaleProvider>();
     final theme = context.watch<ThemeProvider>();
     final server = context.watch<ServerConfig>();
+    _visitedTabs.add(widget.selectedIndex.clamp(0, widget.destinations.length - 1));
 
-    return Scaffold(
+    return PopScope(
+      canPop: widget.selectedIndex == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && widget.selectedIndex != 0) {
+          widget.onDestinationSelected(0);
+        }
+      },
+      child: Scaffold(
       floatingActionButton: widget.floatingActionButton,
       body: Column(
         children: [
@@ -64,6 +73,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
         ],
       ),
       bottomNavigationBar: isDesktop ? null : _buildMobileBottomBar(context, locale),
+      ),
     );
   }
 
@@ -112,6 +122,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                 end: Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppTheme.imperialGold.withValues(alpha: 0.85), width: 1.2),
                             ),
                             child: const AppLogo(size: 36, borderRadius: 10, iconSize: 20, iconColor: Colors.white),
                           ),
@@ -129,6 +140,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                 end: Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.imperialGold.withValues(alpha: 0.85), width: 1.3),
                               boxShadow: [
                                 BoxShadow(
                                   color: AppTheme.primaryPurple.withValues(alpha: 0.3),
@@ -152,9 +164,9 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                 ),
                                 Text(
                                   locale.strings.sidebarTagline,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10.5,
-                                    color: AppTheme.amberGold,
+                                    color: AppTheme.goldReadable(context),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -258,11 +270,11 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                           decoration: BoxDecoration(
-                                            color: AppTheme.amberGold.withValues(alpha: 0.2),
+                                            color: AppTheme.goldReadable(context).withValues(alpha: 0.2),
                                             borderRadius: BorderRadius.circular(4),
-                                            border: Border.all(color: AppTheme.amberGold, width: 0.8),
+                                            border: Border.all(color: AppTheme.goldReadable(context), width: 0.8),
                                           ),
-                                          child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 9, fontWeight: FontWeight.bold)),
+                                          child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 10, fontWeight: FontWeight.bold)),
                                         ),
                                       ],
                                     ],
@@ -395,9 +407,11 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
         Expanded(
           child: ContentMaxWidth(
             maxWidth: 1360,
-            child: widget
-                .destinations[widget.selectedIndex.clamp(0, widget.destinations.length - 1)]
-                .screen,
+            child: _LazyIndexedStack(
+              index: widget.selectedIndex.clamp(0, widget.destinations.length - 1),
+              visited: _visitedTabs,
+              children: [for (final d in widget.destinations) d.screen],
+            ),
           ),
         ),
       ],
@@ -412,9 +426,11 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
   ) {
     return ContentMaxWidth(
       maxWidth: 1360,
-      child: widget
-          .destinations[widget.selectedIndex.clamp(0, widget.destinations.length - 1)]
-          .screen,
+      child: _LazyIndexedStack(
+        index: widget.selectedIndex.clamp(0, widget.destinations.length - 1),
+        visited: _visitedTabs,
+        children: [for (final d in widget.destinations) d.screen],
+      ),
     );
   }
 
@@ -444,6 +460,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                       ),
                       IconButton(
+                        tooltip: locale.strings.closeBtn,
                         icon: const Icon(Icons.close),
                         onPressed: () => Navigator.pop(ctx),
                       ),
@@ -564,5 +581,28 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       'admin' => s.navAdmin,
       _ => key,
     };
+  }
+}
+
+class _LazyIndexedStack extends StatelessWidget {
+  final int index;
+  final Set<int> visited;
+  final List<Widget> children;
+
+  const _LazyIndexedStack({
+    required this.index,
+    required this.visited,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IndexedStack(
+      index: index,
+      children: [
+        for (var i = 0; i < children.length; i++)
+          (i == index || visited.contains(i)) ? children[i] : const SizedBox.shrink(),
+      ],
+    );
   }
 }

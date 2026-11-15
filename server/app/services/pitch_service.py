@@ -234,11 +234,13 @@ def _octave_smooth(f0s, window=5, passes=2, max_cents=700.0):
     if int(voiced.sum()) < 5:
         return f0s
     half = window // 2
+    lo_edge = float(arr[0])
+    hi_edge = float(arr[-1])
     for _ in range(passes):
         stacks = [arr]
         for off in range(1, half + 1):
-            stacks.append(np.concatenate((arr[off:], arr[:off] * 0.0)))
-            stacks.append(np.concatenate((arr[-off:] * 0.0, arr[:-off])))
+            stacks.append(np.concatenate((arr[off:], np.full(off, lo_edge))))
+            stacks.append(np.concatenate((np.full(off, hi_edge), arr[:-off])))
         M = np.median(np.stack(stacks), axis=0)
         safe = np.where(M > 0, M, 1.0)
         ratio = np.where(voiced & (M > 0), arr / safe, 1.0)

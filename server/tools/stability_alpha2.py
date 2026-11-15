@@ -310,10 +310,10 @@ def phase_audio_pipeline(base, admin_tok, user_tok, lid, sec, sample_wav):
             t0 = time.time()
             if kind == 0:
                 r = c.post("/api/music/analyze-pitch", files={"file": ("a.wav", user_wav, "audio/wav")}, headers=h)
-                ok = (r.status_code == 200 and r.json().get("frames", 0) >= 0) or (r.status_code == 429 and "too many concurrent" in str(r.json().get("detail", "")))
+                ok = (r.status_code == 200 and r.json().get("frames", 0) >= 0) or (r.status_code == 429 and "too many requests" in str(r.json().get("detail", "")))
             elif kind == 1:
                 r = c.post("/api/music/compare", files={"sample": ("s.wav", ref_wav, "audio/wav"), "user": ("u.wav", user_wav, "audio/wav")}, headers=h)
-                ok = (r.status_code == 200 and "metrics" in r.json() and "reference_quality" in r.json()["metrics"]) or (r.status_code == 429 and "too many concurrent" in str(r.json().get("detail", "")))
+                ok = (r.status_code == 200 and "metrics" in r.json() and "reference_quality" in r.json()["metrics"]) or (r.status_code == 429 and "too many requests" in str(r.json().get("detail", "")))
             elif kind == 2:
                 tr = [-2, 0, 3][idx % 3]
                 r = c.post(f"/api/lessons/scales/bac/practice?transpose={tr}", files={"file": ("sc.wav", scale_wav, "audio/wav")}, headers=h)
@@ -371,7 +371,7 @@ def phase_mixed_soak(base, admin_tok, user_tok, lid, sec, seconds=120):
                 ok = r.status_code == 200
             elif kind < 15:
                 r = c.post("/api/music/analyze-pitch", files={"file": ("a.wav", sample_wav_small, "audio/wav")}, headers=h)
-                ok = r.status_code == 200 or (r.status_code == 429 and "too many concurrent" in str(r.json().get("detail", "")))
+                ok = r.status_code == 200 or (r.status_code == 429 and "too many requests" in str(r.json().get("detail", "")))
             elif kind < 17:
                 r = c.post(f"/api/lessons/{lid}/practice?section={sec}", files={"file": ("u.wav", sample_wav_small, "audio/wav")}, headers=h)
                 ok = r.status_code in (200, 429)

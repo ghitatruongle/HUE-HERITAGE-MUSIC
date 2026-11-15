@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import secrets
+import os
 import threading
 import time
 
@@ -175,9 +176,13 @@ def get_valid_invite_codes(db=None) -> List[str]:
     return [c for c in codes if not (c in seen or seen.add(c))]
 
 
+_PBKDF2_GATE = threading.Semaphore(max(2, min(8, os.cpu_count() or 4)))
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), PBKDF2_ITERATIONS).hex()
+    with _PBKDF2_GATE:
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), PBKDF2_ITERATIONS).hex()
     return f"pbkdf2${PBKDF2_ITERATIONS}${salt}${digest}"
 
 
@@ -194,7 +199,8 @@ def verify_password(password: str, stored: str) -> bool:
         salt, digest = parts
     else:
         return False
-    calc = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations).hex()
+    with _PBKDF2_GATE:
+        calc = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations).hex()
     return hmac.compare_digest(calc, digest)
 
 

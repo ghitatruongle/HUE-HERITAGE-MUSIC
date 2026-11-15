@@ -19,7 +19,13 @@ class RecordingStopResult {
 }
 
 class RecordingController {
-  RecordingController(this._recorder);
+  static final Set<RecordingController> _instances = {};
+
+  RecordingController(this._recorder) {
+    _instances.add(this);
+  }
+
+  static bool get anyBusy => _instances.any((c) => c._active != null || c.arming || c._stopLock != null);
 
   final AudioRecorder _recorder;
   int epoch = 0;
@@ -115,5 +121,6 @@ class RecordingController {
     try {
       await _recorder.dispose();
     } catch (_) {}
+    _instances.remove(this);
   }
 }

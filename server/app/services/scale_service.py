@@ -6,18 +6,35 @@ import wave
 
 from ..services import pitch_service, compare_service
 
+ROOT_CENTS_REF = 261.63
+SCALE_CENTS = {
+    "bac": [0.0, 154.0, 386.0, 498.0, 702.0],
+    "nam": [0.0, 154.0, 386.0, 631.0, 702.0],
+}
+SCALE_MATCH_TOLERANCE_CENTS = 130.0
+
 SCALES = {
     "bac": {
         "name": "Ngũ cung Bắc",
-        "frequencies": [261.63, 293.66, 349.23, 392.0, 440.0, 523.25],
-        "note_names": ["Do", "Re", "Fa", "Sol", "La", "Do cao"],
+        "cents": [0.0, 154.0, 386.0, 498.0, 702.0],
+        "note_names": ["Cung", "Thương", "Tần", "Xứng", "Phu", "Cung cao"],
     },
     "nam": {
         "name": "Ngũ cung Nam",
-        "frequencies": [261.63, 293.66, 349.23, 392.0, 466.16, 523.25],
-        "note_names": ["Do", "Re", "Fa", "Sol", "Si giáng", "Do cao"],
+        "cents": [0.0, 154.0, 386.0, 631.0, 702.0],
+        "note_names": ["Cung", "Thương", "Tần", "Xứng", "Phu", "Cung cao"],
     },
 }
+
+
+def _freq_from_cents(cent, transpose=0):
+    return round(ROOT_CENTS_REF * (2.0 ** ((cent + transpose * 100.0) / 1200.0)), 2)
+
+
+for _sid, _cfg in SCALES.items():
+    _cfg["frequencies"] = [
+        _freq_from_cents(c, 0) for c in _cfg["cents"]
+    ] + [_freq_from_cents(1200.0, 0)]
 
 NOTE_SECONDS = 0.9
 GAP_SECONDS = 0.15
@@ -43,13 +60,37 @@ def get_scale(scale_id: str):
 
 
 def transposed_frequencies(cfg, transpose: int):
-    factor = 2.0 ** (transpose / 12.0)
-    return [round(f * factor, 2) for f in cfg["frequencies"]]
+    transpose = max(-12, min(12, int(transpose)))
+    return [_freq_from_cents(c, transpose) for c in cfg["cents"]] + [
+        _freq_from_cents(1200.0, transpose)
+    ]
 
 
 def _pitch_class(freq: float) -> int:
     midi = 69 + 12 * math.log2(freq / 440.0)
     return int(round(midi)) % 12
+
+
+def _cents_class(freq: float) -> float:
+    return (1200.0 * math.log2(freq / ROOT_CENTS_REF)) % 1200.0
+
+
+def _min_cents_distance(c: float, centers) -> float:
+    best = 1200.0
+    for x in centers:
+        d = abs(c - x) % 1200.0
+        d = min(d, 1200.0 - d)
+        if d < best:
+            best = d
+    return best
+
+
+def _scale_centers(scale_id: str, transpose: int):
+    cfg = get_scale(scale_id)
+    if cfg is None:
+        return []
+    shift = (transpose * 100.0) % 1200.0
+    return [((c + shift) % 1200.0) for c in cfg["cents"]]
 
 
 def reference_wav(scale_id: str, transpose: int = 0) -> bytes:
@@ -131,10 +172,25 @@ def practice_scale(scale_id: str, data: bytes, transpose: int = 0) -> dict:
     total = sum(chroma) or 1.0
     chroma = [round(v / total, 4) for v in chroma]
     scale_pc = sorted({_pitch_class(f) for f in freqs})
-    on_scale = sum(chroma[i] for i in scale_pc)
+
+    centers = _scale_centers(scale_id, transpose)
+    total_voiced = len(voiced) or 1
+    assigned = [0] * len(centers)
+    on_count = 0
+    for f in voiced:
+        c = _cents_class(f)
+        dists = [
+            (min(abs(c - x) % 1200.0, 1200.0 - abs(c - x) % 1200.0), i)
+            for i, x in enumerate(centers)
+        ]
+        d, idx = min(dists)
+        if d <= SCALE_MATCH_TOLERANCE_CENTS:
+            on_count += 1
+            assigned[idx] += 1
+    on_scale = on_count / total_voiced
 
     s_times, s_f0 = _reference_contour(freqs)
-    result = compare_service.compare_contours(s_times, s_f0, u_times, u_f0)
+    result = compare_service.compare_contours(s_times, s_f0, u_times, u_f0, octave_normalize=False)
     metrics = result["metrics"]
 
     names = cfg["note_names"]
@@ -156,9 +212,9 @@ def practice_scale(scale_id: str, data: bytes, transpose: int = 0) -> dict:
         })
 
     legacy_hits = []
-    for name, freq in zip(cfg["note_names"], cfg["frequencies"]):
-        pc = _pitch_class(freq)
-        legacy_hits.append({"name": name, "share": round(chroma[pc], 3), "hit": chroma[pc] >= 0.05})
+    for i, name in enumerate(cfg["note_names"][: len(centers)]):
+        share = round(assigned[i] / total_voiced, 3)
+        legacy_hits.append({"name": name, "share": share, "hit": share >= 0.05})
 
     return {
         "scale_id": scale_id,
@@ -172,6 +228,8 @@ def practice_scale(scale_id: str, data: bytes, transpose: int = 0) -> dict:
         "mean_abs_cents": metrics["mean_abs_cents"],
         "chroma": chroma,
         "scale_pitch_classes": scale_pc,
+        "scale_cents": centers,
+        "tuning": "phi_can_bang_tran_van_khe",
         "on_scale_share": round(on_scale, 3),
         "notes": legacy_hits,
         "performance": perf,

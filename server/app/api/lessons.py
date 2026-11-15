@@ -3,6 +3,7 @@ import asyncio
 import logging
 import re
 import secrets
+import threading
 import time
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
@@ -179,25 +180,28 @@ async def practice_scale(
 PRACTICE_MIDI_NAME = re.compile(r"^practice_[A-Za-z0-9]{8,32}(_\d+_\d{10})?\.mid$")
 PRACTICE_MAX_INFLIGHT_PER_USER = 2
 _PRACTICE_INFLIGHT: dict = {}
+_PRACTICE_INFLIGHT_LOCK = threading.Lock()
 
 
 def _practice_slot_acquire(user_id: Optional[str]) -> None:
     if not user_id:
         return
-    current = _PRACTICE_INFLIGHT.get(user_id, 0)
-    if current >= PRACTICE_MAX_INFLIGHT_PER_USER:
-        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
-    _PRACTICE_INFLIGHT[user_id] = current + 1
+    with _PRACTICE_INFLIGHT_LOCK:
+        current = _PRACTICE_INFLIGHT.get(user_id, 0)
+        if current >= PRACTICE_MAX_INFLIGHT_PER_USER:
+            raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
+        _PRACTICE_INFLIGHT[user_id] = current + 1
 
 
 def _practice_slot_release(user_id: Optional[str]) -> None:
     if not user_id:
         return
-    remaining = _PRACTICE_INFLIGHT.get(user_id, 0) - 1
-    if remaining <= 0:
-        _PRACTICE_INFLIGHT.pop(user_id, None)
-    else:
-        _PRACTICE_INFLIGHT[user_id] = remaining
+    with _PRACTICE_INFLIGHT_LOCK:
+        remaining = _PRACTICE_INFLIGHT.get(user_id, 0) - 1
+        if remaining <= 0:
+            _PRACTICE_INFLIGHT.pop(user_id, None)
+        else:
+            _PRACTICE_INFLIGHT[user_id] = remaining
 
 
 @router.get("/practice-midi/{name}")
@@ -313,7 +317,8 @@ async def practice_section(
                 return None
             reference = wav_path.read_bytes()
             reference_kind = "original"
-        result = compare_service.compare(reference, data)
+        ref_key = f"lesson:{item.sha256 or item.id}:{section}:{reference_kind}"
+        result = compare_service.compare(reference, data, sample_key=ref_key, include_warped_full=True)
         section_info = None
         lesson = lesson_service.get_lesson(item)
         for s in lesson.get("sections", []):
@@ -323,6 +328,8 @@ async def practice_section(
         result["lesson_id"] = lesson_id
         result["lesson_title"] = item.title
         result["reference"] = reference_kind
+        result["words"] = lesson_service.word_feedback(section_info, result)
+        result["words_alignment"] = lesson_service.WORDS_ALIGNMENT
         if result.get("notes"):
             try:
                 from ..services import midi_service
@@ -341,6 +348,8 @@ async def practice_section(
     _practice_slot_acquire(user_id)
     try:
         result = await asyncio.to_thread(_run)
+    except compare_service.CompareEmptyError as e:
+        raise HTTPException(status_code=422, detail={"code": e.code, "message": e.message})
     except ValueError as e:
         msg = str(e)
         if "empty contour" in msg:

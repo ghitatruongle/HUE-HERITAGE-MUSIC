@@ -189,7 +189,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           padding: const EdgeInsets.only(top: 4),
           child: Row(
             children: [
-              Text(_kindLabel(e.kind, locale), style: const TextStyle(fontSize: 11, color: AppTheme.amberGold, fontWeight: FontWeight.w600)),
+              Text(_kindLabel(e.kind, locale), style: TextStyle(fontSize: 11, color: AppTheme.goldReadable(context), fontWeight: FontWeight.w600)),
               const Text(' • ', style: TextStyle(fontSize: 11)),
               Text(_formatDate(e.at), style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
               if (e.score != null) ...[

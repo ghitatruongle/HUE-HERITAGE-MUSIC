@@ -803,7 +803,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
       color: AppTheme.amberGold.withValues(alpha: 0.08),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        leading: const Icon(Icons.cleaning_services_outlined, color: AppTheme.amberGold),
+        leading: Icon(Icons.cleaning_services_outlined, color: AppTheme.goldReadable(context)),
         title: Text(
           strings.adminCleanupTitle,
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
@@ -876,7 +876,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                 Icon(
                   adminOnly ? Icons.lock_outline : Icons.public,
                   size: 15,
-                  color: adminOnly ? AppTheme.amberGold : AppTheme.emeraldGreen,
+                  color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldGreen,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -884,7 +884,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
-                    color: adminOnly ? AppTheme.amberGold : AppTheme.emeraldGreen,
+                    color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldGreen,
                   ),
                 ),
                 if (entry.ownerUsername.isNotEmpty) ...[

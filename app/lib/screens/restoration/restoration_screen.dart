@@ -10,6 +10,7 @@ import '../../api/endpoints/heritage_api.dart';
 import '../../api/endpoints/restoration_api.dart';
 import '../../api/endpoints/sing_api.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/compare_result.dart';
 import '../../models/heritage_item.dart';
@@ -22,6 +23,7 @@ import '../../widgets/audio_player_bar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/compare_chart.dart';
+import '../../widgets/heritage_motif.dart';
 import '../../widgets/skeleton_loader.dart';
 
 class RestorationScreen extends StatefulWidget {
@@ -189,11 +191,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppTheme.amberGold.withValues(alpha: 0.2),
+                  color: AppTheme.goldReadable(context).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppTheme.amberGold),
+                  border: Border.all(color: AppTheme.goldReadable(context)),
                 ),
-                child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 10, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 8),
               Expanded(child: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
@@ -285,10 +287,25 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       _log(history, 'compare-tune', _compareSampleItem!.title, 'error');
       if (mounted) {
         setState(() {
-          _compareError = ApiClient.describe(e);
+          _compareError = _compareErrorText(e, strings);
           _isComparing = false;
         });
       }
+    }
+  }
+
+  String _compareErrorText(Object e, AppStrings strings) {
+    switch (ApiClient.errorCode(e)) {
+      case 'too_quiet':
+        return strings.practiceErrTooQuiet;
+      case 'no_voice':
+        return strings.practiceErrNoVoice;
+      case 'too_short':
+        return strings.practiceErrTooShort;
+      case 'reference_invalid':
+        return strings.practiceErrRefInvalid;
+      default:
+        return ApiClient.describe(e);
     }
   }
 
@@ -314,16 +331,8 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: TabBar(
+            child: ImperialTabBar(
               controller: _tabController,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicator: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              labelColor: Theme.of(context).colorScheme.onPrimary,
-              unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               tabs: [
                 Tab(
                   icon: const Icon(Icons.auto_fix_high, size: 18),
@@ -365,11 +374,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.amberGold.withValues(alpha: 0.25),
+              color: AppTheme.goldReadable(context).withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppTheme.amberGold, width: 1),
+              border: Border.all(color: AppTheme.goldReadable(context), width: 1),
             ),
-            child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontWeight: FontWeight.bold, fontSize: 11)),
+            child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontWeight: FontWeight.bold, fontSize: 11)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -512,9 +521,9 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: isSel ? AppTheme.amberGold.withValues(alpha: 0.15) : Colors.transparent,
+                color: isSel ? AppTheme.goldReadable(context).withValues(alpha: 0.15) : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
-                border: isSel ? Border.all(color: AppTheme.amberGold, width: 1.2) : null,
+                border: isSel ? Border.all(color: AppTheme.goldReadable(context), width: 1.2) : null,
               ),
               child: ListTile(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -527,10 +536,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     minimumSize: const Size(44, 44),
-                    side: const BorderSide(color: AppTheme.amberGold),
+                    side: BorderSide(color: AppTheme.goldReadable(context)),
                   ),
-                  icon: const Icon(Icons.auto_fix_high, size: 14, color: AppTheme.amberGold),
-                  label: Text(strings.restoreActionBtn, style: const TextStyle(fontSize: 11, color: AppTheme.amberGold)),
+                  icon: Icon(Icons.auto_fix_high, size: 14, color: AppTheme.goldReadable(context)),
+                  label: Text(strings.restoreActionBtn, style: TextStyle(fontSize: 11, color: AppTheme.goldReadable(context))),
                   onPressed: () {
                     onSelect(it);
                     _runDspRestoration(it);
@@ -586,7 +595,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.history, size: 18, color: AppTheme.amberGold),
+                    Icon(Icons.history, size: 18, color: AppTheme.goldReadable(context)),
                     const SizedBox(width: 8),
                     Text(strings.restorationBeforeLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
@@ -823,7 +832,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.help_outline, size: 18, color: AppTheme.amberGold),
+                        Icon(Icons.help_outline, size: 18, color: AppTheme.goldReadable(context)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(strings.comparePickTarget, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -840,10 +849,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.audio_file, size: 20, color: AppTheme.amberGold),
+                            Icon(Icons.audio_file, size: 20, color: AppTheme.goldReadable(context)),
                             const SizedBox(width: 8),
                             Expanded(child: Text(_uploadedTargetName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                             IconButton(
+                              tooltip: strings.clearSelectedFile,
                               icon: const Icon(Icons.close, size: 16),
                               onPressed: () => setState(() {
                                 _uploadedTargetBytes = null;
@@ -953,7 +963,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
             ? strings.compareVerdictModerate
             : strings.compareVerdictDifferent;
 
-    final color = score >= 80 ? AppTheme.emeraldGreen : (score >= 50 ? AppTheme.amberGold : AppTheme.statusDanger);
+    final color = score >= 80 ? AppTheme.emeraldGreen : (score >= 50 ? AppTheme.goldReadable(context) : AppTheme.statusDanger);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

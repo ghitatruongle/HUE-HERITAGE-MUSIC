@@ -90,6 +90,9 @@ class AppStrings {
   String get restoredAudio => isVi ? 'Bản phục chế' : 'Restored';
   String get restoreActionBtn => isVi ? 'Phục dựng' : 'Restore';
   String get closeBtn => isVi ? 'Đóng' : 'Close';
+  String get obscureHidePassword => isVi ? 'Ẩn mật khẩu' : 'Hide password';
+  String get obscureShowPassword => isVi ? 'Hiện mật khẩu' : 'Show password';
+  String get clearSelectedFile => isVi ? 'Xóa tệp đã chọn' : 'Remove selected file';
   String get practiceNoLessons => isVi ? 'Chưa có bài học nào. Hãy nạp dữ liệu di sản trên máy chủ (bài có file âm thanh sẽ thành bài học).' : 'No lessons yet. Load heritage data on the server (any item with audio becomes a lesson).';
   String get practicePickLesson => isVi ? 'Chọn bài học' : 'Choose lesson';
   String get practiceListenLoop => isVi ? 'Nghe mẫu (lặp)' : 'Listen (loop)';
@@ -159,6 +162,20 @@ class AppStrings {
   String get practiceHintUnclearVoice => isVi ? 'Chưa rõ giọng — thu gần mic hơn' : 'Voice unclear — sing closer to the mic';
   String get practiceHintRefUnclearHere => isVi ? 'Bản mẫu không rõ nốt ở đoạn này' : 'Reference unclear here';
   String get practiceHintNoteNotInRef => isVi ? 'Nốt này không có trong bản mẫu' : 'This note is not in the reference';
+  String get practiceHintOctaveDiff => isVi ? 'Hát lệch quãng tám — hãy hát cùng quãng với bản mẫu' : 'Octave off — sing in the same octave as the reference';
+  String get practiceErrTooQuiet => isVi ? 'Bản thu quá nhỏ — hãy hát to và gần mic hơn' : 'Recording too quiet — sing louder and closer to the mic';
+  String get practiceErrNoVoice => isVi ? 'Không nhận ra giọng hát trong bản thu' : 'No singing voice detected in the recording';
+  String get practiceErrTooShort => isVi ? 'Bản thu quá ngắn để chấm điểm' : 'Recording too short to score';
+  String get practiceErrRefInvalid => isVi ? 'Bản mẫu bài học chưa phân tích được — hãy nạp lại bài học' : 'Lesson reference could not be analyzed — reload the lesson';
+  String practiceCountingIn(int n) => isVi ? 'Đếm nhập $n' : 'Count-in $n';
+  String get practiceCountInRunning => isVi ? 'Đang đếm nhập…' : 'Counting in…';
+  String practiceTruncatedFlag(double analyzed, double uploaded) => isVi
+      ? 'Chỉ chấm ${analyzed.toStringAsFixed(0)}s đầu trên ${uploaded.toStringAsFixed(0)}s bản thu'
+      : 'Only first ${analyzed.toStringAsFixed(0)}s of ${uploaded.toStringAsFixed(0)}s analyzed';
+  String get practiceWordTapHint => isVi ? 'bấm từ để nghe mẫu đoạn đó' : 'tap a word to hear that part';
+  String get practiceWordApprox => isVi ? '(thời lượng từ ước lượng theo câu lời)' : '(word timing estimated per lyric line)';
+  String get practiceBestTake => isVi ? 'Take tốt nhất' : 'Best take';
+  String get practiceLessonGone => isVi ? 'Bài học này không còn trong danh sách' : 'This lesson is no longer in the list';
   String practiceHintCountOk(int n) => isVi ? '$n nốt chuẩn' : '$n notes in tune';
   String practiceHintCountMinor(int n) => isVi ? '$n nốt lệch nhẹ' : '$n slightly off';
   String practiceHintCountOff(int n) => isVi ? '$n nốt lệch cao độ' : '$n notes off pitch';

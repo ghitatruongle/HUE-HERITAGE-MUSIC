@@ -428,7 +428,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
   Widget _buildHeaderBanner(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
-    return Container(
+    return RepaintBoundary(
+      child: Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -485,6 +486,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         ],
         ),
       ),
+      ),
     );
   }
 
@@ -492,13 +494,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     final strings = context.watch<LocaleProvider>().strings;
     return Container(
       color: _surfaceVariant,
-      child: TabBar(
+      child: ImperialTabBar(
         controller: _tabController,
-        indicatorColor: AppTheme.imperialGold,
-        indicatorWeight: 3,
-        labelColor: AppTheme.imperialGold,
-        unselectedLabelColor: _onSurfaceVariant,
-        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
         tabs: [
           Tab(
             icon: const Icon(Icons.menu_book_rounded, size: 19),
@@ -706,7 +703,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             Icons.music_note_rounded,
             strings.creationModeLabel,
             item.modeSystem.isNotEmpty ? item.modeSystem : item.tonal,
-            accentColor: AppTheme.amberGold,
+            accentColor: AppTheme.goldReadable(context),
           ),
           if (item.verseStructure.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -995,7 +992,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         children: [
           Row(
             children: [
-              const Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppTheme.amberGold),
+              Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppTheme.goldReadable(context)),
               const SizedBox(width: 6),
               Text(
                 strings.creationRhymeGuideTitle,

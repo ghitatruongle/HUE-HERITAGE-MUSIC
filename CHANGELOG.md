@@ -1,5 +1,53 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.5-preview (2026-11-15)
+
+> Đợt "giao diện Huế + luyện hát chốt hạ": hoàn thiện T1→T10 — sáng/tối đạt WCAG AA, font display đầy đủ weight, đàn nguyệt thay đĩa vinyl, chống lag scroll/render; chấm điểm trung thực (octave-normalize, mã lỗi cấu trúc, per-word thật, thang Ca Huế phi-cân bằng, ornament thưởng); máy trạng thái luyện hát sạch + trải nghiệm dạy học đầy đủ; web không freeze; review vòng 1 vá 9/10 + battery bảo mật D1→D16 toàn CLEAN với 1 lỗ hổng thật đã vá gốc (PBKDF2 GIL starvation).
+
+### Giao diện Huế + sáng/tối (T1–T4)
+- **Hệ vàng kim đạt WCAG AA**: mọi chỗ hardcode route qua `goldReadable()`; ink đậm hơn `#7A5E00` (≥4.5:1 trên mọi nền sáng); token chart user; pin contrast mở rộng (text 4.5 · UI 3.0 · container · accent blend 14%)
+- **Tertiary container tường minh**: dark `#0B3A35`/`#B8E8DD` (9.35) · light `#D6F2EA`/`#0B3A35` (10.62) — hết vi phạm 2.67
+- **Font display đầy đủ**: PlayfairDisplay SemiBold/Bold (weight 600/700) — hết faux-bold tiêu đề; `fontFamilyFallback` cho display styles; web `color-scheme` meta chống FOUC
+- **Đàn nguyệt thay đĩa vinyl**: `DanNguyetDisc` (thân gỗ + rosette 8 cánh + 2 dây + bridge) — vẽ đúng 12→300px; `ImperialTabBar` vàng kim thống nhất learning/restoration/creation; sidebar rim ấn triện; EmptyState gold ring + scrollable
+- **Chống lag**: Home chuyển `CustomScrollView` + `SliverGrid` lazy; `RepaintBoundary` quanh chart hướng dẫn/VU/preview/skeleton/header creation; perf gate tick thu **median 0.88ms** và scroll 200 mục **2.66ms** (< 8ms)
+
+### Chấm điểm trung thực (T5)
+- **Octave-normalize**: hát lệch quãng tám (nam/nữ) không còn bị điểm 0 — err chuẩn hóa ±1200c + flag `octave_diff` + hint; drill thang âm giữ nguyên phạt octave (`octave_normalize=False`)
+- **Mã lỗi cấu trúc thay điểm 0 im lặng**: âm yếu/quá ngắn/không giọng/mẫu hỏng → 422 `{code: too_quiet/no_voice/too_short/reference_invalid}` + client dịch VI/EN (hết dump JSON thô)
+- **Truncation flag**: take >35s ghi `truncated` + `uploaded_seconds`/`analyzed_seconds` — client cảnh báo "chỉ chấm Ns đầu"
+- Verdict người học 20/50→**35/65 cents** · ngưỡng segmentation hợp nhất 80=100c · metrics tính trên contour đã smooth · `sample_key` bỏ sha256 lặp mỗi request
+
+### Per-word thật (T6)
+- `words[]` trả onset/offset/voiced_ratio/err/verdict **từng từ** (line_times voiced-segment + chia tỷ lệ ký tự, `words_alignment` khai báo trung thực) — sửa lỗi trục thời gian section≥1 toàn "unclear"; client word chips **bấm được** (nghe mẫu đúng đoạn từ) + karaoke highlight word-level
+
+### Thang Ca Huế phi-cân bằng (T7)
+- Thay 12-TET piano: **Bắc [0,154,386,498,702] · Nam [0,154,386,631,702] cents** (Trần Văn Khê), tên nốt Cung/Thương/Tần/Xứng/Phu; match tolerance 130c; reference audio/contour dùng tần số mới
+- **Ornament không bị phạt**: vibrato MAD ×0.4 + thưởng tối đa +5 vào score; **DTW band 0.12→0.25** cho phép học chậm align được
+
+### Máy trạng thái luyện hát sạch (T8)
+- Hết chấm nhầm take: xóa result cũ khi thu lại · `takeNo` chốt trước await upload · epoch kill khi đổi lesson · grade khóa khi đang thu/đếm nhập · cross-tab mic guard · scale grade guard
+- **Count-in có UI đếm ngược** (beat flash + số) · lỗi có retry + dịch VI/EN theo mã · MIDI download ký URL cả desktop · `RecordingController.anyBusy` registry
+
+### Trải nghiệm dạy học (T9)
+- Contour hướng dẫn hiện **trước + sau khi thu** (không chỉ khi đang thu); A/B take thật (take tốt nhất có huy hiệu, bấm nghe lại); thang âm nghe lại bản thu; count-in theo tốc độ 0.5x; history chart theo ngày thật + rows bấm xem được bài học
+
+### Web parity + hiệu năng (T10)
+- `LocalPitch.analyzeChunked` (yield mỗi 24 frame) — web hết freeze sau take; test parity chunked↔sync
+
+### Điều hướng + a11y + tài nguyên (C5–C7)
+- **C5**: `LazyIndexedStack` giữ nguyên state tab khi chuyển qua lại (hết mất form/kết quả) + `PopScope` back ở tab trong → về Home (hết thoát nhầm app) · history rows bấm xem được
+- **C6**: tooltip 3 IconButton còn thiếu · tap target 48dp (speed/take chips + word chips) · Tab traversal + Semantics field có test
+- **C7**: assets đúng chuẩn 2 file logo 1024² · test render dpr 1x/2x/3x
+
+### 🔴 Vá thật: PBKDF2 GIL starvation (D11)
+- Flood CPU 40 luồng làm health trễ 5s (GIL starve event loop) — `_PBKDF2_GATE` semaphore (2–8 theo CPU) bó concurrent PBKDF2 trong `hash_password`/`verify_password`; rerun DOS raid **16/16** health 6/6 mẫu 200
+
+### Kiểm định
+- pytest **389/389** (+2 test khóa PBKDF2 gate) · flutter analyze **0** · flutter test **151/151** · matrix render **14 màn × 9 khổ (đủ xoay) × 2 theme** 0 overflow · font VN **7/7 đủ dấu** (fontTools cmap) · build web ✓ · secrets/debug scan diff = 0
+- **Bảo mật D1→D16 toàn CLEAN trên sân cô lập :8004**: basic probe **24/24** · SQLI **84.016 lượt CLEAN** (13 nhóm) · XSS **1.848 CLEAN** + khai thác thật thất bại 4 lớp (JSON escape · USERNAME_RE · CSP · Flutter canvas 0 DOM sink) · CSRF **478.628 forged CLEAN** + kiến trúc Bearer-only/zero-cookie đo được · PWD-HUNT **23/23** · IDOR+ma trận **16/16 (204 tổ hợp 0 lệch)** · UPLOAD **18/18** (traversal/MIME/chunked/signed-URL) · RACE **15/15** · TOKEN **20/20** (TTL 72h/8h · ký chéo · epoch kill phủ slid) · DOS **16/16** (sau vá) · RATE-LIMIT **8/8** (default config: boundary req 119 · XFF toàn 429 · 429 uniform) · ADMIN-MAX **27/27 "bất khả xâm nhập"** (kể cả dưới bão 16 thread) · KILL-CHAIN **29/29 giai đoạn chặn** (7 chuỗi phối hợp) · FINAL ASSAULT **24.818 req · 0 breach** · D16 review final **0 lỗ hổng mở** (3 lớp: vá↔test 18/18 · spot sweep 8/8 · invariants admins==1 'admin'=0)
+- **MEGA B2**: 24k→29.5k VU × 4 hình thái — 5xx=0 · health max 19ms/50 mẫu · RSS 308<400MB · shedding env-tunable chứng minh
+- Sân bảo mật mới :8004 `~/hue_bao_mat_005/` (DB/SECRET/invite riêng, launchd KeepAlive)
+
 ## 0.0.4 (chính thức) (2026-11-14)
 
 > Đợt "dạy học hát trọn vẹn + chốt hạ dọn nợ": karaoke theo timing âm học thật của bản mẫu, chấm điểm theo từng từ, so sánh take, chuỗi ngày luyện tập; song ngữ trọn lời gợi ý chấm điểm; web có đủ VU meter + tự dừng im lặng + xem trước giọng; knob backlog cho bão tải.
@@ -91,6 +139,7 @@
 
 ### Kiểm định
 - pytest **341/341** (340 → +1: clamp anchor với cụm nhỏ trước cụm thật) · flutter analyze **0** · flutter test **123/123** (121 → +2: utcOffset dịch ngày đúng cho offset ±h) · zone check 0 đụng · secrets/IP scan diff = 0 · staged = 0 — **chưa commit/push**
+- **Phát hành 0.0.4 (chính thức) 2026-11-14**: bump version 5+1 chỗ · commit `db9031c` (37 file: 29 sửa + 8 mới) · CI **12m17s 6/6 jobs xanh** (flutter/server/windows/android/linux/release) · Release private + public **đủ 5 gói** (android.apk 64.3MB · linux 13.5MB · macOS ditto 24.6MB PlistBuddy 0.0.4 ✓ · web 21.2MB · windows 16.2MB) · **LAN :8000 health version 0.0.4**
 - **Chiến dịch ổn định trên server cô lập (2026-11-14)**: verify_beta3 **TOÀN XANH exit 0** — SMOKE **39/0** · DSP-STORM (restore/analyze/compare/transcribe) **5xx=0** health max 308ms RSS peak ~1080MB · STABILITY **6/6 SẠCH** (re-login · practice_sessions · mẫu nghệ nhân · bài học · **P6 restart giữa bão** · **0 Traceback**)
 - **Soak 900s 20VU** (`stability_soak.py --soak-seconds 900`): P1 upload-matrix SẠCH · P2 link-storm 120 link sha256 khớp SẠCH · P3 mixed **OK=134.628 · 4xx=0 · 5xx=0 · ex=0 · p50 73ms · p95 316ms** · RSS 316→721→367MB (178 mẫu, không rò) · health max 363ms 0/179 lỗi · P4 **kill -9 giữa upload hồi phục 1.1s · 10/10 file nguyên vẹn** · log server **0 Traceback**
 - **Parity engine-optional**: venv basic-pitch **341/341** · venv stub không basic-pitch (PYTHONPATH stub ImportError) **340 passed + 1 skip** đúng mô-típ — điểm DSP teaching mới (timing/hint codes) không đòi engine nặng

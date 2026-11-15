@@ -364,7 +364,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: oldCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordOld)),
-              TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(icon: Icon(_obscureDialog ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
+              TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(tooltip: _obscureDialog ? strings.obscureShowPassword : strings.obscureHidePassword, icon: Icon(_obscureDialog ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
               TextField(controller: confirmCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordConfirm)),
             ],
           ),

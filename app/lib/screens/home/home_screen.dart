@@ -265,62 +265,75 @@ class _HomeContent extends StatelessWidget {
           childAspectRatio = 3.6;
         }
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeroHeader(context, strings, server),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    strings.featuresHeader,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
+        return CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RepaintBoundary(child: _buildHeroHeader(context, strings, server)),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          strings.featuresHeader,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
                         ),
-                  ),
-                  Text(
-                    strings.modulesCount(features.length),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.amberGold,
-                          fontWeight: FontWeight.w600,
+                        Text(
+                          strings.modulesCount(features.length),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppTheme.goldReadable(context),
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              GridView.count(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: childAspectRatio,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: childAspectRatio,
+                ),
+                delegate: SliverChildListDelegate([
                   for (var i = 0; i < features.length; i++)
                     _FeatureCard(
                       feature: features[i],
                       index: i,
                       onSelect: () => onSelectTab(features[i].tabIndex),
                     ),
-                ],
+                ]),
               ),
-              const SizedBox(height: 20),
-              Center(
-                child: Text(
-                  'Hue Heritage Music · ${strings.versionLabel} ${AppConstants.appVersion}',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              sliver: SliverToBoxAdapter(
+                child: Center(
+                  child: Text(
+                    'Hue Heritage Music · ${strings.versionLabel} ${AppConstants.appVersion}',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
@@ -562,11 +575,11 @@ class _FeatureCardState extends State<_FeatureCard> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.amberGold.withValues(alpha: 0.2),
+                                  color: AppTheme.goldReadable(context).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: AppTheme.amberGold, width: 0.8),
+                                  border: Border.all(color: AppTheme.goldReadable(context), width: 0.8),
                                 ),
-                                child: const Text('BETA', style: TextStyle(color: AppTheme.amberGold, fontSize: 9, fontWeight: FontWeight.bold)),
+                                child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 10, fontWeight: FontWeight.bold)),
                               ),
                             ],
                           ],

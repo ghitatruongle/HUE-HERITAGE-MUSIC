@@ -129,7 +129,7 @@ class ScalePracticeCard extends StatelessWidget {
                   CommonButton(
                     label: strings.practiceScaleGrade,
                     loading: busy,
-                    onPressed: recordPath != null && !busy ? onSubmit : null,
+                    onPressed: recordPath != null && !busy && !recording ? onSubmit : null,
                   ),
                 ],
               ),
@@ -172,7 +172,7 @@ class ScalePracticeCard extends StatelessWidget {
                           child: Chip(
                             backgroundColor: _verdictColor(p.verdictCode, context),
                             label: Text(
-                              '${p.name} ${p.verdictCode == "unclear" ? "" : "${p.errCents > 0 ? "+" : ""}${p.errCents.toStringAsFixed(0)}c"}',
+                              '${p.name} ${p.verdictCode == "unclear" || p.errCents == null ? "" : "${p.errCents! > 0 ? "+" : ""}${p.errCents!.toStringAsFixed(0)}c"}',
                               style: const TextStyle(fontSize: 11),
                             ),
                           ),
