@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
+
 class StaggeredEntrance extends StatefulWidget {
   final int index;
   final int maxAnimatedIndex;
@@ -26,17 +28,26 @@ class _StaggeredEntranceState extends State<StaggeredEntrance>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 380),
+      duration: AppMotion.entrance,
     );
     final animate = widget.index <= widget.maxAnimatedIndex;
-    final begin = animate ? (widget.index * 0.08).clamp(0.0, 0.6) : 0.0;
+    final begin = animate ? (widget.index * AppMotion.staggerInterval).clamp(0.0, 0.6) : 0.0;
     _fade = CurvedAnimation(
       parent: _ctrl,
-      curve: Interval(begin, 1.0, curve: Curves.easeOut),
+      curve: Interval(begin, 1.0, curve: AppMotion.emphasized),
     );
     if (animate) {
       _ctrl.forward();
     } else {
+      _ctrl.value = 1.0;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.of(context).disableAnimations && _ctrl.value < 1.0) {
+      _ctrl.stop();
       _ctrl.value = 1.0;
     }
   }

@@ -1,5 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+
+import '../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../services/locale_provider.dart';
@@ -42,7 +44,7 @@ class CompareChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
     if (times.isEmpty) {
-      return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(strings.noData)));
+      return Center(child: Padding(padding: const EdgeInsets.all(AppSpacing.lg), child: Text(strings.noData)));
     }
     final palette = ChartPalette.of(context);
     var peak = 100.0;

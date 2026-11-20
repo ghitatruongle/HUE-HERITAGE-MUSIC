@@ -6,6 +6,9 @@ Future<void> shareDownloadedFile(String path, String fileName) async {
   if (!(Platform.isAndroid || Platform.isIOS)) {
     return;
   }
+  if (!await File(path).exists()) {
+    return;
+  }
   await SharePlus.instance.share(
     ShareParams(files: [XFile(path)], title: fileName, fileNameOverrides: [fileName]),
   );

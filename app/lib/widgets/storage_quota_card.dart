@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
+
 import '../core/localization/app_strings.dart';
+import 'hue_icons.dart';
 
 class StorageQuotaCard extends StatelessWidget {
   final AppStrings strings;
@@ -29,13 +32,13 @@ class StorageQuotaCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.storage_outlined, size: 20, color: scheme.primary),
+                HueIcon(HueIcons.storage, size: 20, color: scheme.primary),
                 const SizedBox(width: 8),
                 Text(strings.storageTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
@@ -52,7 +55,7 @@ class StorageQuotaCard extends StatelessWidget {
               LinearProgressIndicator(
                 value: quotaBytes! > 0 ? (usedBytes / quotaBytes!).clamp(0.0, 1.0) : 0.0,
                 minHeight: 6,
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(AppRadius.xs),
                 color: usedBytes >= quotaBytes! ? scheme.error : scheme.primary,
                 backgroundColor: scheme.surfaceContainerHighest,
               ),
@@ -67,7 +70,7 @@ class StorageQuotaCard extends StatelessWidget {
   Widget _row(BuildContext context, String label, String value) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

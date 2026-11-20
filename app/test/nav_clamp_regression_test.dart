@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hue_heritage_music/screens/home/home_screen.dart';
 import 'package:hue_heritage_music/services/auth_service.dart';
+import 'package:hue_heritage_music/services/history_service.dart';
 import 'package:hue_heritage_music/services/locale_provider.dart';
 import 'package:hue_heritage_music/services/server_config.dart';
 import 'package:hue_heritage_music/services/session_media.dart';
@@ -54,6 +55,7 @@ Widget _home(AuthService auth) {
       ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
       ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
       ChangeNotifierProvider<AuthService>.value(value: auth),
+      ChangeNotifierProvider<HistoryService>.value(value: HistoryService()),
       ChangeNotifierProvider<SessionMedia>(create: (_) => SessionMedia()),
     ],
     child: const MaterialApp(

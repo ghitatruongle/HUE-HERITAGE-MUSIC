@@ -10,6 +10,9 @@ import '../../services/locale_provider.dart';
 import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
 import '../../widgets/error_panel.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/hue_icons.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class InviteManagerSection extends StatefulWidget {
   const InviteManagerSection({super.key});
@@ -86,7 +89,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
       children: [
         Row(
           children: [
-            const Icon(Icons.vpn_key_outlined, size: 18, color: AppTheme.statusWarning),
+            const HueIcon(HueIcons.vpnKey, size: 18, color: AppTheme.statusWarning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -97,7 +100,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
             IconButton(
               tooltip: strings.adminRefresh,
               onPressed: _loading ? null : _reload,
-              icon: const Icon(Icons.refresh, size: 18),
+              icon: const HueIcon(HueIcons.refresh, size: 18),
             ),
           ],
         ),
@@ -108,21 +111,24 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
         ),
         const SizedBox(height: 10),
         if (_loading && _invites.isEmpty)
-          const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+          const Column(
+            children: [
+              SkeletonLoader(height: 68),
+              SkeletonLoader(height: 68),
+              SkeletonLoader(height: 68),
+            ],
+          )
         else if (_hasError && _invites.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: ErrorPanel(message: strings.authInviteLoadFail, onRetry: _loading ? null : _reload),
           )
         else ...[
           if (_invites.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(strings.authInviteEmpty, style: const TextStyle(fontSize: 12.5)),
-            ),
+            EmptyState(icon: HueIcons.personAdd, title: strings.authInviteEmpty),
           for (final inv in _invites)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Card(
                 margin: EdgeInsets.zero,
                 child: Row(
@@ -139,7 +145,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
                             ),
                             const SizedBox(width: 8),
                             Icon(
-                              inv.used ? Icons.check_circle : Icons.schedule,
+                              inv.used ? HueIcons.checkCircle : HueIcons.schedule,
                               size: 14,
                               color: inv.used ? AppTheme.statusSuccess : AppTheme.statusWarning,
                             ),
@@ -154,17 +160,17 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
                           ],
                         ),
                         if (inv.note.isNotEmpty)
-                          Text(inv.note, style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          Text(inv.note, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.copy, size: 16),
+                    icon: const HueIcon(HueIcons.copy, size: 16),
                     tooltip: strings.authInviteCopy,
                     onPressed: () => _copyInvite(inv),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 16),
+                    icon: const HueIcon(HueIcons.delete, size: 16),
                     tooltip: strings.authInviteDelete,
                     onPressed: () => _deleteInvite(strings, inv),
                   ),
@@ -174,7 +180,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
             ),
           if (_invites.length < _total)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
               child: Center(
                 child: _loadingMore
                     ? const SizedBox(
@@ -184,7 +190,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
                       )
                     : OutlinedButton.icon(
                         onPressed: _loadMore,
-                        icon: const Icon(Icons.expand_more, size: 16),
+                        icon: const HueIcon(HueIcons.expandMore, size: 16),
                         label: Text('${strings.adminLoadMore} ($_total)'),
                       ),
               ),
@@ -192,7 +198,7 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
         ],
         const SizedBox(height: 6),
         OutlinedButton.icon(
-          icon: const Icon(Icons.add_circle_outline, size: 16),
+          icon: const HueIcon(HueIcons.addCircle, size: 16),
           label: Text(strings.authInviteCreate),
           onPressed: _creatingInvite ? null : _createInvite,
         ),

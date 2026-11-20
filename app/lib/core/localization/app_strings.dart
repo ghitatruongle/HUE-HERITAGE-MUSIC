@@ -27,6 +27,35 @@ class AppStrings {
   String get navRestoration => isVi ? 'Phục dựng' : 'Restoration';
   String get navMore => isVi ? 'Danh mục' : 'More';
 
+  String get navGroupListen => isVi ? 'Nghe & Học' : 'Listen & Learn';
+  String get navGroupCreate => isVi ? 'Sáng tạo' : 'Create';
+  String get navGroupSystem => isVi ? 'Hệ thống' : 'System';
+  String get navGroupAdmin => isVi ? 'Quản trị' : 'Admin';
+  String get serverSectionTitle => isVi ? 'Máy chủ AI' : 'AI Server';
+  String get serverChangeAction => isVi ? 'Đổi máy chủ' : 'Change server';
+  String get recentActivityTitle => isVi ? 'Hoạt động gần đây' : 'Recent activity';
+  String get recentActivityEmpty => isVi
+      ? 'Chưa có hoạt động nào — chọn một tính năng bên dưới để bắt đầu.'
+      : 'No activity yet — pick a feature below to get started.';
+  String get quickAccessTitle => isVi ? 'Truy cập nhanh' : 'Quick access';
+  String get homeResumeCta => isVi ? 'Tiếp tục luyện' : 'Resume practice';
+
+  String get analysisHeaderSubtitle => isVi
+      ? 'Nhận diện cao độ và nhạc cụ từ bản thu của bạn'
+      : 'Pitch and instrument recognition from your recordings';
+  String get transcriptionHeaderSubtitle => isVi
+      ? 'Chuyển bản thu thành bản nhạc MIDI / MusicXML'
+      : 'Turn recordings into MIDI / MusicXML sheet music';
+
+  String get wizardStepTune => isVi ? 'Chọn điệu' : 'Pick tune';
+  String get wizardStepLyrics => isVi ? 'Viết lời' : 'Write lyrics';
+  String get wizardStepStyle => isVi ? 'Giọng & phong cách' : 'Voice & style';
+  String get wizardNext => isVi ? 'Tiếp' : 'Next';
+  String get wizardBack => isVi ? 'Quay lại' : 'Back';
+  String get abPlayBoth => isVi ? 'Phát đồng thời' : 'Play both';
+  String get abStopBoth => isVi ? 'Dừng phát' : 'Stop playback';
+  String get restorationUploading => isVi ? 'Đang tải bản thu lên…' : 'Uploading recording…';
+
   String get featHeritageTitle => isVi ? 'Kho di sản số' : 'Heritage Archive';
   String get featHeritageDesc => isVi
       ? 'Lưu trữ, tra cứu và thưởng thức các bản ghi âm cổ truyền nguyên bản (Chỉ nghe nhạc)'
@@ -372,6 +401,7 @@ class AppStrings {
       ? 'Máy chủ AI đang ở chế độ chờ kiểm thử trọng số. Tác phẩm AI cần HuếMusic-LoRA được nạp từ các checkpoint đã huấn luyện.'
       : 'The AI server is on standby for checkpoint testing. AI works require the trained HueMusic-LoRA checkpoints to be loaded.';
   String get taskAiGenerated => isVi ? 'TÁC PHẨM ĐƯỢC AI TẠO MỚI (AI_GENERATED)' : 'AI-GENERATED WORK (AI_GENERATED)';
+  String get taskFailedGeneric => isVi ? 'Tác vụ thất bại.' : 'Task failed.';
 
   String modulesCount(int n) => isVi ? '$n chức năng' : '$n modules';
 
@@ -542,6 +572,7 @@ class AppStrings {
       ? 'Mã dùng một lần — người được tặng đăng ký xong mã tự vô hiệu. Tạo, sao chép, hoặc xóa tại đây.'
       : 'One-time codes — they disable themselves after one registration. Create, copy or delete here.';
   String get authInviteEmpty => isVi ? 'Chưa có mã mời nào trong cơ sở dữ liệu.' : 'No invite codes in the database yet.';
+  String get accountEmpty => isVi ? 'Chưa có tài khoản nào trong cơ sở dữ liệu.' : 'No accounts in the database yet.';
   String get authInviteCreate => isVi ? 'Tạo mã mời mới' : 'Create new invite code';
   String get authInviteUsed => isVi ? 'Đã dùng' : 'Used';
   String get authInviteAvailable => isVi ? 'Còn hiệu lực' : 'Available';

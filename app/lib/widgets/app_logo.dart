@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'hue_icons.dart';
 
 class AppLogo extends StatelessWidget {
   final double size;
@@ -24,7 +25,7 @@ class AppLogo extends StatelessWidget {
         height: size,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Icon(
-          Icons.music_note,
+          HueIcons.musicNote,
           size: iconSize,
           color: iconColor,
         ),

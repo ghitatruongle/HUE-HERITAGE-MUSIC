@@ -190,5 +190,9 @@ def transcribe(samples, sr: int) -> list:
     return notes
 
 
+def stalled() -> bool:
+    return _stalled
+
+
 def status():
     return {"available": available(), "loaded": MODEL is not None, "name": "basic-pitch", "stalled": _stalled}

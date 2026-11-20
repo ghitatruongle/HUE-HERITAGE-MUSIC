@@ -23,6 +23,7 @@ import '../../widgets/heritage_motif.dart';
 import '../../widgets/pitch_contour_chart.dart';
 import '../../widgets/error_panel.dart';
 import 'lesson_practice_view.dart';
+import '../../widgets/hue_icons.dart';
 
 class LearningScreen extends StatefulWidget {
   const LearningScreen({super.key});
@@ -211,10 +212,10 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
       children: [
         ImperialTabBar(
           controller: _tabController,
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
           tabs: [
-            Tab(icon: const Icon(Icons.graphic_eq), text: strings.listenTabTitle),
-            Tab(icon: const Icon(Icons.school), text: strings.practiceTabTitle),
+            Tab(icon: const HueIcon(HueIcons.graphicEq), text: strings.listenTabTitle),
+            Tab(icon: const HueIcon(HueIcons.school), text: strings.practiceTabTitle),
           ],
         ),
         Expanded(
@@ -232,7 +233,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
 
   Widget _buildPitchTab(ColorScheme scheme) {
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         CommonButton(
           label: _recording ? strings.learnStopBtn : strings.learnRecordBtn,
@@ -289,7 +290,7 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: Tween<double>(begin: 0.35, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut)),
-      child: const Icon(Icons.fiber_manual_record, color: AppTheme.statusDanger, size: 14),
+      child: const HueIcon(HueIcons.recordDot, color: AppTheme.statusDanger, size: 14),
     );
   }
 }

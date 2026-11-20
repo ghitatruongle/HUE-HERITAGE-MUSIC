@@ -26,7 +26,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-PBKDF2_ITERATIONS = 600_000
+PBKDF2_ITERATIONS = max(1, int(settings.pbkdf2_iterations))
+if PBKDF2_ITERATIONS < 600_000:
+    logger.warning(
+        "PBKDF2_ITERATIONS=%d is below the production value 600000; "
+        "lower values are only safe in isolated load-test sandboxes",
+        PBKDF2_ITERATIONS,
+    )
 LEGACY_PBKDF2_ITERATIONS = 100_000
 RESERVED_USERNAMES = {"admin", "administrator", "moderator", "root", "system", "support", "official"}
 

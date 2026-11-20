@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     acestep_api_url: str = ""
     invite_codes: str = ""
     admin_truong_username: str = "ghitatruongle"
+    pbkdf2_iterations: int = 600_000
     generation_concurrency: int = 1
     enable_docs: bool = False
     heavy_rate_limit: int = 30

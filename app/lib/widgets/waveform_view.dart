@@ -69,10 +69,10 @@ class WaveformView extends StatelessWidget {
     return Container(
       height: 96,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
       child: data.peaks.isEmpty
           ? Center(child: Text(context.watch<LocaleProvider>().strings.waveformEmpty))
           : CustomPaint(size: Size.infinite, painter: _WavePainter(peaks: data.peaks, color: color)),
@@ -98,7 +98,7 @@ class _WavePainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromLTWH(x + barW * 0.15, (size.height - h) / 2, barW * 0.7, h),
-          const Radius.circular(1.5),
+          const Radius.circular(AppRadius.xs),
         ),
         paint,
       );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import 'hue_icons.dart';
 
 class EmptyState extends StatelessWidget {
   final IconData icon;
@@ -23,7 +24,7 @@ class EmptyState extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxxl, horizontal: AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -55,7 +56,7 @@ class EmptyState extends StatelessWidget {
               const SizedBox(height: 14),
               FilledButton.icon(
                 onPressed: onCta,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
+                icon: const HueIcon(HueIcons.refresh, size: 16),
                 label: Text(ctaLabel!),
               ),
             ],

@@ -6,6 +6,7 @@ const String _libDir = 'lib';
 const Set<String> _allowedVietnameseFiles = {
   'lib/screens/creation/creation_screen.dart',
   'lib/widgets/server_onboarding_dialog.dart',
+  'lib/widgets/hue_icons.dart',
 };
 
 final RegExp _vietnamese = RegExp(r'[\u00C0-\u024F\u1EA0-\u1EF9]');

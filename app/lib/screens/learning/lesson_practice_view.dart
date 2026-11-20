@@ -21,6 +21,7 @@ import '../../services/app_lifecycle_service.dart';
 import '../../services/download_helper.dart';
 import '../../services/file_saver.dart';
 import '../../services/local_pitch.dart';
+import '../../services/practice_resume.dart';
 import '../../services/teaching_utils.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/theme/app_theme.dart';
@@ -35,6 +36,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/overlay_pitch_chart.dart';
 import '../../widgets/skeleton_loader.dart';
+import '../../widgets/hue_icons.dart';
 
 class LessonPracticeView extends StatefulWidget {
   const LessonPracticeView({super.key});
@@ -68,6 +70,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
 
   final Map<int, String> _recordPaths = {};
   int? _practicingSection;
+  int? _countInSection;
   final Map<int, PracticeResult> _results = {};
   final Map<int, bool> _looping = {};
   final Map<int, List<_TakeRec>> _takes = {};
@@ -114,6 +117,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   void initState() {
     super.initState();
     _loadLessons();
+    PracticeResume.lessonId.addListener(_flushPendingResume);
     _sampleSub = _samplePlayer.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed && mounted) {
         setState(() => _looping.clear());
@@ -129,6 +133,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
 
   @override
   void dispose() {
+    PracticeResume.lessonId.removeListener(_flushPendingResume);
     AppLifecycleService.instance.unregister(_lifecycleHooks);
     _vuTimer?.cancel();
     _autoStopTimer?.cancel();
@@ -205,11 +210,19 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         _scales = scales;
         _selectedScale = scales.isNotEmpty ? scales.first : null;
       });
+      _flushPendingResume();
     } catch (e) {
       if (mounted) setState(() => _loadError = _localizedError(e));
     } finally {
       if (mounted) setState(() => _loadingLessons = false);
     }
+  }
+
+  void _flushPendingResume() {
+    final id = PracticeResume.lessonId.value;
+    if (id == null || id.isEmpty || _lessons.isEmpty || _loadingLessons || !mounted) return;
+    PracticeResume.lessonId.value = null;
+    unawaited(_openLessonById(id));
   }
 
   String _localizedError(Object e) {
@@ -244,6 +257,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     _recElapsed.value = 0;
     _looping.clear();
     _playingSample.clear();
+    _countInSection = null;
     if (mounted) setState(() {});
   }
 
@@ -720,6 +734,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       return;
     }
     final epochAtStart = _rec.epoch;
+    setState(() => _countInSection = section.index);
     if (_countIn) {
       Timer? beatTimer;
       try {
@@ -752,7 +767,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           await done.future.timeout(Duration(milliseconds: est), onTimeout: () {});
         } finally {
           beatTimer?.cancel();
-          _countInLeft.value = 0;
+          if (mounted) _countInLeft.value = 0;
           await sub.cancel();
         }
       } catch (_) {
@@ -766,6 +781,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       }
       if (!mounted || _rec.epoch != epochAtStart) {
         _rec.arming = false;
+        if (mounted) setState(() => _countInSection = null);
         return;
       }
     }
@@ -777,6 +793,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     _rec.arming = false;
     if (!mounted) return;
     if (!started || _selected?.id != lessonAtStart) {
+      setState(() => _countInSection = null);
       if (!started) {
         setState(() => _error = strings.practiceMicStartFail);
         return;
@@ -789,6 +806,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       _takePreview = null;
       _takePreviewNo = null;
       _analyzingPreview = false;
+      _countInSection = null;
     });
     _recStartAt = DateTime.now();
     _recElapsed.value = 0;
@@ -976,7 +994,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           await done.future.timeout(const Duration(seconds: 6), onTimeout: () {});
         } finally {
           beatTimer?.cancel();
-          _countInLeft.value = 0;
+          if (mounted) _countInLeft.value = 0;
           sub.cancel();
         }
       } catch (_) {
@@ -1056,19 +1074,19 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   Widget build(BuildContext context) {
     strings = context.watch<LocaleProvider>().strings;
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         if (_loadingLessons)
           const Column(
             children: [
-              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: 8)),
-              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: 8)),
-              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: 8)),
+              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: AppSpacing.sm)),
+              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: AppSpacing.sm)),
+              SkeletonLoader(height: 88, margin: EdgeInsets.only(bottom: AppSpacing.sm)),
             ],
           )
         else if (_lessons.isEmpty)
           EmptyState(
-            icon: Icons.school_rounded,
+            icon: HueIcons.school,
             title: strings.practiceNoLessons,
           )
         else ...[
@@ -1087,18 +1105,18 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         ],
         if (_loadError != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
             child: ErrorPanel(message: _loadError!, onRetry: _loadLessons),
           ),
         if (_error != null)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
             child: ErrorPanel(message: _error!),
           ),
         if (_loadingDetail)
-          const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
+          const Padding(padding: EdgeInsets.all(AppSpacing.lg), child: Center(child: CircularProgressIndicator())),
         if (_detail != null) ...[
-          _buildSpeedBar(),
+          _buildPracticeToolbar(),
           for (final section in _detail!.sections) _buildSectionCard(section),
           const SizedBox(height: 12),
           _buildProgressCard(),
@@ -1135,25 +1153,47 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     );
   }
 
-  Widget _buildSpeedBar() {
+  Widget _buildPracticeToolbar() {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        children: [
-          Text(strings.practiceSlowSpeed, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          const SizedBox(width: 8),
-          for (final v in const [0.5, 0.75, 1.0])
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
+    return Card(
+      margin: const EdgeInsets.only(top: AppSpacing.sm),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(strings.practiceSlowSpeed, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            for (final v in const [0.5, 0.75, 1.0])
+              ChoiceChip(
                 materialTapTargetSize: MaterialTapTargetSize.padded,
                 label: Text('${v}x', style: const TextStyle(fontSize: 11)),
                 selected: _speed == v,
                 onSelected: (_) => _setSpeed(v),
               ),
+            Switch(
+              value: _countIn,
+              onChanged: (v) => setState(() => _countIn = v),
             ),
-        ],
+            Text(
+              strings.practiceCountInLabel(_detail?.bpm != null ? "(${_detail!.bpm!.toStringAsFixed(0)} BPM)" : ""),
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+            Text(
+              strings.practiceSilenceStopHint,
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withAlpha(150)),
+            ),
+            Switch(
+              value: _autoGrade,
+              onChanged: (v) => setState(() => _autoGrade = v),
+            ),
+            Text(
+              strings.practiceAutoGrade,
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1162,7 +1202,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final d = _detail;
     final sel = _selected!;
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
       child: Wrap(
         spacing: 8,
         runSpacing: 4,
@@ -1181,12 +1221,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final result = _results[section.index];
     final recorded = _takes[section.index]?.isNotEmpty == true || _recordPaths.containsKey(section.index);
     return Card(
-      margin: const EdgeInsets.only(top: 10),
+      margin: const EdgeInsets.only(top: AppSpacing.md),
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Stack(
           children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Row(
               children: [
                 Text('${strings.practiceSentence} ${section.index + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -1195,56 +1237,28 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                     style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
                 if (section.hasSample) ...[
                   const SizedBox(width: 8),
-                  const Icon(Icons.record_voice_over, size: 14, color: AppTheme.imperialGold),
+                  const HueIcon(HueIcons.recordVoiceOver, size: 14, color: AppTheme.imperialGold),
                 ],
               ],
             ),
             if (section.lyrics.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(section.lyrics, style: const TextStyle(fontSize: 12.5, height: 1.4)),
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(section.lyrics, style: const TextStyle(fontSize: 12, height: 1.4)),
               ),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 10,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Switch(
-                  value: _countIn,
-                  onChanged: (v) => setState(() => _countIn = v),
-                ),
-                Text(
-                  strings.practiceCountInLabel(_detail?.bpm != null ? "(${_detail!.bpm!.toStringAsFixed(0)} BPM)" : ""),
-                  style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
-                ),
-                Text(
-                  strings.practiceSilenceStopHint,
-                  style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant.withAlpha(150)),
-                ),
-                Switch(
-                  value: _autoGrade,
-                  onChanged: (v) => setState(() => _autoGrade = v),
-                ),
-                Text(
-                  strings.practiceAutoGrade,
-                  style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
             const SizedBox(height: 6),
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: [
                 OutlinedButton.icon(
-                  icon: Icon(((_looping[section.index] ?? false)) ? Icons.stop : Icons.headphones, size: 16),
+                  icon: Icon(((_looping[section.index] ?? false)) ? HueIcons.stop : HueIcons.headphones, size: 16),
                   label: Text((_looping[section.index] ?? false) ? strings.practiceStopSample : strings.practiceListenLoop),
                   onPressed: () => _toggleSample(section),
                 ),
                 if (section.hasSample)
                   OutlinedButton.icon(
-                    icon: Icon(_playingSample[section.index] == true ? Icons.stop : Icons.record_voice_over, size: 16),
+                    icon: Icon(_playingSample[section.index] == true ? HueIcons.stop : HueIcons.recordVoiceOver, size: 16),
                     label: Text(_playingSample[section.index] == true ? strings.practiceStopSample : strings.practiceListenSample),
                     style: OutlinedButton.styleFrom(foregroundColor: AppTheme.goldReadable(context)),
                     onPressed: () => _toggleMasterSample(section),
@@ -1255,7 +1269,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                     final sectionRecording = _rec.isSectionRecording && _rec.activeSection == section.index;
                     final counting = countLeft > 0;
                     return FilledButton.icon(
-                      icon: Icon(sectionRecording ? Icons.stop : Icons.mic, size: 16),
+                      icon: Icon(sectionRecording ? HueIcons.stop : HueIcons.mic, size: 16),
                       label: Text(
                         sectionRecording
                             ? strings.practiceStopRecord
@@ -1285,13 +1299,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 ),
                 if (recorded && result != null)
                   OutlinedButton.icon(
-                    icon: const Icon(Icons.refresh, size: 16),
+                    icon: const HueIcon(HueIcons.refresh, size: 16),
                     label: Text(strings.practiceRegrade),
                     onPressed: _practicingSection == section.index ? null : () => _submitPractice(section),
                   ),
                 if (result?.userMidi.isNotEmpty == true)
                   OutlinedButton.icon(
-                    icon: const Icon(Icons.music_note, size: 16),
+                    icon: const HueIcon(HueIcons.musicNote, size: 16),
                     label: Text(strings.practiceMidiBtn),
                   onPressed: () => _downloadPracticeMidi(result!),
                 ),
@@ -1299,7 +1313,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             ),
             if (_practicingSection == section.index)
               Padding(
-                padding: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
                 child: ValueListenableBuilder<double?>(
                   valueListenable: _uploadProgress,
                   builder: (context, prog, _) => LinearProgressIndicator(
@@ -1307,7 +1321,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                     minHeight: 6,
                     color: scheme.primary,
                     backgroundColor: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: BorderRadius.circular(AppRadius.xs),
                   ),
                 ),
               ),
@@ -1321,7 +1335,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 valueListenable: _vuLevel,
                 builder: (context, vu, _) => Row(
                   children: [
-                    const Icon(Icons.fiber_manual_record, color: AppTheme.statusDanger, size: 12),
+                    const HueIcon(HueIcons.recordDot, color: AppTheme.statusDanger, size: 12),
                     const SizedBox(width: 6),
                     Expanded(
                       child: LinearProgressIndicator(
@@ -1329,11 +1343,11 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                         minHeight: 8,
                         color: scheme.primary,
                         backgroundColor: scheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(AppRadius.xs),
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text('${vu.toStringAsFixed(0)} dB', style: const TextStyle(fontSize: 10.5)),
+                    Text('${vu.toStringAsFixed(0)} dB', style: const TextStyle(fontSize: 11)),
                   ],
                 ),
               ),
@@ -1369,9 +1383,9 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.replay, size: 14, color: scheme.onSurfaceVariant),
+                  HueIcon(HueIcons.replay, size: 14, color: scheme.onSurfaceVariant),
                   const SizedBox(width: 6),
-                  Text(strings.practiceReplayTake, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  Text(strings.practiceReplayTake, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
                 ],
               ),
               AudioPlayerBar(filePath: _recordPaths[section.index]),
@@ -1380,7 +1394,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             if (_analyzingPreview && recorded && result == null) _buildAnalyzingRow(),
             if (recorded && result == null && _practicingSection != section.index)
               Padding(
-                padding: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
                 child: Text(strings.practiceRecorded, style: const TextStyle(fontSize: 12)),
               ),
             if (result != null) ...[
@@ -1399,7 +1413,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                       Tooltip(
                         message: _noteTooltip(n),
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(AppRadius.xl),
                           onTap: n.refEnd > n.refStart ? () => _playRefSegment(n.refStart, n.refEnd, section) : null,
                           child: Chip(
                             backgroundColor: _verdictColor(n.verdictCode),
@@ -1407,8 +1421,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (n.errCents != null && (n.verdictCode == 'off' || n.verdictCode == 'octave' || n.verdictCode == 'minor'))
-                                  Icon(n.errCents! > 0 ? Icons.arrow_upward : Icons.arrow_downward, size: 11, color: scheme.onSurfaceVariant),
-                                if (n.verdictCode == 'ok' && n.vibrato) Icon(Icons.waves, size: 11, color: scheme.onSurfaceVariant),
+                                  Icon(n.errCents! > 0 ? HueIcons.arrowUpward : HueIcons.arrowDownward, size: 11, color: scheme.onSurfaceVariant),
+                                if (n.verdictCode == 'ok' && n.vibrato) HueIcon(HueIcons.waves, size: 11, color: scheme.onSurfaceVariant),
                                 const SizedBox(width: 3),
                                 Text(
                                   n.verdictCode == 'unclear' || n.errCents == null
@@ -1425,6 +1439,51 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 ),
               ],
             ],
+            ],
+            ),
+            if (_countInSection == section.index)
+              Positioned.fill(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _countInLeft,
+                  builder: (context, countLeft, _) {
+                    if (countLeft <= 0) return const SizedBox.shrink();
+                    final digit = Text(
+                      '$countLeft',
+                      style: TextStyle(
+                        fontFamily: AppTheme.displayFontFamily,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.goldReadable(context),
+                      ),
+                    );
+                    final disableAnimations = MediaQuery.of(context).disableAnimations;
+                    return ColoredBox(
+                      color: scheme.surface.withValues(alpha: 0.72),
+                      child: Center(
+                        child: Container(
+                          width: 96,
+                          height: 96,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppTheme.goldReadable(context), width: 1.4),
+                          ),
+                          child: disableAnimations
+                              ? digit
+                              : TweenAnimationBuilder<double>(
+                                  key: ValueKey<int>(countLeft),
+                                  tween: Tween<double>(begin: 0.86, end: 1),
+                                  duration: AppMotion.fast,
+                                  curve: AppMotion.emphasized,
+                                  builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                                  child: digit,
+                                ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         ),
       ),
@@ -1432,16 +1491,15 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   }
 
   Color _verdictColor(String code) {
-    switch (code) {
-      case 'ok':
-        return AppTheme.statusSuccess.withAlpha(40);
-      case 'minor':
-        return AppTheme.statusWarning.withAlpha(40);
-      case 'octave':
-        return AppTheme.statusWarning.withAlpha(70);
-      case 'off':
-        return AppTheme.statusDanger.withAlpha(40);
-      default:
+    final alpha = code == 'octave' ? 70 : 40;
+    switch (practiceVerdictKind(code)) {
+      case AppStatusKind.success:
+        return AppTheme.statusSuccess.withAlpha(alpha);
+      case AppStatusKind.warning:
+        return AppTheme.statusWarning.withAlpha(alpha);
+      case AppStatusKind.danger:
+        return AppTheme.statusDanger.withAlpha(alpha);
+      case AppStatusKind.info:
         return Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40);
     }
   }
@@ -1477,7 +1535,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   Widget _buildAnalyzingRow() {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
       child: Row(
         children: [
           const SizedBox(
@@ -1499,16 +1557,16 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final entries = results.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
     final best = entries.reduce((a, b) => a.value.metrics.score >= b.value.metrics.score ? a : b);
     return Padding(
-      padding: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.only(top: AppSpacing.xs),
       child: Wrap(
         spacing: 10,
         runSpacing: 2,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(strings.practiceCompareTakes, style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+          Text(strings.practiceCompareTakes, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
           for (final e in entries)
             InkWell(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(AppRadius.xs),
               onTap: () => setState(() {
                 final takes = _takes[section.index];
                 if (takes != null) {
@@ -1520,7 +1578,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (e.key == best.key) ...[
-                    Icon(Icons.workspace_premium, size: 12, color: AppTheme.goldReadable(context)),
+                    HueIcon(HueIcons.workspacePremium, size: 12, color: AppTheme.goldReadable(context)),
                     const SizedBox(width: 2),
                   ],
                   Text(
@@ -1548,7 +1606,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     if (words.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1558,14 +1616,14 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               const SizedBox(width: 6),
               Text(
                 strings.practiceWordTapHint,
-                style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant.withAlpha(180)),
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withAlpha(180)),
               ),
             ],
           ),
           if (fromServer && result.wordsAlignment.isNotEmpty)
             Text(
               strings.practiceWordApprox,
-              style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant.withAlpha(150)),
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withAlpha(150)),
             ),
           const SizedBox(height: 4),
           Wrap(
@@ -1582,16 +1640,16 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                       onTap: () => unawaited(_playWordRef(section, w, absolute: fromServer)),
                       child: Container(
                         constraints: const BoxConstraints(minHeight: 48),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                         decoration: BoxDecoration(
                           color: w.verdictCode.isEmpty
                               ? scheme.onSurfaceVariant.withAlpha(25)
                               : _verdictColor(w.verdictCode),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1599,12 +1657,12 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                             Text(
                               w.word,
                               style: TextStyle(
-                                fontSize: 11.5,
+                                fontSize: 12,
                                 color: w.verdictCode.isEmpty ? scheme.onSurfaceVariant : scheme.onSurface,
                               ),
                             ),
                             const SizedBox(width: 3),
-                            Icon(Icons.play_arrow, size: 11, color: scheme.onSurfaceVariant),
+                            HueIcon(HueIcons.playArrow, size: 11, color: scheme.onSurfaceVariant),
                           ],
                         ),
                       ),
@@ -1678,13 +1736,13 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final palette = ChartPalette.of(context);
     var maxY = spots.isEmpty ? 1.0 : spots.map((s) => s.y).reduce(math.max);
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.music_note, size: 13, color: AppTheme.imperialGold),
+              const HueIcon(HueIcons.musicNote, size: 13, color: AppTheme.imperialGold),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(strings.practiceGuideTitle, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
@@ -1744,20 +1802,20 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   offset: section.start,
                 );
                 return Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: AppSpacing.xs),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       for (var i = 0; i < lines.length; i++)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 1),
+                          padding: const EdgeInsets.symmetric(vertical: 0),
                           child: Text(
                             lines[i],
                             style: TextStyle(
-                              fontSize: i == current ? 13.5 : 11.5,
+                              fontSize: i == current ? 13.5 : 12,
                               height: 1.35,
                               fontWeight: i == current ? FontWeight.bold : FontWeight.w400,
-                              color: i == current ? scheme.onSurface : scheme.onSurfaceVariant.withAlpha(130),
+                              color: i == current ? AppTheme.goldReadable(context) : scheme.onSurfaceVariant.withAlpha(130),
                             ),
                           ),
                         ),
@@ -1806,7 +1864,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     if (maxY <= 0) maxY = 1;
     final palette = ChartPalette.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1859,15 +1917,15 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       children: [
         if (m.truncated && m.uploadedSeconds != null && m.analyzedSeconds != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: Row(
               children: [
-                const Icon(Icons.content_cut, size: 12, color: AppTheme.statusWarning),
+                const HueIcon(HueIcons.contentCut, size: 12, color: AppTheme.statusWarning),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     strings.practiceTruncatedFlag(m.analyzedSeconds!, m.uploadedSeconds!),
-                    style: const TextStyle(fontSize: 10.5, color: AppTheme.statusWarning),
+                    style: const TextStyle(fontSize: 11, color: AppTheme.statusWarning),
                   ),
                 ),
               ],
@@ -1890,7 +1948,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                   Text(strings.practiceAvgError(m.meanAbsCents.toStringAsFixed(0)), style: const TextStyle(fontSize: 12)),
                   Text(
                     result.reference == 'sample' ? strings.practiceRefSample : strings.practiceRefOriginal,
-                    style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -1899,31 +1957,31 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         ),
         if (m.ornament > 0)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
             child: Text(
               strings.practiceOrnamentValue(m.ornament.toStringAsFixed(0), m.vibratoRate.toStringAsFixed(1)),
-              style: TextStyle(fontSize: 11.5, color: AppTheme.goldReadable(context)),
+              style: TextStyle(fontSize: 12, color: AppTheme.goldReadable(context)),
             ),
           ),
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
           child: Text(
             strings.practiceMatchedNotes(m.matchedNotes, m.missingNotes),
-            style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
         ),
         if (m.referenceQuality == 'poor')
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
                 color: AppTheme.statusWarning.withAlpha(30),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 13, color: AppTheme.statusWarning),
+                  const HueIcon(HueIcons.info, size: 13, color: AppTheme.statusWarning),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(strings.practiceRefPoorWarning, style: const TextStyle(fontSize: 11)),
@@ -1934,7 +1992,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
           ),
         if (m.summaryHint.isNotEmpty || m.summaryCodes.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
             child: Text(
               summaryHintText(
                 verdictCounts: m.verdictCounts,
@@ -1943,7 +2001,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 fallback: m.summaryHint,
                 strings: strings,
               ),
-              style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
           ),
       ],
@@ -1953,7 +2011,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   Widget _scoreBadge(String label, double value, Color color) {
     return Column(
       children: [
-        Text(value.toStringAsFixed(0), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+        Text(value.toStringAsFixed(0), style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: color)),
         Text(label, style: const TextStyle(fontSize: 11)),
       ],
     );
@@ -2011,7 +2069,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2019,7 +2077,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               children: [
                 Text(strings.practiceProgressTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 6),
-                Text('($sourceLabel)', style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                Text('($sourceLabel)', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
                 const Spacer(),
                 if (avg != null)
                   Text('${strings.practiceAvg5}: $avg', style: const TextStyle(fontSize: 12, color: AppTheme.statusSuccess)),
@@ -2031,7 +2089,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 Text(
                   stats.streakDays > 0 ? strings.practiceStreakDays(stats.streakDays) : strings.practiceNoPracticeYet,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: stats.streakDays > 0 ? AppTheme.goldReadable(context) : scheme.onSurfaceVariant,
                   ),
@@ -2039,7 +2097,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                 const SizedBox(width: 10),
                 Text(strings.practicePracticeCount(stats.totalPractices), style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
                 const Spacer(),
-                Text(strings.practiceWeekLabel, style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant)),
+                Text(strings.practiceWeekLabel, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
               ],
             ),
             const SizedBox(height: 4),
@@ -2053,7 +2111,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
                         color: stats.last7Counts[i] > 0
                             ? scheme.primary.withAlpha(60 + math.min(195, stats.last7Counts[i] * 65))
                             : scheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(AppRadius.xs),
                       ),
                     ),
                   ),
@@ -2072,29 +2130,29 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             if (_serverProgressAvailable && serverEntries.isNotEmpty)
               for (final e in serverEntries.take(6))
                 InkWell(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
                   onTap: () => unawaited(_openLessonById(e.lessonId)),
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 3),
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
                     child: Row(
                       children: [
                         Text(
                           e.createdAt.length >= 16 ? e.createdAt.substring(0, 16) : e.createdAt,
-                          style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             strings.practiceHistoryPhrase(_selected?.title ?? '', e.section + 1),
-                            style: const TextStyle(fontSize: 11.5),
+                            style: const TextStyle(fontSize: 12),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Text(
                           e.score.toStringAsFixed(1),
-                          style: const TextStyle(fontSize: 11.5, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
+                          style: const TextStyle(fontSize: 12, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
                         ),
-                        Icon(Icons.chevron_right, size: 13, color: scheme.onSurfaceVariant.withAlpha(140)),
+                        HueIcon(HueIcons.chevronRight, size: 13, color: scheme.onSurfaceVariant.withAlpha(140)),
                       ],
                     ),
                   ),
@@ -2102,30 +2160,30 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
               else
                 for (final e in history.take(6))
                   InkWell(
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(AppRadius.xs),
                     onTap: e.detail.isNotEmpty ? () => unawaited(_openLessonById(e.detail)) : null,
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 3),
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
                       child: Row(
                         children: [
                           Text(
                             '${e.at.day.toString().padLeft(2, '0')}/${e.at.month.toString().padLeft(2, '0')} ${e.at.hour.toString().padLeft(2, '0')}:${e.at.minute.toString().padLeft(2, '0')}',
-                            style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               e.title,
-                              style: const TextStyle(fontSize: 11.5),
+                              style: const TextStyle(fontSize: 12),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           Text(
                             (e.score ?? 0).toStringAsFixed(1),
-                            style: const TextStyle(fontSize: 11.5, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
+                            style: const TextStyle(fontSize: 12, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
                           ),
                           if (e.detail.isNotEmpty)
-                            Icon(Icons.chevron_right, size: 13, color: scheme.onSurfaceVariant.withAlpha(140)),
+                            HueIcon(HueIcons.chevronRight, size: 13, color: scheme.onSurfaceVariant.withAlpha(140)),
                         ],
                       ),
                     ),
@@ -2166,5 +2224,19 @@ class _ProgressLineChart extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+AppStatusKind practiceVerdictKind(String verdict) {
+  switch (verdict) {
+    case 'ok':
+      return AppStatusKind.success;
+    case 'minor':
+    case 'octave':
+      return AppStatusKind.warning;
+    case 'off':
+      return AppStatusKind.danger;
+    default:
+      return AppStatusKind.info;
   }
 }

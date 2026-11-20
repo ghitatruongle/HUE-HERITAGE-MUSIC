@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+
+import '../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../services/locale_provider.dart';
+import 'hue_icons.dart';
 
 class SheetNote {
   final int midi;
@@ -30,7 +33,7 @@ class SheetMusicView extends StatelessWidget {
       return Container(
         height: 160,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
         ),
         child: Center(child: Text(strings.sheetEmpty)),
@@ -45,10 +48,10 @@ class SheetMusicView extends StatelessWidget {
         Container(
           height: 200,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
           ),
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           child: CustomPaint(
             size: Size.infinite,
             painter: _PianoRollPainter(
@@ -64,7 +67,7 @@ class SheetMusicView extends StatelessWidget {
         const SizedBox(height: 6),
         Row(
           children: [
-            Icon(Icons.info_outline, size: 14, color: scheme.onSurfaceVariant),
+            HueIcon(HueIcons.info, size: 14, color: scheme.onSurfaceVariant),
             const SizedBox(width: 4),
             Expanded(
               child: Text(
@@ -118,7 +121,7 @@ class _PianoRollPainter extends CustomPainter {
       final x0 = n.start / maxTime * size.width;
       final x1 = (n.end / maxTime).clamp(x0 / size.width + 0.01, 1.0) * size.width;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTRB(x0, y0, x1, y1), const Radius.circular(3)),
+        RRect.fromRectAndRadius(Rect.fromLTRB(x0, y0, x1, y1), const Radius.circular(AppRadius.xs)),
         paint,
       );
     }

@@ -9,6 +9,7 @@ import '../../services/server_config.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/skeleton_loader.dart';
+import '../../widgets/hue_icons.dart';
 
 class SecuritySection extends StatefulWidget {
   const SecuritySection({super.key});
@@ -101,12 +102,12 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
   }
 
   IconData _eventIcon(String event) {
-    if (event.contains('flood') || event.contains('rate_limited')) return Icons.block;
-    if (event.contains('failed')) return Icons.error_outline;
-    if (event.startsWith('admin_')) return Icons.admin_panel_settings;
-    if (event.contains('deleted') || event.contains('cleanup')) return Icons.delete_outline;
-    if (event.contains('password')) return Icons.vpn_key_outlined;
-    return Icons.shield_outlined;
+    if (event.contains('flood') || event.contains('rate_limited')) return HueIcons.block;
+    if (event.contains('failed')) return HueIcons.error;
+    if (event.startsWith('admin_')) return HueIcons.adminPanel;
+    if (event.contains('deleted') || event.contains('cleanup')) return HueIcons.delete;
+    if (event.contains('password')) return HueIcons.vpnKey;
+    return HueIcons.security;
   }
 
   Color _eventColor(String event, BuildContext context) {
@@ -135,10 +136,10 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
           child: Row(
             children: [
-              Icon(Icons.shield_outlined, size: 18, color: AppTheme.goldReadable(context)),
+              HueIcon(HueIcons.security, size: 18, color: AppTheme.goldReadable(context)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -149,14 +150,14 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
               IconButton(
                 tooltip: strings.adminRefresh,
                 onPressed: _loading ? null : _reload,
-                icon: const Icon(Icons.refresh, size: 18),
+                icon: const HueIcon(HueIcons.refresh, size: 18),
               ),
             ],
           ),
         ),
         if (summary != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Wrap(
@@ -165,14 +166,14 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                 children: [
                   for (final entry in summary.counts.entries)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                       decoration: BoxDecoration(
                         color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
                       ),
                       child: Text(
                         '${strings.securityEventLabel(entry.key)}: ${entry.value}',
-                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ),
                   if (summary.counts.isEmpty)
@@ -186,17 +187,17 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
           ),
         if (summary?.lastAdminLoginTs != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 '${strings.securityLastAdminLogin}: ${summary!.lastAdminLoginTs}',
-                style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               ),
             ),
           ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
           child: Row(
             children: [
               Expanded(
@@ -206,7 +207,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                   decoration: InputDecoration(
                     hintText: strings.securitySearchHint,
                     isDense: true,
-                    prefixIcon: const Icon(Icons.search, size: 20),
+                    prefixIcon: const HueIcon(HueIcons.search, size: 20),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -222,11 +223,11 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                     value: _eventFilter,
                     underline: const SizedBox.shrink(),
                     items: [
-                      DropdownMenuItem(value: '', child: Text(strings.securityFilterAll, style: const TextStyle(fontSize: 12.5))),
+                      DropdownMenuItem(value: '', child: Text(strings.securityFilterAll, style: const TextStyle(fontSize: 12))),
                       for (final k in keys)
                         DropdownMenuItem(
                           value: k,
-                          child: Text(strings.securityEventLabel(k), style: const TextStyle(fontSize: 12.5)),
+                          child: Text(strings.securityEventLabel(k), style: const TextStyle(fontSize: 12)),
                         ),
                     ],
                     onChanged: (v) {
@@ -245,17 +246,17 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
               : _hasError && _events.isEmpty
                   ? ErrorPanel(message: strings.adminLoadFail, onRetry: _reload)
                   : _events.isEmpty
-                      ? EmptyState(icon: Icons.security_rounded, title: strings.securityEmpty)
+                      ? EmptyState(icon: HueIcons.security, title: strings.securityEmpty)
                       : RefreshIndicator(
                           onRefresh: _reload,
                           child: ListView.separated(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(AppSpacing.lg),
                             itemCount: _events.length + ((_events.length < _total) ? 1 : 0),
                             separatorBuilder: (_, __) => const SizedBox(height: 6),
                             itemBuilder: (context, index) {
                               if (index >= _events.length) {
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                                   child: Center(
                                     child: _loadingMore
                                         ? const SizedBox(
@@ -265,7 +266,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                                           )
                                         : OutlinedButton.icon(
                                             onPressed: _loadMore,
-                                            icon: const Icon(Icons.expand_more, size: 16),
+                                            icon: const HueIcon(HueIcons.expandMore, size: 16),
                                             label: Text('${strings.adminLoadMore} ($_total)'),
                                           ),
                                   ),
@@ -275,7 +276,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                               final color = _eventColor(e.event, context);
                               return Card(
                                 margin: EdgeInsets.zero,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                                 child: ListTile(
                                   dense: true,
                                   leading: Icon(_eventIcon(e.event), color: color, size: 20),
@@ -298,10 +299,10 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
         ),
         if (_truncated)
           Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
             child: Text(
               strings.securityTruncated,
-              style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
             ),
           ),
       ],

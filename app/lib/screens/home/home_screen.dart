@@ -4,12 +4,17 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/auth_service.dart';
+import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
+import '../../services/practice_resume.dart';
 import '../../services/server_config.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/empty_state.dart';
 import '../../widgets/heritage_motif.dart';
+import '../../widgets/hue_icons.dart';
 import '../../widgets/server_onboarding_dialog.dart';
 import '../../widgets/staggered_entrance.dart';
+import '../../widgets/status_colors.dart';
 import '../../widgets/responsive_layout.dart';
 import '../analysis/analysis_screen.dart';
 import '../admin/admin_screen.dart';
@@ -97,64 +102,78 @@ class _HomeScreenState extends State<HomeScreen> {
     _maybeShowSessionNotices(context);
     final destinations = [
       NavigationDestinationItem(
-        icon: Icons.home_outlined,
-        selectedIcon: Icons.home,
+        icon: HueIcons.home,
+        selectedIcon: HueIcons.home,
         labelKey: 'home',
         screen: _HomeContent(onSelectTab: (idx) => setState(() => _navIndex = idx)),
+        pinnedMobile: true,
       ),
       const NavigationDestinationItem(
-        icon: Icons.library_music_outlined,
-        selectedIcon: Icons.library_music,
+        icon: HueIcons.libraryMusic,
+        selectedIcon: HueIcons.libraryMusic,
         labelKey: 'heritage',
         screen: HeritageListScreen(),
+        group: NavGroup.listenLearn,
+        pinnedMobile: true,
       ),
       const NavigationDestinationItem(
-        icon: Icons.healing_outlined,
-        selectedIcon: Icons.healing,
+        icon: HueIcons.healing,
+        selectedIcon: HueIcons.healing,
         labelKey: 'restoration',
         screen: RestorationScreen(),
+        group: NavGroup.create,
+        showBetaBadge: true,
       ),
       const NavigationDestinationItem(
-        icon: Icons.mic_outlined,
-        selectedIcon: Icons.mic,
+        icon: HueIcons.mic,
+        selectedIcon: HueIcons.mic,
         labelKey: 'learning',
         screen: LearningScreen(),
+        group: NavGroup.listenLearn,
+        pinnedMobile: true,
       ),
       const NavigationDestinationItem(
-        icon: Icons.query_stats_outlined,
-        selectedIcon: Icons.query_stats,
+        icon: HueIcons.queryStats,
+        selectedIcon: HueIcons.queryStats,
         labelKey: 'analysis',
         screen: AnalysisScreen(),
+        group: NavGroup.listenLearn,
       ),
       const NavigationDestinationItem(
-        icon: Icons.music_note_outlined,
-        selectedIcon: Icons.music_note,
+        icon: HueIcons.musicNote,
+        selectedIcon: HueIcons.musicNote,
         labelKey: 'transcription',
         screen: TranscriptionScreen(),
+        group: NavGroup.listenLearn,
       ),
       const NavigationDestinationItem(
-        icon: Icons.auto_awesome_outlined,
-        selectedIcon: Icons.auto_awesome,
+        icon: HueIcons.autoAwesome,
+        selectedIcon: HueIcons.autoAwesome,
         labelKey: 'creation',
         screen: CreationScreen(),
+        group: NavGroup.create,
+        pinnedMobile: true,
       ),
       const NavigationDestinationItem(
-        icon: Icons.history_outlined,
-        selectedIcon: Icons.history,
+        icon: HueIcons.history,
+        selectedIcon: HueIcons.history,
         labelKey: 'history',
         screen: HistoryScreen(),
+        group: NavGroup.system,
       ),
       const NavigationDestinationItem(
-        icon: Icons.settings_outlined,
-        selectedIcon: Icons.settings,
+        icon: HueIcons.settings,
+        selectedIcon: HueIcons.settings,
         labelKey: 'settings',
         screen: SettingsScreen(),
+        group: NavGroup.system,
       ),
       const NavigationDestinationItem(
-        icon: Icons.account_circle_outlined,
-        selectedIcon: Icons.account_circle,
+        icon: HueIcons.accountCircle,
+        selectedIcon: HueIcons.accountCircle,
         labelKey: 'auth',
         screen: LoginScreen(),
+        group: NavGroup.system,
       ),
     ];
 
@@ -162,10 +181,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (auth.isAdmin) {
       destinations.add(
         const NavigationDestinationItem(
-          icon: Icons.admin_panel_settings_outlined,
-          selectedIcon: Icons.admin_panel_settings,
+          icon: HueIcons.adminPanel,
+          selectedIcon: HueIcons.adminPanel,
           labelKey: 'admin',
           screen: AdminScreen(),
+          group: NavGroup.admin,
         ),
       );
     }
@@ -185,174 +205,167 @@ class _HomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    final strings = locale.strings;
+    final strings = context.watch<LocaleProvider>().strings;
     final server = context.watch<ServerConfig>();
 
-    final features = [
-      _Feature(
-        icon: Icons.library_music,
+    final quickActions = [
+      _QuickAction(
+        icon: HueIcons.libraryMusic,
         color: AppTheme.featureAccent(context, 0),
-        title: strings.featHeritageTitle,
-        subtitle: strings.featHeritageDesc,
+        label: strings.featHeritageTitle,
         tabIndex: 1,
       ),
-      _Feature(
-        icon: Icons.healing,
-        color: AppTheme.featureAccent(context, 1),
-        title: strings.featRestorationTitle,
-        subtitle: strings.featRestorationDesc,
-        tabIndex: 2,
-      ),
-      _Feature(
-        icon: Icons.mic,
+      _QuickAction(
+        icon: HueIcons.mic,
         color: AppTheme.featureAccent(context, 2),
-        title: strings.featLearningTitle,
-        subtitle: strings.featLearningDesc,
+        label: strings.featLearningTitle,
         tabIndex: 3,
       ),
-      _Feature(
-        icon: Icons.query_stats,
-        color: AppTheme.featureAccent(context, 3),
-        title: strings.featAnalysisTitle,
-        subtitle: strings.featAnalysisDesc,
-        tabIndex: 4,
-      ),
-      _Feature(
-        icon: Icons.music_note,
-        color: AppTheme.featureAccent(context, 4),
-        title: strings.featTranscriptionTitle,
-        subtitle: strings.featTranscriptionDesc,
-        tabIndex: 5,
-      ),
-      _Feature(
-        icon: Icons.auto_awesome,
+      _QuickAction(
+        icon: HueIcons.autoAwesome,
         color: AppTheme.featureAccent(context, 5),
-        title: strings.featCreationTitle,
-        subtitle: strings.featCreationDesc,
+        label: strings.featCreationTitle,
         tabIndex: 6,
       ),
-      _Feature(
-        icon: Icons.history,
-        color: AppTheme.featureAccent(context, 6),
-        title: strings.featHistoryTitle,
-        subtitle: strings.featHistoryDesc,
-        tabIndex: 7,
-      ),
-      _Feature(
-        icon: Icons.settings_outlined,
-        color: AppTheme.featureAccent(context, 7),
-        title: strings.settingsTitle,
-        subtitle: strings.featSettingsSubtitle,
-        tabIndex: 8,
+      _QuickAction(
+        icon: HueIcons.healing,
+        color: AppTheme.featureAccent(context, 1),
+        label: strings.navRestoration,
+        tabIndex: 2,
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        int crossAxisCount = 1;
-        double childAspectRatio = 3.2;
-
-        if (width >= AppBreakpoints.wide) {
-          crossAxisCount = 4;
-          childAspectRatio = 2.1;
-        } else if (width >= AppBreakpoints.compact) {
-          crossAxisCount = 2;
-          childAspectRatio = 2.3;
-        } else {
-          crossAxisCount = 1;
-          childAspectRatio = 3.6;
-        }
-
-        return CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, 0),
+          sliver: SliverToBoxAdapter(
+            child: RepaintBoundary(child: _buildHeroHeader(context, strings, server)),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, 0),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  strings.quickAccessTitle,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
                   children: [
-                    RepaintBoundary(child: _buildHeroHeader(context, strings, server)),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          strings.featuresHeader,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                              ),
+                    for (var i = 0; i < quickActions.length; i++)
+                      StaggeredEntrance(
+                        index: i,
+                        child: _QuickActionChip(
+                          action: quickActions[i],
+                          onSelect: () => onSelectTab(quickActions[i].tabIndex),
                         ),
-                        Text(
-                          strings.modulesCount(features.length),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppTheme.goldReadable(context),
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
+                      ),
                   ],
                 ),
-              ),
+              ],
             ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverGrid(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: childAspectRatio,
-                ),
-                delegate: SliverChildListDelegate([
-                  for (var i = 0; i < features.length; i++)
-                    _FeatureCard(
-                      feature: features[i],
-                      index: i,
-                      onSelect: () => onSelectTab(features[i].tabIndex),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0),
+          sliver: SliverToBoxAdapter(
+            child: _buildRecentSection(context, strings),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, AppSpacing.xxl),
+          sliver: SliverToBoxAdapter(
+            child: Center(
+              child: Text(
+                'Hue Heritage Music · ${strings.versionLabel} ${AppConstants.appVersion}',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 11,
                     ),
-                ]),
               ),
             ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-              sliver: SliverToBoxAdapter(
-                child: Center(
-                  child: Text(
-                    'Hue Heritage Music · ${strings.versionLabel} ${AppConstants.appVersion}',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 11,
-                        ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentSection(BuildContext context, dynamic strings) {
+    final entries = context.watch<HistoryService>().entries;
+    final recent = entries.take(3).toList();
+    final resume = PracticeResume.pickLatest(entries);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              strings.recentActivityTitle,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            if (entries.isNotEmpty)
+              TextButton.icon(
+                onPressed: () => onSelectTab(7),
+                icon: const HueIcon(HueIcons.arrowForward, size: 15),
+                label: Text(strings.taskHistoryTitle),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                  textStyle: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (resume != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: _ResumeTile(
+              title: resume.title,
+              onTap: () {
+                PracticeResume.lessonId.value = resume.detail;
+                onSelectTab(3);
+              },
+            ),
+          ),
+        if (recent.isEmpty)
+          EmptyState(icon: HueIcons.historyToggleOff, title: strings.recentActivityEmpty)
+        else
+          Column(
+            children: [
+              for (var i = 0; i < recent.length; i++)
+                StaggeredEntrance(
+                  index: i,
+                  child: _RecentTile(
+                    entry: recent[i],
+                    onTap: () => onSelectTab(7),
                   ),
                 ),
-              ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+      ],
     );
   }
 
   Widget _buildHeroHeader(BuildContext context, dynamic strings, ServerConfig server) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: AppTheme.brandGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primaryPurple.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        gradient: AppTheme.brandGradientOf(context),
+        boxShadow: AppElevation.card(Theme.of(context).brightness),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
       child: HeritageMotif(
         color: Colors.white,
         opacity: 0.09,
@@ -362,7 +375,7 @@ class _HomeContent extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               color: Colors.white.withValues(alpha: 0.15),
               border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
             ),
@@ -378,8 +391,8 @@ class _HomeContent extends StatelessWidget {
                   strings.appTitle,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0.2,
                     fontFamily: AppTheme.displayFontFamily,
                   ),
@@ -400,12 +413,12 @@ class _HomeContent extends StatelessWidget {
           const SizedBox(width: 12),
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
-                color: (server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
+                color: (server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(AppRadius.xl),
                 border: Border.all(
-                  color: (server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger).withValues(alpha: 0.6),
+                  color: (server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark).withValues(alpha: 0.6),
                   width: 0.8,
                 ),
               ),
@@ -417,7 +430,7 @@ class _HomeContent extends StatelessWidget {
                     height: 7,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+                      color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -427,7 +440,7 @@ class _HomeContent extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+                        color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
@@ -444,7 +457,7 @@ class _HomeContent extends StatelessWidget {
               return IconButton(
                 tooltip: loggedIn ? (auth?.username ?? strings.authTooltipLoggedIn) : strings.authTooltipGuest,
                 icon: Icon(
-                  loggedIn ? Icons.account_circle : Icons.account_circle_outlined,
+                  loggedIn ? HueIcons.accountCircle : HueIcons.accountCircle,
                   color: Colors.white,
                   size: 26,
                 ),
@@ -463,151 +476,246 @@ class _HomeContent extends StatelessWidget {
   }
 }
 
-class _Feature {
+class _QuickAction {
   final IconData icon;
   final Color color;
-  final String title;
-  final String subtitle;
+  final String label;
   final int tabIndex;
 
-  const _Feature({
+  const _QuickAction({
     required this.icon,
     required this.color,
-    required this.title,
-    required this.subtitle,
+    required this.label,
     required this.tabIndex,
   });
 }
 
-class _FeatureCard extends StatefulWidget {
-  final _Feature feature;
-  final int index;
+class _QuickActionChip extends StatelessWidget {
+  final _QuickAction action;
   final VoidCallback onSelect;
 
-  const _FeatureCard({
-    required this.feature,
-    required this.index,
-    required this.onSelect,
-  });
-
-  @override
-  State<_FeatureCard> createState() => _FeatureCardState();
-}
-
-class _FeatureCardState extends State<_FeatureCard> {
-  bool _isHovered = false;
+  const _QuickActionChip({required this.action, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final baseBorder = scheme.outline;
-    const hoverBorder = AppTheme.primaryPurpleGlow;
-
-    return StaggeredEntrance(
-      index: widget.index,
-      child: MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        decoration: BoxDecoration(
-          color: _isHovered
-              ? scheme.surfaceContainerHighest
-              : scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _isHovered ? hoverBorder : baseBorder,
-            width: _isHovered ? 1.4 : 1.0,
-          ),
-          boxShadow: _isHovered
-              ? [
-                  BoxShadow(
-                    color: AppTheme.primaryPurple.withValues(alpha: isDark ? 0.2 : 0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: widget.onSelect,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: widget.feature.color.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: action.color.withValues(alpha: AppAlpha.selected),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: onSelect,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(action.icon, size: 18, color: action.color),
+              const SizedBox(width: 8),
+              Text(
+                action.label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                    child: Icon(widget.feature.icon, color: widget.feature.color, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                widget.feature.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                      color: scheme.onSurface,
-                                    ),
-                              ),
-                            ),
-                            if (widget.feature.title.contains('Beta')) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.goldReadable(context).withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: AppTheme.goldReadable(context), width: 0.8),
-                                ),
-                                child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 10, fontWeight: FontWeight.bold)),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.feature.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 13,
-                    color: _isHovered ? AppTheme.primaryPurple : scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                  ),
-                ],
               ),
+              const SizedBox(width: 4),
+              Icon(
+                HueIcons.arrowForwardIos,
+                size: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentTile extends StatelessWidget {
+  final HistoryEntry entry;
+  final VoidCallback onTap;
+
+  const _RecentTile({required this.entry, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = context.read<LocaleProvider>();
+    final strings = locale.strings;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryPurple.withValues(alpha: AppAlpha.hover + 0.04),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Icon(_kindIcon(entry.kind), color: AppTheme.primaryPurple, size: 19),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        entry.title.isEmpty ? _kindLabel(entry.kind, strings) : entry.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '${_kindLabel(entry.kind, strings)} · ${_formatDate(entry.at)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _statusChip(context, entry.status, strings),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _statusChip(BuildContext context, String status, dynamic strings) {
+    final color = statusColor(context, status);
+    final label = switch (status) {
+      'done' => strings.historyStatusDone,
+      'error' => strings.historyStatusError,
+      'running' => strings.historyStatusRunning,
+      _ => status,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: AppAlpha.hover + 0.06),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
+      ),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11)),
+    );
+  }
+
+  IconData _kindIcon(String kind) => switch (kind) {
+        'transcribe' => HueIcons.musicNote,
+        'restore' || 'restore-upload' => HueIcons.healing,
+        'instruments' => HueIcons.piano,
+        'generate' => HueIcons.autoAwesome,
+        'cover' => HueIcons.shuffle,
+        'compare' || 'compare-tune' => HueIcons.compareArrows,
+        'analyze-pitch' => HueIcons.queryStats,
+        'practice' => HueIcons.school,
+        'sing_original' || 'sing_new_lyrics' => HueIcons.autoAwesome,
+        _ => HueIcons.task,
+      };
+
+  String _kindLabel(String kind, dynamic strings) => switch (kind) {
+        'transcribe' => strings.featTranscriptionTitle,
+        'restore' || 'restore-upload' => strings.navRestoration,
+        'instruments' => strings.navInstruments,
+        'generate' => strings.navCreation,
+        'cover' => strings.navCover,
+        'compare' => strings.navLearning,
+        'compare-tune' => strings.restorationTabCompare,
+        'analyze-pitch' => strings.featAnalysisTitle,
+        'practice' => strings.historyFilterPractice,
+        'sing_original' || 'sing_new_lyrics' => strings.navCreation,
+        _ => kind.isEmpty ? strings.taskHistoryTitle : kind,
+      };
+
+  String _formatDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} '
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+}
+
+class _ResumeTile extends StatelessWidget {
+  final String title;
+  final VoidCallback onTap;
+
+  const _ResumeTile({required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.read<LocaleProvider>().strings;
+    return Material(
+      color: AppTheme.primaryPurple.withValues(alpha: AppAlpha.selected),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.goldReadable(context), width: 1.2),
+                  color: AppTheme.goldReadable(context).withValues(alpha: AppAlpha.hover + 0.06),
+                ),
+                child: HueIcon(HueIcons.playArrow, size: 18, color: AppTheme.goldReadable(context)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      strings.homeResumeCta,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppTheme.goldReadable(context),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                HueIcons.arrowForward,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

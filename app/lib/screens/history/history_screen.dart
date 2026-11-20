@@ -4,8 +4,11 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
+import '../../widgets/feature_header.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/status_colors.dart';
+import '../../widgets/hue_icons.dart';
+import '../../widgets/staggered_entrance.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -29,7 +32,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final locale = context.watch<LocaleProvider>();
     final strings = locale.strings;
     final allEntries = context.watch<HistoryService>().entries;
@@ -44,55 +46,48 @@ class _HistoryScreenState extends State<HistoryScreen> {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, AppSpacing.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          strings.taskHistoryTitle,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                      ),
+                  FeatureHeader(
+                    title: strings.taskHistoryTitle,
+                    icon: HueIcons.historyToggleOff,
+                    actions: [
                       if (allEntries.isNotEmpty)
                         OutlinedButton.icon(
                           onPressed: () => _confirmClear(context, strings),
-                          icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                          icon: const HueIcon(HueIcons.deleteSweep, size: 18),
                           label: Text(strings.clearHistory),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: scheme.error,
-                            side: BorderSide(color: scheme.error.withValues(alpha: 0.5)),
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
                           ),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                     decoration: BoxDecoration(
-                      color: AppTheme.emeraldGreen.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: AppTheme.emeraldReadable(context).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                       border: Border.all(
-                        color: AppTheme.emeraldGreen.withValues(alpha: 0.3),
+                        color: AppTheme.emeraldReadable(context).withValues(alpha: 0.3),
                       ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.verified_user_outlined,
-                            color: AppTheme.emeraldGreen, size: 20),
+                        HueIcon(HueIcons.verified,
+                            color: AppTheme.emeraldReadable(context), size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             strings.historyPrivacyNote,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: AppTheme.emeraldGreen,
+                              color: AppTheme.emeraldReadable(context),
                             ),
                           ),
                         ),
@@ -127,14 +122,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
           if (entries.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
-              child: EmptyState(icon: Icons.history_toggle_off, title: strings.emptyHistory),
+              child: EmptyState(icon: HueIcons.historyToggleOff, title: strings.emptyHistory),
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xxxl),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _localTile(context, entries[index], locale),
+                  (context, index) => StaggeredEntrance(
+                    index: index,
+                    maxAnimatedIndex: 11,
+                    child: _localTile(context, entries[index], locale),
+                  ),
                   childCount: entries.length,
                 ),
               ),
@@ -162,22 +161,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _localTile(BuildContext context, HistoryEntry e, LocaleProvider locale) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         side: BorderSide(
           color: Theme.of(context).colorScheme.outline,
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
         leading: Container(
           width: 42,
           height: 42,
           decoration: BoxDecoration(
             color: AppTheme.primaryPurple.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
           child: Icon(_kindIcon(e.kind), color: AppTheme.primaryPurple, size: 22),
         ),
@@ -186,7 +185,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
           child: Row(
             children: [
               Text(_kindLabel(e.kind, locale), style: TextStyle(fontSize: 11, color: AppTheme.goldReadable(context), fontWeight: FontWeight.w600)),
@@ -216,10 +215,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
       _ => status,
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
       ),
       child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11)),
@@ -251,18 +250,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   IconData _kindIcon(String kind) => switch (kind) {
-        'transcribe' => Icons.music_note,
-        'restore' => Icons.healing,
-        'restore-upload' => Icons.upload_file,
-        'instruments' => Icons.piano,
-        'generate' => Icons.auto_awesome,
-        'cover' => Icons.shuffle,
-        'compare' => Icons.mic,
-        'compare-tune' => Icons.compare_arrows,
-        'analyze-pitch' => Icons.query_stats,
-        'practice' => Icons.school,
-        'sing_original' || 'sing_new_lyrics' => Icons.auto_awesome,
-        _ => Icons.task_outlined,
+        'transcribe' => HueIcons.musicNote,
+        'restore' => HueIcons.healing,
+        'restore-upload' => HueIcons.uploadFile,
+        'instruments' => HueIcons.piano,
+        'generate' => HueIcons.autoAwesome,
+        'cover' => HueIcons.shuffle,
+        'compare' => HueIcons.mic,
+        'compare-tune' => HueIcons.compareArrows,
+        'analyze-pitch' => HueIcons.queryStats,
+        'practice' => HueIcons.school,
+        'sing_original' || 'sing_new_lyrics' => HueIcons.autoAwesome,
+        _ => HueIcons.task,
       };
 
   String _kindLabel(String kind, LocaleProvider locale) {

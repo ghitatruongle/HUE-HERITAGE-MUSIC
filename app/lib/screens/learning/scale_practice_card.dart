@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/localization/app_strings.dart';
 import '../../models/lesson.dart';
 import '../../api/endpoints/lesson_api.dart';
 import '../../services/locale_provider.dart';
@@ -9,6 +10,9 @@ import '../../services/server_config.dart';
 import '../../services/teaching_utils.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/hue_icons.dart';
+import '../../widgets/result_card.dart';
+import 'lesson_practice_view.dart';
 
 class ScalePracticeCard extends StatelessWidget {
   final List<ScaleInfo> scales;
@@ -38,18 +42,22 @@ class ScalePracticeCard extends StatelessWidget {
     required this.onTransposeChanged,
   });
 
-  Color _verdictColor(String code, BuildContext context) {
+  String _scoreVerdict(double v) {
+    if (v >= 80) return 'ok';
+    if (v >= 50) return 'minor';
+    return 'off';
+  }
+
+  String _scaleVerdictLabel(AppStrings strings, String code) {
     switch (code) {
       case 'ok':
-        return AppTheme.statusSuccess.withAlpha(40);
+        return strings.verdictOk;
       case 'minor':
-        return AppTheme.statusWarning.withAlpha(40);
-      case 'octave':
-        return AppTheme.statusWarning.withAlpha(70);
+        return strings.verdictMinor;
       case 'off':
-        return AppTheme.statusDanger.withAlpha(40);
+        return strings.verdictOff;
       default:
-        return Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40);
+        return strings.verdictUnclear;
     }
   }
 
@@ -62,7 +70,7 @@ class ScalePracticeCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -119,7 +127,7 @@ class ScalePracticeCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   FilledButton.icon(
-                    icon: Icon(recording ? Icons.stop : Icons.mic, size: 16),
+                    icon: Icon(recording ? HueIcons.stop : HueIcons.mic, size: 16),
                     label: Text(recording ? strings.practiceStopRecord : strings.practiceScaleRecord),
                     style: FilledButton.styleFrom(
                       backgroundColor: recording ? AppTheme.statusDanger : null,
@@ -135,32 +143,56 @@ class ScalePracticeCard extends StatelessWidget {
               ),
               if (result != null) ...[
                 const Divider(height: 20),
-                Text(
-                  strings.practiceScaleResult(result!.score.toStringAsFixed(0), (result!.onScaleShare * 100).toStringAsFixed(0)),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${strings.practiceScorePitch}: ${result!.pitchScore.toStringAsFixed(0)} · ${strings.practiceScoreRhythm}: ${result!.rhythmScore.toStringAsFixed(0)} · ${strings.practiceScoreStability}: ${result!.stabilityScore.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
-                ),
-                if (result!.summaryHint.isNotEmpty || result!.summaryCodes.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      summaryHintText(
-                        verdictCounts: result!.verdictCounts,
-                        summaryCodes: result!.summaryCodes,
-                        missingNotes: 0,
-                        fallback: result!.summaryHint,
-                        strings: strings,
-                      ),
-                      style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                ResultSummaryCard(
+                  title: strings.practiceScaleResult(result!.score.toStringAsFixed(0), (result!.onScaleShare * 100).toStringAsFixed(0)),
+                  status: practiceVerdictKind(_scoreVerdict(result!.score)),
+                  statusLabel: _scaleVerdictLabel(strings, _scoreVerdict(result!.score)),
+                  leadingIcon: HueIcons.workspacePremium,
+                  children: [
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        ScoreBadge(
+                          label: strings.practiceScorePitch,
+                          value: result!.pitchScore.toStringAsFixed(0),
+                          kind: practiceVerdictKind(_scoreVerdict(result!.pitchScore)),
+                        ),
+                        ScoreBadge(
+                          label: strings.practiceScoreRhythm,
+                          value: result!.rhythmScore.toStringAsFixed(0),
+                          kind: practiceVerdictKind(_scoreVerdict(result!.rhythmScore)),
+                        ),
+                        ScoreBadge(
+                          label: strings.practiceScoreStability,
+                          value: result!.stabilityScore.toStringAsFixed(0),
+                          kind: practiceVerdictKind(_scoreVerdict(result!.stabilityScore)),
+                        ),
+                      ],
                     ),
-                  ),
-                const SizedBox(height: 6),
+                    MetricRow(
+                      label: strings.practiceScoreTotal,
+                      value: result!.score.toStringAsFixed(0),
+                      valueKind: practiceVerdictKind(_scoreVerdict(result!.score)),
+                    ),
+                    if (result!.summaryHint.isNotEmpty || result!.summaryCodes.isNotEmpty)
+                      Text(
+                        summaryHintText(
+                          verdictCounts: result!.verdictCounts,
+                          summaryCodes: result!.summaryCodes,
+                          missingNotes: 0,
+                          fallback: result!.summaryHint,
+                          strings: strings,
+                        ),
+                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                      ),
+                  ],
+                ),
                 if (result!.performance.isNotEmpty) ...[
-                  Text(strings.practiceScalePerfTitle, style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.sm),
+                    child: Text(strings.practiceScalePerfTitle, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ),
                   const SizedBox(height: 4),
                   Wrap(
                     spacing: 6,
@@ -170,7 +202,14 @@ class ScalePracticeCard extends StatelessWidget {
                         Tooltip(
                           message: noteHintText(p.hintCodes, p.errCents, p.onsetErrMs, false, p.hint.isNotEmpty ? p.hint : p.verdict, strings),
                           child: Chip(
-                            backgroundColor: _verdictColor(p.verdictCode, context),
+                            backgroundColor: switch (practiceVerdictKind(p.verdictCode)) {
+                              AppStatusKind.success => AppTheme.statusSuccess.withAlpha(40),
+                              AppStatusKind.warning => p.verdictCode == 'octave'
+                                  ? AppTheme.statusWarning.withAlpha(70)
+                                  : AppTheme.statusWarning.withAlpha(40),
+                              AppStatusKind.danger => AppTheme.statusDanger.withAlpha(40),
+                              AppStatusKind.info => scheme.onSurfaceVariant.withAlpha(40),
+                            },
                             label: Text(
                               '${p.name} ${p.verdictCode == "unclear" || p.errCents == null ? "" : "${p.errCents! > 0 ? "+" : ""}${p.errCents!.toStringAsFixed(0)}c"}',
                               style: const TextStyle(fontSize: 11),
@@ -180,17 +219,19 @@ class ScalePracticeCard extends StatelessWidget {
                     ],
                   ),
                 ],
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    for (final n in result!.notes)
-                      Chip(
-                        backgroundColor: n.hit ? AppTheme.statusSuccess.withAlpha(40) : AppTheme.statusDanger.withAlpha(40),
-                        label: Text('${n.name} (${(n.share * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 11)),
-                      ),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final n in result!.notes)
+                        Chip(
+                          backgroundColor: n.hit ? AppTheme.statusSuccess.withAlpha(40) : AppTheme.statusDanger.withAlpha(40),
+                          label: Text('${n.name} (${(n.share * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 11)),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ],

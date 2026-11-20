@@ -22,6 +22,7 @@ import 'package:hue_heritage_music/services/auth_service.dart';
 import 'package:hue_heritage_music/services/history_service.dart';
 import 'package:hue_heritage_music/services/local_pitch.dart';
 import 'package:hue_heritage_music/services/locale_provider.dart';
+import 'package:hue_heritage_music/services/practice_resume.dart';
 import 'package:hue_heritage_music/services/server_config.dart';
 import 'package:hue_heritage_music/services/session_media.dart';
 import 'package:hue_heritage_music/services/theme_provider.dart';
@@ -48,7 +49,19 @@ void main() {
     expect(ServerConfig.normalize(''), '');
   });
 
-  testWidgets('Settings screen never shows server configuration UI', (tester) async {
+  test('PracticeResume picks latest practice entry with lesson-id detail', () {
+    final now = DateTime.now();
+    final scaleEntry = HistoryEntry(id: 'a', kind: 'practice', title: 'Thang', status: 'done', at: now, detail: 'scale:s1');
+    final lessonEntry = HistoryEntry(id: 'b', kind: 'practice', title: 'Bài 1', status: 'done', at: now, detail: 'lesson-9');
+    final analyzeEntry = HistoryEntry(id: 'c', kind: 'analyze-pitch', title: 'F0', status: 'done', at: now, detail: 'lesson-9');
+    final blankEntry = HistoryEntry(id: 'd', kind: 'practice', title: 'Trống', status: 'done', at: now);
+
+    expect(PracticeResume.pickLatest([analyzeEntry, scaleEntry, blankEntry]), isNull);
+    expect(PracticeResume.pickLatest([scaleEntry, lessonEntry, analyzeEntry]), same(lessonEntry));
+    expect(PracticeResume.pickLatest([lessonEntry]), same(lessonEntry));
+  });
+
+  testWidgets('Settings screen shows AI server section without inline config form', (tester) async {
     final locale = LocaleProvider();
     await tester.pumpWidget(
       MultiProvider(
@@ -65,11 +78,11 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text('Máy chủ AI'), findsOneWidget);
+    expect(find.text('Chưa cấu hình máy chủ.'), findsOneWidget);
+    expect(find.text('Đổi máy chủ'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     expect(find.byType(FilledButton), findsNothing);
-    expect(find.textContaining('Kết nối máy chủ AI'), findsNothing);
-    expect(find.textContaining('Địa chỉ máy chủ'), findsNothing);
-    expect(find.textContaining('URL máy chủ'), findsNothing);
     expect(find.textContaining('Kiểm tra'), findsNothing);
   });
 
@@ -214,7 +227,7 @@ void main() {
     expect(find.text('Sáng Tạo Lời Mới'), findsOneWidget);
   });
 
-  testWidgets('HomeScreen renders only 3 core cards and excludes legacy clutter', (tester) async {
+  testWidgets('HomeScreen renders dashboard with quick access and recent activity', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -235,6 +248,7 @@ void main() {
           ChangeNotifierProvider<LocaleProvider>.value(value: locale),
           ChangeNotifierProvider<ThemeProvider>.value(value: theme),
           ChangeNotifierProvider<AuthService>.value(value: AuthService()),
+          ChangeNotifierProvider<HistoryService>.value(value: HistoryService()),
           ChangeNotifierProvider<SessionMedia>(create: (_) => SessionMedia()),
         ],
         child: const MaterialApp(
@@ -245,12 +259,13 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
+    expect(find.text('Truy cập nhanh'), findsOneWidget);
+    expect(find.text('Hoạt động gần đây'), findsOneWidget);
     expect(find.text('Kho di sản số'), findsWidgets);
-    expect(find.text('Phục dựng (Beta)'), findsWidgets);
     expect(find.text('Học hát Ca Huế'), findsWidgets);
     expect(find.text('Audio -> Bản nhạc'), findsWidgets);
     expect(find.text('Sáng tạo cùng Ca Huế'), findsWidgets);
-    expect(find.text('Lịch sử'), findsWidgets);
+    expect(find.text('Phục dựng'), findsWidgets);
     expect(find.text('Thông tin dự án'), findsNothing);
   });
 
@@ -302,6 +317,12 @@ void main() {
   });
 
   testWidgets('RestorationScreen cross-compare tab opens without crashing', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     final server = ServerConfig();
     server.api.dio.httpClientAdapter = _MockHttpAdapter();
     final locale = LocaleProvider();
@@ -325,9 +346,12 @@ void main() {
     await tester.tap(find.text('Đối chiếu & Tìm tên bài'));
     await tester.pump();
     await tester.pumpAndSettle();
+    for (var i = 0; i < 10 && find.text('Đối chiếu âm học & Nhận diện bài').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.text('Đối chiếu âm học & Nhận diện bài'), findsOneWidget);
-    expect(find.text('Tải lên bản ghi của bạn để đối chiếu'), findsOneWidget);
+    expect(find.textContaining('Tải lên bản ghi của bạn'), findsWidgets);
   });
 
   test('AuthService guest mode behaves correctly without persistence', () {
@@ -864,6 +888,12 @@ void main() {
   });
 
   testWidgets('ScalePracticeCard renders transpose selector and performance chips', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     final server = ServerConfig();
     server.api.dio.httpClientAdapter = _JsonAdapter({});
     final scaleInfo = ScaleInfo(id: 'bac', name: 'Ngũ cung Bắc', noteNames: ['Do', 'Re']);

@@ -1,5 +1,47 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.5-alpha (2026-11-20)
+
+> Đợt "hoàn thiện chất lượng tổng thể": review code toàn dự án + 8 gate UI chất lượng (theme, layout, motion, điều hướng, polish) + battery bảo mật D0→D16 trên sân mới + dọn dẹp repo — 0 lỗ hổng mở, mọi gate xanh.
+
+### Review code toàn dự án (A2→A4/E1)
+- Đối chiếu hợp đồng API↔client: **khớp 54/54 endpoint** (path/method/shape/error)
+- Vá 2 lỗi TRUNG: `/api/music/evaluate` thiếu body-limit 15MB trong `LARGE_BODY_PATHS` (413 sai) · `rate_limit.py` dọn key stale không hiệu quả (leak bộ nhớ vô hạn) — cả 2 có test khóa đỏ-trước/xanh-sau
+
+### Gate C1/C2 — theme + layout (hue-theme-layout-gates)
+- Vá nút danger dark theme: chữ trắng trên `#F87171` chỉ 2.77:1 → ink `#161524` đạt 6.51:1, test khóa widget cả 2 theme
+- Nạp font JetBrainsMono vào ma trận render + test glyph dấu tiếng Việt (92/92 glyph đủ)
+- Quét 48 hardcode màu — tất cả nằm whitelist; hot-switch theme giữ state 13/13
+
+### Gate C3/C4 — motion + trạng thái (hue-motion-flow-gates)
+- Vá mounted-guard `_countInLeft` sau await (unmount giữa count-in dùng notifier đã dispose)
+- Ma trận 17 màn × 3 trạng thái = **45 PASS · 6 N/A · 0 THIẾU**; home/account/invite đổi sang `EmptyState`/`SkeletonLoader` dùng chung; task failed → `ErrorPanel` thân thiện VI
+- Scroll median 2.81ms < gate 25ms · metronome tick 0.82ms
+
+### Gate C5 — điều hướng (hue-navigation-flow-gates)
+- G1–G5 toàn PASS: bản đồ boot→Home khớp, PopScope 2 shell, 5 state-type giữ state, QR/deep-link = GAP đúng, 0 màn chết (17/17), 0 nút vô hiệu
+- Test khóa mới mobile 320×640: back-tab-trong→Home · Home bubble thoát chủ đích · tab giữ state
+
+### Gate C6/C7/C8 — polish (hue-polish-gates)
+- **A11y**: map 92 label tiếng Việt + widget `HueIcon` auto-inject `semanticLabel` — swap 121 call site, 0 `Icon(HueIcons.` còn; test khóa cấm quay lại
+- Vùng chạm rail thu gọn 44→48dp; share kiểm file tồn tại trước khi share
+- **fontSize scale chặt 10 cỡ**: 10.5→11 (61 chỗ), 13.5→13 (9 chỗ), gate whitelist khít; logo test thật ≥1024²; QR/share = GAP đúng
+
+### Battery bảo mật D0→D16 — sân mới :8006 (0 breach)
+- Dựng sân cô lập mới (`~/hue_bao_mat_006/`, SECRET/MK riêng) sau khi MK sân cũ mất — **13 campaign toàn CLEAN, ~700k lượt bắn, 0 breach, 0 5xx-thật, 0 Traceback**
+- SQLi 79k · CSRF 486k (4 pha bằng chứng kiến trúc Bearer-only) · IDOR 16/16 · upload 18/18 · race 15/15 (CAS 1-winner) · token 20/20 · DoS 16/16 · rate 8/8 boundary default · admin-max 27/0 · kill-chain 29/29 · final 25k req server dự
+- D16 3 lớp: vá↔test khóa khớp · sweep bề mặt live · invariants admins==1==ghitatruongle
+
+### Vệ sinh dự án
+- Xóa ~5.9G: cache build + 4 venv cũ + 4 sân test (:8003–8006 bootout đúng cách) — giữ `.venv-mac312` + production :8000 nguyên vẹn
+- 63 script test cũ chuyển `~/hue_archive`; repo chỉ còn code + server + tài sản thật
+- Regression sau dọn: pytest **398/398** · analyze **0** · flutter **204/204**
+
+### Sửa lỗi nhỏ
+- Warmup lesson ngắn không còn văng Traceback (warning + skip)
+- `rss_mb` health đo RSS hiện tại thay vì peak; `/health` miễn shedding
+- PBKDF2_ITERATIONS thành env knob có warning khi < 600k; `_logout` mounted-guard
+
 ## 0.0.5-preview (2026-11-15)
 
 > Đợt "giao diện Huế + luyện hát chốt hạ": hoàn thiện T1→T10 — sáng/tối đạt WCAG AA, font display đầy đủ weight, đàn nguyệt thay đĩa vinyl, chống lag scroll/render; chấm điểm trung thực (octave-normalize, mã lỗi cấu trúc, per-word thật, thang Ca Huế phi-cân bằng, ornament thưởng); máy trạng thái luyện hát sạch + trải nghiệm dạy học đầy đủ; web không freeze; review vòng 1 vá 9/10 + battery bảo mật D1→D16 toàn CLEAN với 1 lỗ hổng thật đã vá gốc (PBKDF2 GIL starvation).

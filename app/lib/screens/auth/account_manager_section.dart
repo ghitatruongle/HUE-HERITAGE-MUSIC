@@ -10,6 +10,9 @@ import '../../services/locale_provider.dart';
 import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
 import '../../widgets/error_panel.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/hue_icons.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class AccountManagerSection extends StatefulWidget {
   const AccountManagerSection({super.key});
@@ -92,7 +95,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
       children: [
         Row(
           children: [
-            const Icon(Icons.manage_accounts, size: 18, color: AppTheme.statusWarning),
+            const HueIcon(HueIcons.manageAccounts, size: 18, color: AppTheme.statusWarning),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -103,7 +106,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
             IconButton(
               tooltip: strings.adminRefresh,
               onPressed: _loading ? null : _reload,
-              icon: const Icon(Icons.refresh, size: 18),
+              icon: const HueIcon(HueIcons.refresh, size: 18),
             ),
           ],
         ),
@@ -111,16 +114,24 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         Text(strings.accountManagerHint, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 10),
         if (_loading && _accounts.isEmpty)
-          const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+          const Column(
+            children: [
+              SkeletonLoader(height: 68),
+              SkeletonLoader(height: 68),
+              SkeletonLoader(height: 68),
+            ],
+          )
         else if (_hasError && _accounts.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: ErrorPanel(message: strings.authInviteLoadFail, onRetry: _loading ? null : _reload),
           )
         else ...[
+          if (_accounts.isEmpty)
+            EmptyState(icon: HueIcons.accountCircle, title: strings.accountEmpty),
           for (final acc in _accounts)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Card(
                 margin: EdgeInsets.zero,
                 child: Row(
@@ -134,27 +145,27 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                             Text(acc.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             const SizedBox(width: 6),
                             if (acc.role == 'admin')
-                              const Icon(Icons.admin_panel_settings, size: 13, color: AppTheme.statusWarning)
+                              const HueIcon(HueIcons.adminPanel, size: 13, color: AppTheme.statusWarning)
                             else
-                              const Icon(Icons.person, size: 13, color: AppTheme.statusInfo),
+                              const HueIcon(HueIcons.person, size: 13, color: AppTheme.statusInfo),
                             if (!acc.active) ...[
                               const SizedBox(width: 6),
-                              const Icon(Icons.block, size: 13, color: AppTheme.statusDanger),
+                              const HueIcon(HueIcons.block, size: 13, color: AppTheme.statusDanger),
                             ],
                           ],
                         ),
                         if (acc.email.isNotEmpty)
-                          Text(acc.email, style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          Text(acc.email, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.vpn_key_outlined, size: 16),
+                    icon: const HueIcon(HueIcons.vpnKey, size: 16),
                     tooltip: strings.accountResetPassword,
                     onPressed: () => _resetAccountPassword(acc),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.person_remove, size: 16, color: AppTheme.statusDanger),
+                    icon: const HueIcon(HueIcons.personRemove, size: 16, color: AppTheme.statusDanger),
                     tooltip: strings.accountDeleteTitle,
                     onPressed: acc.role == 'admin' ? null : () => _deleteAccount(acc),
                   ),
@@ -168,7 +179,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
             ),
           if (_accounts.length < _total)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
               child: Center(
                 child: _loadingMore
                     ? const SizedBox(
@@ -178,7 +189,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                       )
                     : OutlinedButton.icon(
                         onPressed: _loadMore,
-                        icon: const Icon(Icons.expand_more, size: 16),
+                        icon: const HueIcon(HueIcons.expandMore, size: 16),
                         label: Text('${strings.adminLoadMore} ($_total)'),
                       ),
               ),

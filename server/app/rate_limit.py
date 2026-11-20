@@ -20,7 +20,7 @@ def hit_and_allow(key: str, limit: int, window_seconds: float = 60.0) -> bool:
             return False
         queue.append(now)
         if len(_hits) > 10000:
-            for k in [k for k, q in _hits.items() if not q]:
+            for k in [k for k, q in _hits.items() if not q or now - q[-1] > window_seconds]:
                 _hits.pop(k, None)
         return True
 

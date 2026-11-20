@@ -60,7 +60,7 @@ class _ServerOnboardingDialogState extends State<ServerOnboardingDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(strings.onboardingHint, style: const TextStyle(fontSize: 12.5)),
+          Text(strings.onboardingHint, style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 12),
           TextField(
             controller: _ctrl,

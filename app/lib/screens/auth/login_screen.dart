@@ -9,9 +9,10 @@ import '../../services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
-import '../../widgets/app_logo.dart';
+import '../../widgets/feature_header.dart';
 import '../../widgets/common_button.dart';
 import '../../widgets/error_panel.dart';
+import '../../widgets/hue_icons.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -167,6 +168,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Future<void> _logout() async {
     await context.read<AuthService>().clearToken();
+    if (!mounted) return;
     setState(() {
       _error = null;
     });
@@ -187,14 +189,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             : TabBar(
                 controller: _tabController,
                 tabs: [
-                  Tab(icon: const Icon(Icons.login), text: strings.authTabLogin),
-                  Tab(icon: const Icon(Icons.person_add_alt_1), text: strings.authTabRegister),
+                  Tab(icon: const HueIcon(HueIcons.login), text: strings.authTabLogin),
+                  Tab(icon: const HueIcon(HueIcons.personAdd), text: strings.authTabRegister),
                 ],
               ),
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.xl),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: auth.isLoggedIn
@@ -205,17 +207,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       if (auth.secureStorageBroken) ...[
                         Card(
                           color: scheme.tertiaryContainer,
-                          margin: const EdgeInsets.only(bottom: 16),
+                          margin: const EdgeInsets.only(bottom: AppSpacing.lg),
                           child: Padding(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(AppSpacing.md),
                             child: Row(
                               children: [
-                                Icon(Icons.key_off_outlined, color: scheme.onTertiaryContainer),
+                                HueIcon(HueIcons.keyOff, color: scheme.onTertiaryContainer),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     strings.authStorageWarning,
-                                    style: TextStyle(color: scheme.onTertiaryContainer, fontSize: 12.5),
+                                    style: TextStyle(color: scheme.onTertiaryContainer, fontSize: 12),
                                   ),
                                 ),
                               ],
@@ -225,20 +227,20 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       ],
                       if (_error != null) ...[
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                           child: ErrorPanel(message: _error!),
                         ),
                       ],
-                      _buildBrandHeader(strings),
-                      SizedBox(
-                        height: 480,
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildLoginTab(strings),
-                            _buildRegisterTab(strings),
-                          ],
-                        ),
+                      FeatureHeader(
+                        title: strings.appTitle,
+                        subtitle: strings.appSubtitle,
+                        icon: HueIcons.vpnKey,
+                      ),
+                      AnimatedBuilder(
+                        animation: _tabController,
+                        builder: (context, _) => _tabController.index == 0
+                            ? _buildLoginTab(strings)
+                            : _buildRegisterTab(strings),
                       ),
                     ],
                   ),
@@ -250,16 +252,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Widget _buildLoggedInCard(BuildContext context, AuthService auth, ColorScheme scheme, AppStrings strings) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           children: [
             CircleAvatar(
               radius: 36,
               backgroundColor: scheme.primary.withValues(alpha: 0.15),
-              child: Icon(Icons.verified_user, size: 40, color: scheme.primary),
+              child: HueIcon(HueIcons.verified, size: 40, color: scheme.primary),
             ),
             const SizedBox(height: 16),
             Text(
@@ -272,19 +273,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ],
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
                 color: auth.isAdmin
                     ? AppTheme.statusWarning.withAlpha(40)
                     : AppTheme.statusInfo.withAlpha(40),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 border: Border.all(color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    auth.isAdmin ? Icons.admin_panel_settings : Icons.person,
+                    auth.isAdmin ? HueIcons.adminPanel : HueIcons.person,
                     size: 14,
                     color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo,
                   ),
@@ -302,10 +303,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ),
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
                 color: AppTheme.statusSuccess.withAlpha(40),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 border: Border.all(color: AppTheme.statusSuccess),
               ),
               child: Text(strings.authLoggedInChip, style: const TextStyle(color: AppTheme.statusSuccess, fontSize: 12, fontWeight: FontWeight.w600)),
@@ -316,7 +317,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _busy ? null : _logout,
-                    icon: const Icon(Icons.logout),
+                    icon: const HueIcon(HueIcons.logout),
                     label: Text(strings.authLogoutBtn),
                   ),
                 ),
@@ -324,7 +325,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                 Expanded(
                   child: FilledButton.tonalIcon(
                     onPressed: _busy ? null : _chooseGuestMode,
-                    icon: const Icon(Icons.person_outline),
+                    icon: const HueIcon(HueIcons.person),
                     label: Text(strings.authGuestModeBtn),
                   ),
                 ),
@@ -333,13 +334,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _busy ? null : _openChangePassword,
-              icon: const Icon(Icons.lock_reset, size: 16),
+              icon: const HueIcon(HueIcons.lockReset, size: 16),
               label: Text(strings.changePasswordBtn),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _busy ? null : _logoutEverywhere,
-              icon: const Icon(Icons.phonelink_erase, size: 16),
+              icon: const HueIcon(HueIcons.phonelinkErase, size: 16),
               label: Text(strings.logoutEverywhereBtn),
             ),
           ],
@@ -364,7 +365,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: oldCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordOld)),
-              TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(tooltip: _obscureDialog ? strings.obscureShowPassword : strings.obscureHidePassword, icon: Icon(_obscureDialog ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
+              TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(tooltip: _obscureDialog ? strings.obscureShowPassword : strings.obscureHidePassword, icon: Icon(_obscureDialog ? HueIcons.visibility : HueIcons.visibilityOff, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
               TextField(controller: confirmCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordConfirm)),
             ],
           ),
@@ -439,73 +440,54 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     }
   }
 
-  Widget _buildBrandHeader(AppStrings strings) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        children: [
-          const AppLogo(size: 64),
-          const SizedBox(height: 10),
-          Text(
-            strings.appTitle,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: AppTheme.goldReadable(context),
-                ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            strings.appSubtitle,
-            style: Theme.of(context).textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildLoginTab(AppStrings strings) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _loginIdCtrl,
-          decoration: InputDecoration(
-            labelText: strings.authLoginIdLabel,
-            hintText: strings.authLoginIdHint,
-            border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.account_circle_outlined),
+        Semantics(
+          label: strings.authLoginIdLabel,
+          child: TextField(
+            controller: _loginIdCtrl,
+            decoration: InputDecoration(
+              labelText: strings.authLoginIdLabel,
+              hintText: strings.authLoginIdHint,
+              border: const OutlineInputBorder(),
+              prefixIcon: const HueIcon(HueIcons.accountCircle),
+            ),
+            enabled: !_busy,
           ),
-          enabled: !_busy,
         ),
         const SizedBox(height: 16),
-        TextField(
-          controller: _loginPasswordCtrl,
-          obscureText: _obscureLogin,
-          decoration: InputDecoration(
-            labelText: strings.authPasswordLabel,
-            border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.lock_outline),
-            suffixIcon: IconButton(
-              icon: Icon(_obscureLogin ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
-              tooltip: strings.authTogglePassword,
-              onPressed: () => setState(() => _obscureLogin = !_obscureLogin),
+        Semantics(
+          label: strings.authPasswordLabel,
+          child: TextField(
+            controller: _loginPasswordCtrl,
+            obscureText: _obscureLogin,
+            decoration: InputDecoration(
+              labelText: strings.authPasswordLabel,
+              border: const OutlineInputBorder(),
+              prefixIcon: const HueIcon(HueIcons.lock),
+              suffixIcon: IconButton(
+                icon: Icon(_obscureLogin ? HueIcons.visibility : HueIcons.visibilityOff, size: 20),
+                tooltip: strings.authTogglePassword,
+                onPressed: () => setState(() => _obscureLogin = !_obscureLogin),
+              ),
             ),
+            enabled: !_busy,
+            onSubmitted: (_) => _submitLogin(),
           ),
-          enabled: !_busy,
-          onSubmitted: (_) => _submitLogin(),
         ),
         const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
           decoration: BoxDecoration(
             color: AppTheme.statusWarning.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(color: AppTheme.statusWarning.withValues(alpha: 0.35)),
           ),
           child: Row(
             children: [
-              const Icon(Icons.info_outline, size: 16, color: AppTheme.statusWarning),
+              const HueIcon(HueIcons.info, size: 16, color: AppTheme.statusWarning),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -531,7 +513,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           children: [
             const Expanded(child: Divider()),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: Text(strings.authOrDivider, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
             ),
             const Expanded(child: Divider()),
@@ -540,11 +522,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         const SizedBox(height: 16),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
           ),
           onPressed: _busy ? null : _chooseGuestMode,
-          icon: const Icon(Icons.visibility_outlined),
+          icon: const HueIcon(HueIcons.visibility),
           label: Text(strings.authGuestBtn, style: const TextStyle(fontWeight: FontWeight.bold)),
         ),
         const SizedBox(height: 6),
@@ -566,7 +548,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           decoration: InputDecoration(
             labelText: strings.authUsernameLabel,
             border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.person_outline),
+            prefixIcon: const HueIcon(HueIcons.person),
           ),
           enabled: !_busy,
         ),
@@ -578,7 +560,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             labelText: strings.authGmailLabel,
             hintText: strings.authGmailHint,
             border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.alternate_email),
+            prefixIcon: const HueIcon(HueIcons.alternateEmail),
           ),
           enabled: !_busy,
         ),
@@ -589,9 +571,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           decoration: InputDecoration(
             labelText: strings.authPasswordMinLabel,
             border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.lock_outline),
+            prefixIcon: const HueIcon(HueIcons.lock),
             suffixIcon: IconButton(
-              icon: Icon(_obscureRegister ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
+              icon: Icon(_obscureRegister ? HueIcons.visibility : HueIcons.visibilityOff, size: 20),
               tooltip: strings.authTogglePassword,
               onPressed: () => setState(() => _obscureRegister = !_obscureRegister),
             ),
@@ -605,7 +587,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             labelText: strings.authInviteLabel,
             hintText: strings.authInviteHint,
             border: const OutlineInputBorder(),
-            prefixIcon: const Icon(Icons.vpn_key_outlined),
+            prefixIcon: const HueIcon(HueIcons.vpnKey),
           ),
           enabled: !_busy,
         ),

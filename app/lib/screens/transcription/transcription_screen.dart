@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
@@ -15,9 +17,13 @@ import '../../services/file_saver.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/feature_header.dart';
+import '../../widgets/hue_button.dart';
+import '../../widgets/hue_chip.dart';
 import '../../widgets/sheet_music_view.dart';
 import '../../widgets/waveform_view.dart';
 import '../../widgets/error_panel.dart';
+import '../../widgets/hue_icons.dart';
 
 class TranscriptionScreen extends StatefulWidget {
   const TranscriptionScreen({super.key});
@@ -210,129 +216,172 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
     super.dispose();
   }
 
+  Color _pitchAccent(BuildContext context, int midi) {
+    return AppTheme.featureAccent(context, (midi % 12) % 8);
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       children: [
-        Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(strings.transcribePickHint),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: _busy ? null : _pickFile,
-                      icon: const Icon(Icons.folder_open),
-                      label: Text(strings.transcribePickBtn),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _useRecording,
-                      icon: const Icon(Icons.mic),
-                      label: Text(strings.transcribeUseLast),
-                    ),
-                  ],
+        FeatureHeader(
+          title: strings.featTranscriptionTitle,
+          subtitle: strings.transcriptionHeaderSubtitle,
+          icon: HueIcons.musicNote,
+        ),
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(strings.transcribePickHint),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: _busy ? null : _pickFile,
+                            icon: const HueIcon(HueIcons.folderOpen),
+                            label: Text(strings.transcribePickBtn),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _busy ? null : _useRecording,
+                            icon: const HueIcon(HueIcons.mic),
+                            label: Text(strings.transcribeUseLast),
+                          ),
+                        ],
+                      ),
+                      if (_sourceLabel.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text('${strings.transcribeSource}: $_sourceLabel', style: Theme.of(context).textTheme.bodySmall),
+                        if (_waveform != null) ...[
+                          const SizedBox(height: 8),
+                          WaveformView(data: _waveform!),
+                        ],
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 110,
+                            child: TextField(
+                              controller: _bpm,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: strings.transcribeBpm,
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          Text('${strings.transcribeEngine}:'),
+                          SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(value: 'basic_pitch', label: Text('Basic Pitch')),
+                              ButtonSegment(value: 'dsp', label: Text('DSP')),
+                            ],
+                            selected: {_engine},
+                            onSelectionChanged: (s) => setState(() => _engine = s.first),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      CommonButton(
+                        label: strings.transcribeRunBtn,
+                        loading: _busy,
+                        onPressed: _run,
+                      ),
+                    ],
+                  ),
                 ),
-                if (_sourceLabel.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text('${strings.transcribeSource}: $_sourceLabel', style: Theme.of(context).textTheme.bodySmall),
-                  if (_waveform != null) ...[
-                    const SizedBox(height: 8),
-                    WaveformView(data: _waveform!),
-                  ],
-                ],
-                const SizedBox(height: 12),
+              ),
+              if (_busy) ...[
+                const SizedBox(height: AppSpacing.md),
+                LinearProgressIndicator(value: _progress > 0 ? _progress : null),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                ErrorPanel(message: _error!),
+              ],
+              if (_result != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(strings.transcribeNotesSummary(_result!.label, _result!.notes.length), style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.sm),
+                SheetMusicView(
+                  notes: _result!.notes
+                      .map((n) => SheetNote(midi: n.midi, start: n.start, end: n.end))
+                      .toList(),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
+                  spacing: AppSpacing.md,
+                  runSpacing: AppSpacing.md,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    SizedBox(
-                      width: 110,
-                      child: TextField(
-                        controller: _bpm,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: strings.transcribeBpm,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
+                    HueButton(
+                      label: strings.transcribeMidiBtn,
+                      icon: HueIcons.audioFile,
+                      variant: HueButtonVariant.gold,
+                      onPressed: () => _save(true),
                     ),
-                    Text('${strings.transcribeEngine}:'),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'basic_pitch', label: Text('Basic Pitch')),
-                        ButtonSegment(value: 'dsp', label: Text('DSP')),
-                      ],
-                      selected: {_engine},
-                      onSelectionChanged: (s) => setState(() => _engine = s.first),
+                    HueButton(
+                      label: strings.transcribeXmlBtn,
+                      variant: HueButtonVariant.gold,
+                      size: HueButtonSize.small,
+                      onPressed: () => _save(false),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                CommonButton(
-                  label: strings.transcribeRunBtn,
-                  loading: _busy,
-                  onPressed: _run,
+                const SizedBox(height: AppSpacing.md),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    for (final n in _result!.notes.take(50))
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: AppSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: Color.alphaBlend(
+                            _pitchAccent(context, n.midi).withValues(alpha: 0.10),
+                            scheme.surface,
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.xl),
+                          border: Border.all(color: _pitchAccent(context, n.midi).withValues(alpha: 0.45)),
+                        ),
+                        child: HueChip(
+                          label: '${n.name} ${n.start}s - ${n.end}s',
+                          icon: HueIcons.musicNote,
+                        ),
+                      ),
+                  ],
                 ),
+                if (_result!.notes.length > 50)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xs),
+                    child: Text(
+                      strings.transcribeMoreNotes(_result!.notes.length - 50),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
               ],
-            ),
-          ),
-        ),
-        if (_busy) ...[
-          const SizedBox(height: 12),
-          LinearProgressIndicator(value: _progress > 0 ? _progress : null),
-        ],
-        if (_error != null) ...[
-          const SizedBox(height: 12),
-          ErrorPanel(message: _error!),
-        ],
-        if (_result != null) ...[
-          const SizedBox(height: 16),
-          Text(strings.transcribeNotesSummary(_result!.label, _result!.notes.length), style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          SheetMusicView(
-            notes: _result!.notes
-                .map((n) => SheetNote(midi: n.midi, start: n.start, end: n.end))
-                .toList(),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              CommonButton(label: strings.transcribeMidiBtn, onPressed: () => _save(true)),
-              CommonButton(label: strings.transcribeXmlBtn, onPressed: () => _save(false)),
             ],
           ),
-          const SizedBox(height: 12),
-          for (final n in _result!.notes.take(50))
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.music_note, size: 18),
-              title: Text(n.name),
-              subtitle: Text('${n.start}s - ${n.end}s'),
-            ),
-          if (_result!.notes.length > 50)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                strings.transcribeMoreNotes(_result!.notes.length - 50),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-        ],
+        ),
       ],
     );
   }

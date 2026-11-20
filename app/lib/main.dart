@@ -147,7 +147,7 @@ class _OfflineBannerState extends State<OfflineBanner> {
                 child: SizedBox(
                   width: double.infinity,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: AppSpacing.md),
                     child: Text(
                       locale.strings.offlineMessage,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
@@ -13,9 +15,13 @@ import '../../api/endpoints/sing_api.dart';
 import '../../services/locale_provider.dart';
 import '../../services/connectivity_guard.dart';
 import '../../services/server_config.dart';
+import '../../widgets/feature_header.dart';
+import '../../widgets/hue_chip.dart';
 import '../../widgets/pitch_contour_chart.dart';
+import '../../widgets/stat_card.dart';
 import '../../widgets/waveform_view.dart';
 import '../../widgets/error_panel.dart';
+import '../../widgets/hue_icons.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -114,79 +120,130 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
+  AppStatusKind _confidenceKind(double confidence) {
+    if (confidence >= 0.8) return AppStatusKind.success;
+    if (confidence >= 0.4) return AppStatusKind.warning;
+    return AppStatusKind.info;
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       children: [
-        Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(strings.analysisPickHint),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: _loading ? null : _pickAndAnalyze,
-                  icon: const Icon(Icons.folder_open),
-                  label: Text(strings.analysisPickBtn),
+        FeatureHeader(
+          title: strings.featAnalysisTitle,
+          subtitle: strings.analysisHeaderSubtitle,
+          icon: HueIcons.queryStats,
+        ),
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(strings.analysisPickHint),
+                      const SizedBox(height: AppSpacing.md),
+                      FilledButton.icon(
+                        onPressed: _loading ? null : _pickAndAnalyze,
+                        icon: const HueIcon(HueIcons.folderOpen),
+                        label: Text(strings.analysisPickBtn),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_loading) ...[
+                const SizedBox(height: AppSpacing.lg),
+                const LinearProgressIndicator(),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                ErrorPanel(message: _error!, onRetry: _loading ? null : _pickAndAnalyze),
+              ],
+              if (_source.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(strings.analysisFileLabel(_source), style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: AppSpacing.sm),
+                if (_wave != null) WaveformView(data: _wave!),
+              ],
+              if (_pitch != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(strings.analysisF0Title, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.sm),
+                PitchContourChart(data: _pitch!),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: StatCard(
+                        icon: HueIcons.graphicEq,
+                        label: 'Mean F0',
+                        value: '${_pitch!.meanF0.toStringAsFixed(1)} Hz',
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: StatCard(
+                        icon: HueIcons.schedule,
+                        label: 'Frames',
+                        value: '${_pitch!.frames}',
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
+              if (_instrumentsFailed) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(strings.analysisInstrumentsFail, style: Theme.of(context).textTheme.bodySmall),
+              ],
+              if (_instruments != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(strings.analysisInstrumentsTitle, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.sm),
+                if (_instruments!.segments.isEmpty)
+                  Text(
+                    strings.analysisNoInstruments,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  )
+                else
+                  for (final s in _instruments!.segments)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          HueChip(
+                            label: '${s.instrument} ${(s.confidence * 100).toStringAsFixed(0)}%',
+                            icon: HueIcons.piano,
+                            kind: _confidenceKind(s.confidence),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          LinearProgressIndicator(
+                            value: s.confidence.clamp(0.0, 1.0),
+                            minHeight: 6,
+                            borderRadius: BorderRadius.circular(AppRadius.xs),
+                            color: AppTheme.statusReadable(context, _confidenceKind(s.confidence)),
+                            backgroundColor: scheme.surfaceContainerHighest,
+                          ),
+                        ],
+                      ),
+                    ),
+              ],
+            ],
           ),
         ),
-        if (_loading) ...[
-          const SizedBox(height: 16),
-          const LinearProgressIndicator(),
-        ],
-        if (_error != null) ...[
-          const SizedBox(height: 16),
-          ErrorPanel(message: _error!, onRetry: _loading ? null : _pickAndAnalyze),
-        ],
-        if (_source.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(strings.analysisFileLabel(_source), style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 8),
-          if (_wave != null) WaveformView(data: _wave!),
-        ],
-        if (_pitch != null) ...[
-          const SizedBox(height: 16),
-          Text(strings.analysisF0Title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          PitchContourChart(data: _pitch!),
-          const SizedBox(height: 8),
-          Text(
-            strings.analysisMeanF0(_pitch!.meanF0.toStringAsFixed(1)),
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
-        if (_instrumentsFailed) ...[
-          const SizedBox(height: 16),
-          Text(strings.analysisInstrumentsFail, style: Theme.of(context).textTheme.bodySmall),
-        ],
-        if (_instruments != null) ...[
-          const SizedBox(height: 16),
-          Text(strings.analysisInstrumentsTitle, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          ..._instruments!.segments.map(
-            (s) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.piano),
-              title: Text(s.instrument),
-              subtitle: Text('${s.start.toStringAsFixed(1)}s – ${s.end.toStringAsFixed(1)}s'),
-              trailing: Text('${(s.confidence * 100).toStringAsFixed(0)}%'),
-            ),
-          ),
-          if (_instruments!.segments.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(strings.analysisNoInstruments),
-            ),
-        ],
       ],
     );
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
+
 class SkeletonLoader extends StatefulWidget {
   final double height;
   final double? width;
@@ -62,7 +64,7 @@ class SkeletonList extends StatelessWidget {
     super.key,
     this.itemCount = 6,
     this.itemHeight = 64,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(AppSpacing.lg),
   });
 
   @override
@@ -72,7 +74,7 @@ class SkeletonList extends StatelessWidget {
       itemCount: itemCount,
       itemBuilder: (context, i) => SkeletonLoader(
         height: itemHeight,
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
       ),
     );
   }

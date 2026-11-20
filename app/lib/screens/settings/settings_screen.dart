@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/theme/app_theme.dart';
 import '../../services/auth_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../services/theme_provider.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/hue_button.dart';
+import '../../widgets/server_onboarding_dialog.dart';
 import '../../widgets/storage_quota_card.dart';
+import '../../widgets/hue_icons.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -39,19 +43,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final strings = locale.strings;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         _sectionLabel(context, strings.languageTitle),
         Card(
           margin: EdgeInsets.zero,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.language, size: 20, color: scheme.primary),
+                    HueIcon(HueIcons.language, size: 20, color: scheme.primary),
                     const SizedBox(width: 8),
                     Text(strings.languageTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
@@ -61,12 +65,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   segments: [
                     ButtonSegment(
                       value: 'en',
-                      icon: const Icon(Icons.public),
+                      icon: const HueIcon(HueIcons.language),
                       label: Text(strings.langEnglish),
                     ),
                     ButtonSegment(
                       value: 'vi',
-                      icon: const Icon(Icons.flag_outlined),
+                      icon: const HueIcon(HueIcons.flag),
                       label: Text(strings.langVietnamese),
                     ),
                   ],
@@ -84,13 +88,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Card(
           margin: EdgeInsets.zero,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.brightness_6_outlined, size: 20, color: scheme.primary),
+                    HueIcon(HueIcons.brightness, size: 20, color: scheme.primary),
                     const SizedBox(width: 8),
                     Text(strings.themeModeTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
@@ -100,17 +104,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   segments: [
                     ButtonSegment(
                       value: ThemeMode.system,
-                      icon: const Icon(Icons.settings_suggest_outlined),
+                      icon: const HueIcon(HueIcons.settingsSuggest),
                       label: Text(strings.themeSystem),
                     ),
                     ButtonSegment(
                       value: ThemeMode.light,
-                      icon: const Icon(Icons.light_mode_outlined),
+                      icon: const HueIcon(HueIcons.lightMode),
                       label: Text(strings.themeLight),
                     ),
                     ButtonSegment(
                       value: ThemeMode.dark,
-                      icon: const Icon(Icons.dark_mode_outlined),
+                      icon: const HueIcon(HueIcons.darkMode),
                       label: Text(strings.themeDark),
                     ),
                   ],
@@ -123,6 +127,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 20),
+        _buildServerSection(context, strings),
         if (auth.isLoggedIn && auth.storageUsedBytes != null) ...[
           const SizedBox(height: 20),
           _sectionLabel(context, strings.storageTitle),
@@ -137,7 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Card(
           margin: EdgeInsets.zero,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -147,7 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    Icon(Icons.info_outline, size: 20, color: scheme.primary),
+                    HueIcon(HueIcons.info, size: 20, color: scheme.primary),
                     const SizedBox(width: 8),
                     Text(strings.settingsAppInfo, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
@@ -165,9 +171,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildServerSection(BuildContext context, dynamic strings) {
+    final scheme = Theme.of(context).colorScheme;
+    final server = context.watch<ServerConfig>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel(context, strings.serverSectionTitle),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    HueIcon(HueIcons.dns, size: 20, color: scheme.primary),
+                    const Spacer(),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _infoRow(
+                  context,
+                  strings.onboardingUrlLabel,
+                  server.hasServer ? server.baseUrl : strings.serverNotConfigured,
+                ),
+                const SizedBox(height: 10),
+                HueButton(
+                  label: strings.serverChangeAction,
+                  variant: HueButtonVariant.gold,
+                  icon: HueIcons.edit,
+                  size: HueButtonSize.small,
+                  onPressed: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => const ServerOnboardingDialog(),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _sectionLabel(BuildContext context, String text) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.sm),
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -181,7 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _infoRow(BuildContext context, String label, String value) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

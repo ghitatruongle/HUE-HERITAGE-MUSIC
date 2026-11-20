@@ -19,11 +19,13 @@ import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/heritage_motif.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../auth/account_manager_section.dart';
 import '../auth/invite_manager_section.dart';
 import 'security_section.dart';
+import '../../widgets/hue_icons.dart';
 
 String formatBytes(num bytes) {
   if (bytes < 1024) return '$bytes B';
@@ -62,6 +64,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       appBar: AppBar(
         title: Text(strings.adminTitle),
         automaticallyImplyLeading: false,
+        flexibleSpace: HeritageMotif(
+          color: Theme.of(context).colorScheme.primary,
+          opacity: 0.06,
+        ),
       ),
       body: Column(
         children: [
@@ -155,7 +161,7 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
                 Center(
                   child: TextButton.icon(
                     onPressed: _reload,
-                    icon: const Icon(Icons.refresh),
+                    icon: const HueIcon(HueIcons.refresh),
                     label: Text(strings.adminRefresh),
                   ),
                 ),
@@ -171,16 +177,16 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
 
   Widget _buildStats(AdminStats s, dynamic strings) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Card(
           color: s.engineOnline
               ? AppTheme.emeraldGreen.withValues(alpha: 0.12)
               : AppTheme.statusDanger.withValues(alpha: 0.10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
           child: ListTile(
             leading: Icon(
-              s.engineOnline ? Icons.dns : Icons.dns_outlined,
+              s.engineOnline ? HueIcons.dns : HueIcons.dns,
               color: s.engineOnline ? AppTheme.emeraldGreen : AppTheme.statusDanger,
             ),
             title: Text(
@@ -203,31 +209,31 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
           childAspectRatio: MediaQuery.of(context).size.width >= AppBreakpoints.medium ? 2.4 : 2.0,
           children: [
             _StatCard(
-              icon: Icons.people_alt_outlined,
+              icon: HueIcons.peopleAlt,
               label: strings.adminStatUsers,
               value: '${s.usersTotal}',
               sub: '${strings.adminStatActive}: ${s.usersActive}',
             ),
             _StatCard(
-              icon: Icons.confirmation_number_outlined,
+              icon: HueIcons.confirmationNumber,
               label: strings.adminStatInvites,
               value: '${s.invitesTotal}',
               sub: '${strings.adminStatUnused}: ${s.invitesUnused}',
             ),
             _StatCard(
-              icon: Icons.library_music_outlined,
+              icon: HueIcons.libraryMusic,
               label: strings.adminStatItems,
               value: '${s.itemsTotal}',
               sub: formatBytes(s.itemsBytes),
             ),
             _StatCard(
-              icon: Icons.graphic_eq_outlined,
+              icon: HueIcons.graphicEq,
               label: strings.adminStatDerived,
               value: '${s.derivedFiles}',
               sub: formatBytes(s.derivedBytes),
             ),
             _StatCard(
-              icon: Icons.auto_awesome_outlined,
+              icon: HueIcons.autoAwesome,
               label: strings.adminStatGenerated,
               value: formatBytes(s.generatedBytes),
             ),
@@ -260,9 +266,9 @@ class _StatCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Column(
@@ -282,13 +288,13 @@ class _StatCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 value,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
               ),
               if (sub != null)
                 Text(
                   sub!,
                   maxLines: 1,
-                  style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
             ],
           ),
@@ -311,9 +317,9 @@ class _TaskGroupCard extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
     return Card(
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -328,10 +334,10 @@ class _TaskGroupCard extends StatelessWidget {
                 children: [
                   for (final e in entries)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                       decoration: BoxDecoration(
                         color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
                       ),
                       child: Text(
                         '${e.key}: ${e.value}',
@@ -353,7 +359,7 @@ class _UsersTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: const [
         _CreateUserCard(),
         SizedBox(height: 12),
@@ -434,15 +440,15 @@ class _CreateUserCardState extends State<_CreateUserCard> {
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               strings.adminCreateUserTitle,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -477,7 +483,7 @@ class _CreateUserCardState extends State<_CreateUserCard> {
               children: [
                 FilledButton.icon(
                   onPressed: _busy ? null : _submit,
-                  icon: const Icon(Icons.person_add_alt_1, size: 18),
+                  icon: const HueIcon(HueIcons.personAdd, size: 18),
                   label: Text(strings.adminCreateUserButton),
                 ),
                 const SizedBox(width: 12),
@@ -486,7 +492,7 @@ class _CreateUserCardState extends State<_CreateUserCard> {
                       ? const SizedBox.shrink()
                       : Text(
                           _message!,
-                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                 ),
               ],
@@ -504,7 +510,7 @@ class _InvitesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: const [
         InviteManagerSection(),
       ],
@@ -721,7 +727,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
           child: Row(
             children: [
               Expanded(
@@ -734,7 +740,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                   decoration: InputDecoration(
                     hintText: strings.adminSearchHint,
                     isDense: true,
-                    prefixIcon: const Icon(Icons.search, size: 20),
+                    prefixIcon: const HueIcon(HueIcons.search, size: 20),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -742,7 +748,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
               IconButton(
                 tooltip: strings.adminRefresh,
                 onPressed: _loading ? null : _reload,
-                icon: const Icon(Icons.refresh),
+                icon: const HueIcon(HueIcons.refresh),
               ),
             ],
           ),
@@ -762,11 +768,11 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
       return Center(child: ErrorPanel(message: strings.adminLoadFail, onRetry: _loading ? null : _reload));
     }
     if (_items.isEmpty) {
-      return Center(child: EmptyState(icon: Icons.library_music_outlined, title: strings.adminStorageEmpty));
+      return Center(child: EmptyState(icon: HueIcons.libraryMusic, title: strings.adminStorageEmpty));
     }
     final hasMore = _items.length < _total;
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       itemCount: _items.length + 1 + (hasMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
@@ -778,7 +784,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
           return _buildStorageRow(_items[rowIndex], strings);
         }
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
           child: Center(
             child: _loadingMore
                 ? const SizedBox(
@@ -788,7 +794,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                   )
                 : OutlinedButton.icon(
                     onPressed: _loadMore,
-                    icon: const Icon(Icons.expand_more, size: 16),
+                    icon: const HueIcon(HueIcons.expandMore, size: 16),
                     label: Text('${strings.adminLoadMore} ($_total)'),
                   ),
           ),
@@ -801,16 +807,16 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
     return Card(
       margin: EdgeInsets.zero,
       color: AppTheme.amberGold.withValues(alpha: 0.08),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       child: ListTile(
-        leading: Icon(Icons.cleaning_services_outlined, color: AppTheme.goldReadable(context)),
+        leading: HueIcon(HueIcons.cleaningServices, color: AppTheme.goldReadable(context)),
         title: Text(
           strings.adminCleanupTitle,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
         ),
         subtitle: Text(
           strings.adminCleanupHint,
-          style: const TextStyle(fontSize: 11.5),
+          style: const TextStyle(fontSize: 12),
         ),
         trailing: FilledButton.tonal(
           onPressed: _cleaning ? null : _confirmCleanup,
@@ -831,9 +837,9 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
     final adminOnly = entry.adminOnly;
     return Card(
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -847,14 +853,14 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                       ),
                       Text(
                         '${entry.filename} · ${formatBytes(entry.size)}'
                         '${entry.derivedBytes > 0 ? ' + ${formatBytes(entry.derivedBytes)}' : ''}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11.5),
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ],
                   ),
@@ -862,11 +868,11 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                 if (!entry.originalExists)
                   Tooltip(
                     message: strings.adminStorageOriginalMissing,
-                    child: const Icon(Icons.warning_amber_rounded, color: AppTheme.statusWarning, size: 20),
+                    child: const HueIcon(HueIcons.warning, color: AppTheme.statusWarning, size: 20),
                   ),
                 IconButton(
                   tooltip: strings.adminDelete,
-                  icon: const Icon(Icons.delete_outline, color: AppTheme.statusDanger),
+                  icon: const HueIcon(HueIcons.delete, color: AppTheme.statusDanger),
                   onPressed: () => _confirmDelete(entry),
                 ),
               ],
@@ -874,7 +880,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
             Row(
               children: [
                 Icon(
-                  adminOnly ? Icons.lock_outline : Icons.public,
+                  adminOnly ? HueIcons.lock : HueIcons.language,
                   size: 15,
                   color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldGreen,
                 ),
@@ -882,7 +888,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                 Text(
                   adminOnly ? strings.adminVisibilityAdminOnly : strings.adminVisibilityPublic,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldGreen,
                   ),
@@ -891,7 +897,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                   const SizedBox(width: 8),
                   Text(
                     entry.ownerUsername,
-                    style: TextStyle(fontSize: 10.5, color: scheme.onSurfaceVariant),
+                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                   ),
                 ],
                 const Spacer(),
@@ -1093,9 +1099,9 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
       return const SkeletonList(itemCount: 6, itemHeight: 88);
     }
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        Text(strings.adminLearningHint, style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        Text(strings.adminLearningHint, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
         if (_stats != null) ...[
           const SizedBox(height: 8),
           Text(
@@ -1108,7 +1114,7 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
           Card(
             color: scheme.errorContainer,
             child: Padding(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
             ),
           ),
@@ -1124,14 +1130,14 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
           },
         ),
         if (_loading && _selected != null)
-          const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
+          const Padding(padding: EdgeInsets.all(AppSpacing.lg), child: Center(child: CircularProgressIndicator())),
         if (_detail != null)
           for (final s in _detail!.sections)
             Card(
-              margin: const EdgeInsets.only(top: 8),
+              margin: const EdgeInsets.only(top: AppSpacing.sm),
               child: ListTile(
                 leading: Icon(
-                  s.hasSample ? Icons.record_voice_over : Icons.mic_off,
+                  s.hasSample ? HueIcons.recordVoiceOver : HueIcons.micOff,
                   color: s.hasSample ? AppTheme.emeraldGreen : scheme.onSurfaceVariant,
                 ),
                 title: Text(strings.adminLearningPhrase(s.index + 1)),
@@ -1150,19 +1156,19 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
                           if (s.hasSample)
                             IconButton(
                               tooltip: strings.adminLearningReplace,
-                              icon: const Icon(Icons.upload_file, size: 20),
+                              icon: const HueIcon(HueIcons.uploadFile, size: 20),
                               onPressed: () => _uploadSample(s.index),
                             )
                           else
                             IconButton(
                               tooltip: strings.adminLearningUpload,
-                              icon: const Icon(Icons.upload, size: 20),
+                              icon: const HueIcon(HueIcons.uploadFile, size: 20),
                               onPressed: () => _uploadSample(s.index),
                             ),
                           if (s.hasSample)
                             IconButton(
                               tooltip: strings.adminLearningDelete,
-                              icon: const Icon(Icons.delete_outline, size: 20),
+                              icon: const HueIcon(HueIcons.delete, size: 20),
                               onPressed: () => _deleteSample(s.index),
                             ),
                         ],
@@ -1172,7 +1178,7 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
         if (_detail != null && _detail!.sections.isNotEmpty)
           for (final s in _detail!.sections.where((s) => s.hasSample))
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
               child: AudioPlayerBar(
                 key: ValueKey('${_detail!.id}_${s.index}_$_sampleRev'),
                 url: s.sampleUrl,
@@ -1294,8 +1300,8 @@ class _CrashTabState extends State<_CrashTab> {
         title: Text(strings.adminTabCrash),
         automaticallyImplyLeading: false,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), tooltip: strings.adminRefresh, onPressed: _reload),
-          IconButton(icon: const Icon(Icons.delete_sweep), tooltip: strings.crashDeleteAll, onPressed: _items.isEmpty ? null : _deleteAll),
+          IconButton(icon: const HueIcon(HueIcons.refresh), tooltip: strings.adminRefresh, onPressed: _reload),
+          IconButton(icon: const HueIcon(HueIcons.deleteSweep), tooltip: strings.crashDeleteAll, onPressed: _items.isEmpty ? null : _deleteAll),
         ],
       ),
       body: _buildBody(strings),
@@ -1320,14 +1326,14 @@ class _CrashTabState extends State<_CrashTab> {
     return RefreshIndicator(
       onRefresh: _reload,
       child: ListView.separated(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         itemCount: _items.length,
         separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final e = _items[index];
           return Card(
             child: ListTile(
-              leading: const Icon(Icons.bug_report, color: AppTheme.statusWarning),
+              leading: const HueIcon(HueIcons.bugReport, color: AppTheme.statusWarning),
               title: Text(
                 e.summary.isEmpty ? '-' : e.summary,
                 maxLines: 2,

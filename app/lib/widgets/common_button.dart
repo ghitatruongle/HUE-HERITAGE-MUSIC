@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'hue_button.dart';
+
 class CommonButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -14,15 +16,11 @@ class CommonButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: loading ? null : onPressed,
-      child: loading
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Text(label),
+    return HueButton(
+      label: label,
+      onPressed: onPressed,
+      loading: loading,
+      variant: HueButtonVariant.primary,
     );
   }
 }

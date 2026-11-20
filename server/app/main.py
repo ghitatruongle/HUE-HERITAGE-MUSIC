@@ -42,6 +42,7 @@ LARGE_BODY_PATHS = (
     "/api/music/instruments",
     "/api/music/restore",
     "/api/music/transcribe",
+    "/api/music/evaluate",
 )
 LARGE_BODY_LIMIT = 15 * 1024 * 1024
 COMPARE_BODY_LIMIT = _storage_manager.COMPARE_BODY_LIMIT
@@ -231,7 +232,7 @@ class BodyLimitMiddleware:
         await self.app(scope, counting_receive, send)
 
 
-SHED_EXEMPT_PATHS = {"/api/auth/login", "/api/auth/admin-unlock"}
+SHED_EXEMPT_PATHS = {"/health", "/api/auth/login", "/api/auth/admin-unlock"}
 
 
 class SheddingMiddleware:
@@ -296,6 +297,7 @@ def _warmup_lessons():
         ids = [item.id for item in items]
     except Exception:
         db.close()
+        logging.getLogger(__name__).warning("lessons warmup skipped", exc_info=True)
         return
     db.close()
     for item_id in ids:
@@ -308,7 +310,15 @@ def _warmup_lessons():
                 continue
             try:
                 lesson_service.build_lesson(item)
+            except ValueError as exc:
+                logging.getLogger(__name__).warning(
+                    "lesson warmup skipped for item %s: %s", item_id, exc
+                )
+                continue
             except Exception:
+                logging.getLogger(__name__).warning(
+                    "lesson warmup failed for item %s", item_id, exc_info=True
+                )
                 continue
         finally:
             db.close()
@@ -371,7 +381,7 @@ def create_app() -> FastAPI:
     docs_open = settings.enable_docs
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.5-preview",
+        version="0.0.5-alpha",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
@@ -434,8 +444,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.5-preview",
-            "stage": "0.0.5-preview",
+            "version": "0.0.5-alpha",
+            "stage": "0.0.5-alpha",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio
@@ -452,11 +462,10 @@ def create_app() -> FastAPI:
                 except Exception:
                     disk_free_gb = None
                 try:
-                    import resource
-                    import sys as _sys
+                    import subprocess as _sp
 
-                    _rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                    rss_mb = round(_rss / 1024 / 1024, 1) if _sys.platform == "darwin" else round(_rss / 1024, 1)
+                    _rss_kb = int(_sp.check_output(["ps", "-o", "rss=", "-p", str(os.getpid())]).split()[0])
+                    rss_mb = round(_rss_kb / 1024, 1)
                 except Exception:
                     rss_mb = None
                 try:
@@ -472,7 +481,7 @@ def create_app() -> FastAPI:
                     "rss_mb": rss_mb,
                     "threads": threading.active_count(),
                     "db_wal_mb": wal_mb,
-                    "basic_pitch_stalled": basic_pitch_amt.status()["stalled"],
+                    "basic_pitch_stalled": basic_pitch_amt.stalled(),
                 }
 
             payload.update(await asyncio.to_thread(_extended))

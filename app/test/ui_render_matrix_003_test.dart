@@ -106,6 +106,9 @@ Future<void> _loadBundledFonts() async {
   playfair.addFont(rootBundle.load('assets/fonts/PlayfairDisplay-SemiBold.ttf'));
   playfair.addFont(rootBundle.load('assets/fonts/PlayfairDisplay-Bold.ttf'));
   await playfair.load();
+  final jbm = FontLoader('JetBrainsMono')
+    ..addFont(rootBundle.load('assets/fonts/JetBrainsMono-Regular.ttf'));
+  await jbm.load();
 }
 
 Future<void> _sweep(WidgetTester tester, Widget screen) async {
@@ -249,6 +252,22 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
     expect(tester.widget<Container>(find.byKey(markerKey)).color, AppTheme.lightTheme.colorScheme.surface);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('JetBrainsMono render đủ dấu tiếng Việt không fallback', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: const Scaffold(
+          body: Text(
+            'ệ ơ ứ ậ ỹ đ Đ ườ ị ế ề ễ ắ ộ ẵ ẳng',
+            style: TextStyle(fontFamily: AppTheme.monoFontFamily, fontSize: 14),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('ệ ơ ứ ậ ỹ đ Đ ườ ị ế ề ễ ắ ộ ẵ ẳng'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../core/theme/app_theme.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +12,7 @@ import 'skeleton_loader.dart';
 
 import '../services/locale_provider.dart';
 import 'error_panel.dart';
+import 'hue_icons.dart';
 
 class AudioPlayerBar extends StatefulWidget {
   final String? url;
@@ -19,6 +22,7 @@ class AudioPlayerBar extends StatefulWidget {
   final bool autoPlay;
   final bool compact;
   final Dio? dio;
+  final ValueNotifier<bool>? pauseSignal;
 
   const AudioPlayerBar({
     super.key,
@@ -29,6 +33,7 @@ class AudioPlayerBar extends StatefulWidget {
     this.autoPlay = false,
     this.compact = false,
     this.dio,
+    this.pauseSignal,
   });
 
   @override
@@ -48,7 +53,16 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.pauseSignal?.addListener(_onPauseSignal);
     _load();
+  }
+
+  void _onPauseSignal() {
+    if (widget.pauseSignal?.value == true) {
+      try {
+        _player.pause();
+      } catch (_) {}
+    }
   }
 
   @override
@@ -63,6 +77,10 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
   @override
   void didUpdateWidget(covariant AudioPlayerBar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.pauseSignal != widget.pauseSignal) {
+      oldWidget.pauseSignal?.removeListener(_onPauseSignal);
+      widget.pauseSignal?.addListener(_onPauseSignal);
+    }
     if (oldWidget.url != widget.url ||
         oldWidget.filePath != widget.filePath ||
         oldWidget.bytes != widget.bytes) {
@@ -188,6 +206,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
 
   @override
   void dispose() {
+    widget.pauseSignal?.removeListener(_onPauseSignal);
     WidgetsBinding.instance.removeObserver(this);
     final stale = _lastTempPlayPath;
     if (stale != null) {
@@ -217,7 +236,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
   Widget build(BuildContext context) {
     if (_error != null) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: ErrorPanel(
           message: _error!,
           onRetry: () => _load(forceResign: true),
@@ -246,7 +265,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2.2),
                 )
-              : Icon(playing ? Icons.pause_circle : Icons.play_circle),
+              : Icon(playing ? HueIcons.pauseCircle : HueIcons.playCircle),
           onPressed: () {
             if (playing) {
               _player.pause();
@@ -307,7 +326,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
       children: [
         if (widget.label.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: Text(widget.label, style: Theme.of(context).textTheme.bodySmall),
           ),
         playButton,

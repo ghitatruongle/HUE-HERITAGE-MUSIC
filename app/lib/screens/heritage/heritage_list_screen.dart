@@ -14,7 +14,9 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/common_button.dart';
 import '../../widgets/heritage_motif.dart';
+import '../../widgets/hue_icons.dart';
 import '../../widgets/skeleton_loader.dart';
+import '../../widgets/staggered_entrance.dart';
 
 class HeritageListScreen extends StatefulWidget {
   const HeritageListScreen({super.key});
@@ -155,17 +157,10 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         VerticalDivider(width: 1, color: borderColor),
         Expanded(
           child: _selectedItem == null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.headphones, size: 64, color: AppTheme.primaryPurple.withValues(alpha: 0.4)),
-                      const SizedBox(height: 16),
-                      Text(strings.masterDetailEmptyTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 6),
-                      Text(strings.masterDetailEmptySubtitle, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                    ],
-                  ),
+              ? EmptyState(
+                  icon: HueIcons.headphones,
+                  title: strings.masterDetailEmptyTitle,
+                  desc: strings.masterDetailEmptySubtitle,
                 )
               : _buildMusicListeningPane(_selectedItem!, strings),
         ),
@@ -175,16 +170,16 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
 
   Widget _buildArchiveHeader(dynamic strings) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: AppTheme.primaryPurple.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.3), width: 1.2),
       ),
       child: Row(
         children: [
-          const Icon(Icons.headphones, size: 20, color: AppTheme.primaryPurpleLight),
+          const HueIcon(HueIcons.headphones, size: 20, color: AppTheme.primaryPurpleLight),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -211,7 +206,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
 
   Widget _buildSearchBar(dynamic strings) {
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         children: [
           Expanded(
@@ -220,7 +215,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
               onSubmitted: (_) => _reload(),
               decoration: InputDecoration(
                 hintText: strings.searchHint,
-                prefixIcon: const Icon(Icons.search, size: 20),
+                prefixIcon: const HueIcon(HueIcons.search, size: 20),
                 isDense: true,
               ),
             ),
@@ -246,7 +241,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
       return ErrorPanel(message: '${strings.errorPrefix}: ${strings.loadFailGeneric}', onRetry: _reload);
     }
     if (_items.isEmpty) {
-      return EmptyState(icon: Icons.library_music_rounded, title: strings.noRecordings, ctaLabel: strings.learnRetry, onCta: _reload);
+      return EmptyState(icon: HueIcons.libraryMusic, title: strings.noRecordings, ctaLabel: strings.learnRetry, onCta: _reload);
     }
     final hasMore = _items.length < _total;
     return ListView.builder(
@@ -254,7 +249,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
       itemBuilder: (context, i) {
         if (i >= _items.length) {
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
             child: Center(
               child: _loadingMore
                   ? const SizedBox(
@@ -264,7 +259,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                     )
                   : OutlinedButton.icon(
                       onPressed: _loadMore,
-                      icon: const Icon(Icons.expand_more, size: 18),
+                      icon: const HueIcon(HueIcons.expandMore, size: 18),
                       label: Text('${strings.adminLoadMore} ($_total)'),
                     ),
             ),
@@ -290,19 +285,24 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    return StaggeredEntrance(
+      index: index,
+      maxAnimatedIndex: 11,
+      child: Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: isSelected
             ? AppTheme.primaryPurple.withValues(alpha: isDark ? 0.25 : 0.12)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: isSelected
             ? Border.all(color: AppTheme.primaryPurpleLight, width: 1.5)
             : null,
       ),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
         leading: Container(
           width: 32,
           height: 32,
@@ -339,7 +339,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         },
         trailing: IconButton(
           icon: Icon(
-            isSelected ? Icons.headphones : Icons.play_arrow,
+            isSelected ? HueIcons.headphones : HueIcons.playArrow,
             color: AppTheme.primaryPurpleLight,
             size: 26,
           ),
@@ -352,6 +352,8 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
             }
           },
         ),
+        ),
+      ),
       ),
     );
   }
@@ -374,15 +376,15 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
     final audioUrl = HeritageApi(dio).audioUrl(item.id);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 20, 28, 40),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, AppSpacing.xxxl),
       children: [
         Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xl)),
           child: Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.xxl),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: AppTheme.brandGradient,
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+              gradient: AppTheme.brandGradientOf(context),
             ),
             child: HeritageMotif(
               color: Colors.white,
@@ -412,7 +414,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                     children: [
                       Text(
                         item.title,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white),
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -437,13 +439,13 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         const SizedBox(height: 18),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.music_note, size: 20, color: AppTheme.goldReadable(context)),
+                    HueIcon(HueIcons.musicNote, size: 20, color: AppTheme.goldReadable(context)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -468,7 +470,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
           const SizedBox(height: 8),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(AppSpacing.xl),
               child: SelectableText(
                 item.lyrics,
                 style: const TextStyle(height: 1.8, fontSize: 14, fontStyle: FontStyle.italic),
@@ -484,12 +486,12 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         const SizedBox(height: 8),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               children: [
                 for (final e in rows.entries)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -502,7 +504,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -511,7 +513,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
                         child: Text('SHA-256', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                       ),
                       Expanded(
-                        child: SelectableText(item.sha256, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+                        child: SelectableText(item.sha256, style: const TextStyle(fontFamily: AppTheme.monoFontFamily, fontSize: 11)),
                       ),
                     ],
                   ),
@@ -523,7 +525,7 @@ class _HeritageListScreenState extends State<HeritageListScreen> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Icon(Icons.verified_outlined, size: 16, color: Theme.of(context).colorScheme.primary),
+            HueIcon(HueIcons.verified, size: 16, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 8),
             Expanded(child: Text(strings.heritageOriginalNote)),
           ],

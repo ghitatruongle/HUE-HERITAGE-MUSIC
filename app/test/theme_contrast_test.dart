@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hue_heritage_music/core/theme/app_theme.dart';
+import 'package:hue_heritage_music/widgets/hue_button.dart';
 
 double _lin(double c) {
   c /= 255.0;
@@ -216,5 +217,87 @@ void main() {
   test('amberGold chỉ hợp lệ trên nền tối (gradient/tối) — ghim ngưỡng 3.0', () {
     expectAA(AppTheme.amberGold, AppTheme.darkSurface, 3.0, 'amberGold/darkSurface');
     expectAA(AppTheme.amberGold, const Color(0xFF4A2B78), 3.0, 'amberGold/gradientMid');
+  });
+
+  test('amberGoldReadable: cặp dark/light đọc được trên surface + bg theme tương ứng (3.0)', () {
+    expectAA(AppTheme.amberGold, AppTheme.darkTheme.colorScheme.surface, 3.0, 'amberGold/darkSurface');
+    expectAA(AppTheme.amberGold, AppTheme.darkBg, 3.0, 'amberGold/darkBg');
+    expectAA(AppTheme.amberGoldInk, AppTheme.lightTheme.colorScheme.surface, 3.0, 'amberGoldInk/lightSurface');
+    expectAA(AppTheme.amberGoldInk, AppTheme.lightBg, 3.0, 'amberGoldInk/lightBg');
+  });
+
+  test('emeraldReadable: cặp dark/light đọc được trên surface + bg theme tương ứng (3.0)', () {
+    expectAA(AppTheme.emeraldBright, AppTheme.darkTheme.colorScheme.surface, 3.0, 'emeraldBright/darkSurface');
+    expectAA(AppTheme.emeraldBright, AppTheme.darkBg, 3.0, 'emeraldBright/darkBg');
+    expectAA(AppTheme.emeraldGreen, AppTheme.lightTheme.colorScheme.surface, 3.0, 'emeraldGreen/lightSurface');
+    expectAA(AppTheme.emeraldGreen, AppTheme.lightBg, 3.0, 'emeraldGreen/lightBg');
+  });
+
+  test('statusReadable: cặp sáng/tối mới đọc được trên surface + bg theme tương ứng (3.0)', () {
+    final dark = AppTheme.darkTheme.colorScheme;
+    final light = AppTheme.lightTheme.colorScheme;
+    expectAA(AppTheme.statusSuccessDark, dark.surface, 3.0, 'statusSuccessDark/darkSurface');
+    expectAA(AppTheme.statusWarningDark, dark.surface, 3.0, 'statusWarningDark/darkSurface');
+    expectAA(AppTheme.statusDangerDark, dark.surface, 3.0, 'statusDangerDark/darkSurface');
+    expectAA(AppTheme.statusInfoDark, dark.surface, 3.0, 'statusInfoDark/darkSurface');
+    expectAA(AppTheme.statusSuccess, light.surface, 3.0, 'statusSuccess/lightSurface');
+    expectAA(AppTheme.statusWarning, light.surface, 3.0, 'statusWarning/lightSurface');
+    expectAA(AppTheme.statusDanger, light.surface, 3.0, 'statusDanger/lightSurface');
+    expectAA(AppTheme.statusInfo, light.surface, 3.0, 'statusInfo/lightSurface');
+  });
+
+  test('Chữ trắng đọc được trên mọi stop của brandGradient cả 2 theme (AA 4.5)', () {
+    for (final c in AppTheme.brandGradientColors) {
+      expectAA(Colors.white, c, 4.5, 'white/dark gradient stop ${c.toARGB32()}');
+    }
+    for (final c in AppTheme.brandGradientColorsLight) {
+      expectAA(Colors.white, c, 4.5, 'white/light gradient stop ${c.toARGB32()}');
+    }
+  });
+
+  test('AppMotion/AppAlpha/AppElevation token tồn tại với giá trị chuẩn', () {
+    expect(AppMotion.fast, const Duration(milliseconds: 150));
+    expect(AppMotion.base, const Duration(milliseconds: 200));
+    expect(AppMotion.slow, const Duration(milliseconds: 350));
+    expect(AppMotion.entrance, const Duration(milliseconds: 380));
+    expect(AppMotion.staggerInterval, 0.08);
+    expect(AppAlpha.hover, 0.08);
+    expect(AppAlpha.selected, 0.14);
+    expect(AppAlpha.overlay, 0.40);
+    expect(AppAlpha.scrim, 0.54);
+    expect(AppElevation.card(Brightness.dark), isNotEmpty);
+    expect(AppElevation.card(Brightness.light), isNotEmpty);
+  });
+
+  testWidgets('HueButton danger — dark: ink sáng trên nền danger đạt 4.5', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: HueButton(label: 'Xoá', variant: HueButtonVariant.danger, onPressed: () {}),
+        ),
+      ),
+    );
+    final filled = tester.widget<FilledButton>(find.byType(FilledButton));
+    final fg = filled.style!.foregroundColor!.resolve(<WidgetState>{})!;
+    final bg = filled.style!.backgroundColor!.resolve(<WidgetState>{})!;
+    expect(fg, AppTheme.darkSurface, reason: 'dark danger phải dùng ink tối');
+    expectAA(fg, bg, 4.5, 'dark danger foreground/background');
+  });
+
+  testWidgets('HueButton danger — light: chữ trắng trên nền danger đạt 4.5', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HueButton(label: 'Xoá', variant: HueButtonVariant.danger, onPressed: () {}),
+        ),
+      ),
+    );
+    final filled = tester.widget<FilledButton>(find.byType(FilledButton));
+    final fg = filled.style!.foregroundColor!.resolve(<WidgetState>{})!;
+    final bg = filled.style!.backgroundColor!.resolve(<WidgetState>{})!;
+    expect(fg, Colors.white, reason: 'light danger phải dùng chữ trắng');
+    expectAA(fg, bg, 4.5, 'light danger foreground/background');
   });
 }

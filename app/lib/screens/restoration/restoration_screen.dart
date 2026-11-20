@@ -24,7 +24,11 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/compare_chart.dart';
 import '../../widgets/heritage_motif.dart';
+import '../../widgets/hue_button.dart';
+import '../../widgets/hue_icons.dart';
+import '../../widgets/result_card.dart';
 import '../../widgets/skeleton_loader.dart';
+import '../../widgets/staggered_entrance.dart';
 
 class RestorationScreen extends StatefulWidget {
   const RestorationScreen({super.key});
@@ -43,6 +47,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   HeritageItem? _selectedItem;
   RestoreResult? _restoreResult;
   bool _isRestoring = false;
+  bool _uploading = false;
   String? _restoreError;
 
   HeritageItem? _compareSampleItem;
@@ -52,6 +57,9 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   CompareResult? _compareResult;
   bool _isComparing = false;
   String? _compareError;
+  int _abGen = 0;
+  bool _abPlaying = false;
+  final ValueNotifier<bool> _abPause = ValueNotifier(false);
   StateSetter? _sheetRefresh;
 
   @override
@@ -140,6 +148,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   }
 
   Future<void> _uploadAndRestoreFile() async {
+    if (_uploading) return;
     final config = context.read<ServerConfig>();
     final strings = context.read<LocaleProvider>().strings;
 
@@ -158,30 +167,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     final dio = config.api.dio;
     final history = context.read<HistoryService>();
     _log(history, 'restore-upload', file.name, 'running');
-
-    BuildContext? dialogCtx;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dCtx) {
-        dialogCtx = dCtx;
-        return AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 12),
-              Text(strings.processing),
-            ],
-          ),
-        );
-      },
-    );
+    setState(() => _uploading = true);
 
     try {
       final res = await RestorationApi(dio).restoreUpload(bytes: bytes, filename: file.name);
       _log(history, 'restore-upload', file.name, 'done');
-      if (dialogCtx != null && dialogCtx!.mounted) Navigator.pop(dialogCtx!);
       if (!mounted) return;
       showDialog(
         context: context,
@@ -189,31 +179,31 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           title: Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                 decoration: BoxDecoration(
                   color: AppTheme.goldReadable(context).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
                   border: Border.all(color: AppTheme.goldReadable(context)),
                 ),
-                child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 11, fontWeight: FontWeight.bold)),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(child: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(res.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('${strings.restorationDcRemoved}: ${res.dcRemoved.toStringAsFixed(4)}'),
-              Text('${strings.restorationClicksFixed}: ${res.clicksFixed}'),
-              Text('${strings.restorationPeakChange}: ${res.peakBefore.toStringAsFixed(2)} -> ${res.peakAfter.toStringAsFixed(2)}'),
-              Text('${strings.restorationNoiseFloor}: ${res.noiseFloorDb.toStringAsFixed(1)} dB'),
-              const SizedBox(height: 12),
-              AudioPlayerBar(url: RestorationApi(dio).restoredUrl(res.sha), label: strings.restoredAudio, dio: dio),
-            ],
+          content: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(res.label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: AppSpacing.md),
+                _buildRestoreMetrics(res, strings),
+                const SizedBox(height: AppSpacing.md),
+                AudioPlayerBar(url: RestorationApi(dio).restoredUrl(res.sha), label: strings.restoredAudio, dio: dio),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -224,9 +214,13 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         ),
       );
     } catch (e) {
-      if (dialogCtx != null && dialogCtx!.mounted) Navigator.pop(dialogCtx!);
+      _log(history, 'restore-upload', file.name, 'error');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+    } finally {
+      if (mounted) {
+        setState(() => _uploading = false);
+      }
     }
   }
 
@@ -294,6 +288,22 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     }
   }
 
+  bool get _abReady =>
+      _compareSampleItem != null && (_uploadedTargetBytes != null || _compareTargetItem != null);
+
+  void _playBothAb() {
+    _abPause.value = false;
+    setState(() {
+      _abGen++;
+      _abPlaying = true;
+    });
+  }
+
+  void _stopBothAb() {
+    setState(() => _abPlaying = false);
+    _abPause.value = true;
+  }
+
   String _compareErrorText(Object e, AppStrings strings) {
     switch (ApiClient.errorCode(e)) {
       case 'too_quiet':
@@ -311,6 +321,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
   @override
   void dispose() {
+    _abPause.dispose();
     _tabController.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -326,20 +337,20 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         children: [
           _buildBetaBanner(strings),
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
             child: ImperialTabBar(
               controller: _tabController,
               tabs: [
                 Tab(
-                  icon: const Icon(Icons.auto_fix_high, size: 18),
+                  icon: const HueIcon(HueIcons.autoFixHigh, size: 18),
                   text: strings.restorationTabDsp,
                 ),
                 Tab(
-                  icon: const Icon(Icons.compare_arrows, size: 18),
+                  icon: const HueIcon(HueIcons.compareArrows, size: 18),
                   text: strings.restorationTabCompare,
                 ),
               ],
@@ -361,21 +372,21 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
   Widget _buildBetaBanner(dynamic strings) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: AppTheme.amberGold.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: AppTheme.amberGold.withValues(alpha: 0.35), width: 1.2),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
             decoration: BoxDecoration(
               color: AppTheme.goldReadable(context).withValues(alpha: 0.25),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(color: AppTheme.goldReadable(context), width: 1),
             ),
             child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontWeight: FontWeight.bold, fontSize: 11)),
@@ -387,12 +398,12 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               children: [
                 Text(
                   strings.restorationLabTitle,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   strings.restorationLabDesc,
-                  style: TextStyle(fontSize: 11.5, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
                 ),
               ],
             ),
@@ -449,17 +460,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         VerticalDivider(width: 1, color: borderColor),
         Expanded(
           child: _selectedItem == null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.auto_fix_high, size: 64, color: AppTheme.amberGold.withValues(alpha: 0.4)),
-                      const SizedBox(height: 16),
-                      Text(strings.restorationEmptyTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 6),
-                      Text(strings.restorationEmptySubtitle, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                    ],
-                  ),
+              ? EmptyState(
+                  icon: HueIcons.autoFixHigh,
+                  title: strings.restorationEmptyTitle,
+                  desc: strings.restorationEmptySubtitle,
                 )
               : _buildDspDetailWorkspace(_selectedItem!, strings),
         ),
@@ -469,26 +473,41 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
   Widget _buildSearchAndUploadBar(dynamic strings) {
     return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              onSubmitted: (_) => _reloadItems(),
-              decoration: InputDecoration(
-                hintText: strings.searchHint,
-                prefixIcon: const Icon(Icons.search, size: 20),
-                isDense: true,
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  onSubmitted: (_) => _reloadItems(),
+                  decoration: InputDecoration(
+                    hintText: strings.searchHint,
+                    prefixIcon: const HueIcon(HueIcons.search, size: 20),
+                    isDense: true,
+                  ),
+                ),
               ),
+              const SizedBox(width: AppSpacing.sm),
+              IconButton.filledTonal(
+                key: const Key('restoration-upload'),
+                icon: const HueIcon(HueIcons.uploadFile, size: 20),
+                tooltip: strings.restorationUploadVintageBtn,
+                onPressed: _uploading ? null : _uploadAndRestoreFile,
+              ),
+            ],
+          ),
+          if (_uploading) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              strings.restorationUploading,
+              style: Theme.of(context).textTheme.labelMedium,
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filledTonal(
-            icon: const Icon(Icons.upload_file, size: 20),
-            tooltip: strings.restorationUploadVintageBtn,
-            onPressed: _uploadAndRestoreFile,
-          ),
+            const SizedBox(height: AppSpacing.xs),
+            LinearProgressIndicator(color: Theme.of(context).colorScheme.primary),
+          ],
         ],
       ),
     );
@@ -506,7 +525,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         }
         final items = snap.data ?? [];
         if (items.isEmpty) {
-          return EmptyState(icon: Icons.auto_fix_high_rounded, title: strings.noRecordings, ctaLabel: strings.learnRetry, onCta: _reloadItems);
+          return EmptyState(icon: HueIcons.autoFixHigh, title: strings.noRecordings, ctaLabel: strings.learnRetry, onCta: _reloadItems);
         }
         if (_selectedItem == null && items.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -518,27 +537,32 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           itemBuilder: (context, i) {
             final it = items[i];
             final isSel = _selectedItem?.id == it.id;
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            return StaggeredEntrance(
+              index: i,
+              maxAnimatedIndex: 11,
+              child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
                 color: isSel ? AppTheme.goldReadable(context).withValues(alpha: 0.15) : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 border: isSel ? Border.all(color: AppTheme.goldReadable(context), width: 1.2) : null,
               ),
-              child: ListTile(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                title: Text(it.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+              child: Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+                title: Text(it.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 subtitle: Text(
                   [it.type, it.artist].where((s) => s.isNotEmpty).join(' • '),
                   style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 trailing: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                     minimumSize: const Size(44, 44),
                     side: BorderSide(color: AppTheme.goldReadable(context)),
                   ),
-                  icon: Icon(Icons.auto_fix_high, size: 14, color: AppTheme.goldReadable(context)),
+                  icon: HueIcon(HueIcons.autoFixHigh, size: 14, color: AppTheme.goldReadable(context)),
                   label: Text(strings.restoreActionBtn, style: TextStyle(fontSize: 11, color: AppTheme.goldReadable(context))),
                   onPressed: () {
                     onSelect(it);
@@ -546,6 +570,8 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   },
                 ),
                 onTap: () => onSelect(it),
+                ),
+              ),
               ),
             );
           },
@@ -559,7 +585,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     final originalUrl = HeritageApi(dio).audioUrl(item.id);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 16, 28, 40),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.lg, AppSpacing.xxxl, AppSpacing.xxxl),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,15 +594,15 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                  Text(item.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
                     children: [
-                      if (item.type.isNotEmpty) Chip(label: Text(item.type, style: const TextStyle(fontSize: 11.5))),
-                      if (item.artist.isNotEmpty) Chip(label: Text(item.artist, style: const TextStyle(fontSize: 11.5))),
-                      if (item.tonal.isNotEmpty) Chip(label: Text(item.tonal, style: const TextStyle(fontSize: 11.5))),
+                      if (item.type.isNotEmpty) Chip(label: Text(item.type, style: const TextStyle(fontSize: 12))),
+                      if (item.artist.isNotEmpty) Chip(label: Text(item.artist, style: const TextStyle(fontSize: 12))),
+                      if (item.tonal.isNotEmpty) Chip(label: Text(item.tonal, style: const TextStyle(fontSize: 12))),
                     ],
                   ),
                 ],
@@ -589,13 +615,13 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         const SizedBox(height: 10),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.history, size: 18, color: AppTheme.goldReadable(context)),
+                    HueIcon(HueIcons.history, size: 18, color: AppTheme.goldReadable(context)),
                     const SizedBox(width: 8),
                     Text(strings.restorationBeforeLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                   ],
@@ -609,23 +635,23 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         const SizedBox(height: 12),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.auto_fix_high, size: 18, color: AppTheme.emeraldGreen),
+                    const HueIcon(HueIcons.autoFixHigh, size: 18, color: AppTheme.emeraldGreen),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(strings.restorationAfterLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                     if (_restoreResult != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                         decoration: BoxDecoration(
                           color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Text(strings.restoreDspDone, style: const TextStyle(color: AppTheme.emeraldGreen, fontSize: 11, fontWeight: FontWeight.bold)),
                       ),
@@ -634,7 +660,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                 const SizedBox(height: 12),
                 if (_isRestoring)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     child: Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -654,10 +680,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   ),
                 ] else ...[
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                     child: Center(
                       child: FilledButton.icon(
-                        icon: const Icon(Icons.auto_fix_high, size: 18),
+                        icon: const HueIcon(HueIcons.autoFixHigh, size: 18),
                         label: Text(strings.restorationRunBtn),
                         onPressed: _isRestoring ? null : () => _runDspRestoration(item),
                       ),
@@ -674,28 +700,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         ),
         if (_restoreResult != null) ...[
           const SizedBox(height: 18),
-          Text(strings.restorationMetricsTitle, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _metricRow(strings.restorationDcRemoved, _restoreResult!.dcRemoved.toStringAsFixed(4)),
-                  const Divider(height: 16),
-                  _metricRow(strings.restorationClicksFixed, '${_restoreResult!.clicksFixed} ${strings.restoreClicks}'),
-                  const Divider(height: 16),
-                  _metricRow(strings.restorationPeakChange, '${_restoreResult!.peakBefore.toStringAsFixed(2)} -> ${_restoreResult!.peakAfter.toStringAsFixed(2)}'),
-                  const Divider(height: 16),
-                  _metricRow(strings.restorationNoiseFloor, '${_restoreResult!.noiseFloorDb.toStringAsFixed(1)} dB'),
-                  const Divider(height: 16),
-                  _metricRow(strings.restoreSampleRate, '${_restoreResult!.sampleRate} Hz'),
-                  const Divider(height: 16),
-                  _metricRow(strings.restoreAlgorithm, strings.restorationAlgorithm),
-                ],
-              ),
-            ),
-          ),
+          _buildRestoreMetrics(_restoreResult!, strings),
         ],
         const SizedBox(height: 16),
         Wrap(
@@ -703,14 +708,14 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           runSpacing: 8,
           children: [
             FilledButton.icon(
-              icon: const Icon(Icons.refresh, size: 18),
+              icon: const HueIcon(HueIcons.refresh, size: 18),
               label: Text(strings.restorationRunBtn),
               onPressed: _isRestoring ? null : () => _runDspRestoration(item),
             ),
             OutlinedButton.icon(
-              icon: const Icon(Icons.upload_file, size: 18),
+              icon: const HueIcon(HueIcons.uploadFile, size: 18),
               label: Text(strings.restorationUploadVintageBtn),
-              onPressed: _uploadAndRestoreFile,
+              onPressed: _uploading ? null : _uploadAndRestoreFile,
             ),
           ],
         ),
@@ -749,19 +754,19 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     final heritageApi = HeritageApi(dio);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xxxl),
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: AppTheme.primaryPurple.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.25)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.compare_arrows, color: AppTheme.primaryPurpleLight, size: 20),
+              const HueIcon(HueIcons.compareArrows, color: AppTheme.primaryPurpleLight, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -778,13 +783,13 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
             final isWide = constraints.maxWidth >= AppBreakpoints.medium;
             final cardA = Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.verified, size: 18, color: AppTheme.emeraldGreen),
+                        const HueIcon(HueIcons.verified, size: 18, color: AppTheme.emeraldGreen),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(strings.comparePickSample, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -817,7 +822,14 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     ),
                     if (_compareSampleItem != null) ...[
                       const SizedBox(height: 12),
-                      AudioPlayerBar(url: heritageApi.audioUrl(_compareSampleItem!.id), label: _compareSampleItem!.title, dio: dio),
+                      AudioPlayerBar(
+                        key: ValueKey('ab-a-$_abGen'),
+                        pauseSignal: _abPause,
+                        url: heritageApi.audioUrl(_compareSampleItem!.id),
+                        label: _compareSampleItem!.title,
+                        dio: dio,
+                        autoPlay: _abPlaying,
+                      ),
                     ],
                   ],
                 ),
@@ -826,13 +838,13 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
             final cardB = Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.help_outline, size: 18, color: AppTheme.goldReadable(context)),
+                        HueIcon(HueIcons.help, size: 18, color: AppTheme.goldReadable(context)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(strings.comparePickTarget, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -842,19 +854,19 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     const SizedBox(height: 10),
                     if (_uploadedTargetBytes != null) ...[
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(AppSpacing.md),
                         decoration: BoxDecoration(
                           color: AppTheme.amberGold.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.audio_file, size: 20, color: AppTheme.goldReadable(context)),
+                            HueIcon(HueIcons.audioFile, size: 20, color: AppTheme.goldReadable(context)),
                             const SizedBox(width: 8),
                             Expanded(child: Text(_uploadedTargetName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                             IconButton(
                               tooltip: strings.clearSelectedFile,
-                              icon: const Icon(Icons.close, size: 16),
+                              icon: const HueIcon(HueIcons.close, size: 16),
                               onPressed: () => setState(() {
                                 _uploadedTargetBytes = null;
                                 _uploadedTargetName = '';
@@ -865,7 +877,13 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                         ),
                       ),
                       const SizedBox(height: 10),
-                      AudioPlayerBar(bytes: _uploadedTargetBytes!, label: _uploadedTargetName),
+                      AudioPlayerBar(
+                        key: ValueKey('ab-b-$_abGen'),
+                        pauseSignal: _abPause,
+                        bytes: _uploadedTargetBytes!,
+                        label: _uploadedTargetName,
+                        autoPlay: _abPlaying,
+                      ),
                     ] else ...[
                       InputDecorator(
                         decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
@@ -892,13 +910,20 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
-                        icon: const Icon(Icons.upload_file, size: 16),
+                        icon: const HueIcon(HueIcons.uploadFile, size: 16),
                         label: Text(strings.compareUploadPrompt),
                         onPressed: _pickTargetAudioForComparison,
                       ),
                       if (_compareTargetItem != null) ...[
                         const SizedBox(height: 10),
-                        AudioPlayerBar(url: heritageApi.audioUrl(_compareTargetItem!.id), label: _compareTargetItem!.title, dio: dio),
+                        AudioPlayerBar(
+                          key: ValueKey('ab-b-$_abGen'),
+                          pauseSignal: _abPause,
+                          url: heritageApi.audioUrl(_compareTargetItem!.id),
+                          label: _compareTargetItem!.title,
+                          dio: dio,
+                          autoPlay: _abPlaying,
+                        ),
                       ],
                     ],
                   ],
@@ -906,12 +931,35 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               ),
             );
 
+            final abControls = Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                HueButton(
+                  label: strings.abPlayBoth,
+                  variant: HueButtonVariant.gold,
+                  icon: HueIcons.playArrow,
+                  onPressed: _abReady ? _playBothAb : null,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                HueButton(
+                  label: strings.abStopBoth,
+                  variant: HueButtonVariant.ghost,
+                  size: HueButtonSize.small,
+                  icon: HueIcons.stop,
+                  onPressed: _stopBothAb,
+                ),
+              ],
+            );
+
             if (isWide) {
               return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(child: cardA),
-                  const SizedBox(width: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                    child: abControls,
+                  ),
                   Expanded(child: cardB),
                 ],
               );
@@ -919,7 +967,9 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
             return Column(
               children: [
                 cardA,
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
+                abControls,
+                const SizedBox(height: AppSpacing.md),
                 cardB,
               ],
             );
@@ -928,7 +978,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         const SizedBox(height: 20),
         Center(
           child: FilledButton.icon(
-            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14)),
+            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg)),
             icon: _isComparing
                 ? SizedBox(
                     width: 18,
@@ -938,7 +988,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       color: Theme.of(context).colorScheme.onPrimary,
                     ),
                   )
-                : const Icon(Icons.compare_arrows, size: 20),
+                : const HueIcon(HueIcons.compareArrows, size: 20),
             label: Text(strings.compareRunBtn, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             onPressed: _isComparing ? null : _runCrossComparison,
           ),
@@ -972,7 +1022,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         const SizedBox(height: 10),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Row(
               children: [
                 Container(
@@ -980,13 +1030,13 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   height: 72,
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                     border: Border.all(color: color, width: 2),
                   ),
                   child: Center(
                     child: Text(
                       '${score.toStringAsFixed(0)}%',
-                      style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 20),
+                      style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 19),
                     ),
                   ),
                 ),
@@ -997,7 +1047,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     children: [
                       Text(
                         '${strings.compareIdentifiedMatch}: ${_compareSampleItem?.title ?? ""}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1021,7 +1071,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         const SizedBox(height: 8),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: CompareChart(
               times: r.times,
               sampleF0: r.sampleF0,
@@ -1035,17 +1085,19 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     );
   }
 
-  Widget _metricRow(String label, String value) {
-    return Row(
+  Widget _buildRestoreMetrics(RestoreResult res, AppStrings strings) {
+    return ResultSummaryCard(
+      title: strings.restorationMetricsTitle,
+      status: AppStatusKind.success,
+      statusLabel: strings.restoreDspDone,
+      leadingIcon: HueIcons.healing,
       children: [
-        Expanded(
-          flex: 2,
-          child: Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
-        ),
-        Expanded(
-          flex: 3,
-          child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-        ),
+        MetricRow(label: strings.restorationDcRemoved, value: res.dcRemoved.toStringAsFixed(4)),
+        MetricRow(label: strings.restorationClicksFixed, value: '${res.clicksFixed} ${strings.restoreClicks}'),
+        MetricRow(label: strings.restorationPeakChange, value: '${res.peakBefore.toStringAsFixed(2)} -> ${res.peakAfter.toStringAsFixed(2)}'),
+        MetricRow(label: strings.restorationNoiseFloor, value: '${res.noiseFloorDb.toStringAsFixed(1)} dB'),
+        MetricRow(label: strings.restoreSampleRate, value: '${res.sampleRate} Hz'),
+        MetricRow(label: strings.restoreAlgorithm, value: strings.restorationAlgorithm),
       ],
     );
   }
