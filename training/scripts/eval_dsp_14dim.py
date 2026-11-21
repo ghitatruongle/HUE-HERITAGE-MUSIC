@@ -1,8 +1,10 @@
 import argparse
 import csv
+import itertools
 import json
 import math
 import os
+import re
 import sys
 
 import numpy as np
@@ -11,18 +13,61 @@ import soundfile as sf
 
 
 AUDIO_EXTS = (".wav", ".mp3", ".flac", ".m4a", ".aiff", ".ogg")
+SEED_PATTERN = re.compile(r"_ban\d+$", re.IGNORECASE)
 
 
-def list_audio(inputs):
+def list_audio(inputs, recursive=False):
     files = []
     for item in inputs:
         if os.path.isdir(item):
-            for name in sorted(os.listdir(item)):
-                if name.lower().endswith(AUDIO_EXTS):
-                    files.append(os.path.join(item, name))
+            if recursive:
+                for root, _, names in os.walk(item):
+                    for name in sorted(names):
+                        if name.lower().endswith(AUDIO_EXTS):
+                            files.append(os.path.join(root, name))
+            else:
+                for name in sorted(os.listdir(item)):
+                    if name.lower().endswith(AUDIO_EXTS):
+                        files.append(os.path.join(item, name))
         elif os.path.isfile(item):
             files.append(item)
-    return files
+    return sorted(dict.fromkeys(files))
+
+
+def seed_group_key(path):
+    stem = os.path.splitext(os.path.basename(path))[0]
+    prompt = SEED_PATTERN.sub("", stem)
+    prompt = re.sub(r"^\d+_", "", prompt)
+    return os.path.basename(os.path.dirname(path)), prompt
+
+
+def cross_seed_report(paths, units):
+    groups = {}
+    for path in paths:
+        if path in units:
+            groups.setdefault(seed_group_key(path), []).append(path)
+    report = []
+    for (model, prompt), members in sorted(groups.items()):
+        if len(members) < 2:
+            continue
+        pairs = []
+        for a, b in itertools.combinations(members, 2):
+            pairs.append({
+                "a": os.path.basename(a),
+                "b": os.path.basename(b),
+                "cosine": round(cosine_similarity(units[a], units[b]), 2),
+            })
+        values = [p["cosine"] for p in pairs if math.isfinite(p["cosine"])]
+        report.append({
+            "model": model,
+            "prompt": prompt,
+            "seeds": len(members),
+            "pairs": pairs,
+            "cross_seed_min": round(min(values), 2) if values else float("nan"),
+            "cross_seed_mean": round(float(np.mean(values)), 2) if values else float("nan"),
+            "members": [os.path.basename(m) for m in members],
+        })
+    return report
 
 
 def load_audio(path, sr=44100):
@@ -99,7 +144,7 @@ def max_jump(y):
     return float(np.abs(np.diff(y)).max())
 
 
-def analyze_file(path, args, reference=None):
+def analyze_file(path, args, reference=None, units=None):
     y, sr = load_audio(path, sr=args.sample_rate)
     peak = float(np.abs(y).max())
     peak_db = 20.0 * math.log10(max(peak, 1e-12))
@@ -113,7 +158,6 @@ def analyze_file(path, args, reference=None):
     power = spec ** 2
     freqs = np.linspace(0, sr / 2.0, spec.shape[0])
     total_power = power.sum()
-    wood_pct = band_power_share(freqs, power, 200.0, 800.0, total_power)
     pluck_pct = band_power_share(freqs, power, 2000.0, 6000.0, total_power)
 
     centroid = float(librosa.feature.spectral_centroid(y=y, sr=sr, n_fft=n_fft, hop_length=hop).mean())
@@ -125,32 +169,43 @@ def analyze_file(path, args, reference=None):
     perc_energy = float((perc_spec ** 2).sum())
     hpr_db = 10.0 * math.log10(max(harm_energy, 1e-12) / max(perc_energy, 1e-12))
 
-    noise700 = noise_700(y, sr, args.noise700_nfft, args.noise700_nfft // 4, args.noise700_scale)
-
     transients = onset_count(y, sr, args.onset_delta)
     contrast = float(librosa.feature.spectral_contrast(y=y, sr=sr, n_fft=n_fft, hop_length=hop).mean())
 
     mean_chroma, unit_chroma = chroma_stats(y, sr)
+    if units is not None:
+        units[path] = unit_chroma
 
     result = {
         "file": os.path.basename(path),
+        "model": os.path.basename(os.path.dirname(path)),
         "peak_db": round(peak_db, 2),
         "rms_db": round(rms_db, 2),
         "crest_db": round(crest_db, 2),
-        "wood_pct": round(wood_pct, 2),
+    }
+    if args.profile == "vocal":
+        result["vocal_band_pct"] = round(band_power_share(freqs, power, 1000.0, 4000.0, total_power), 2)
+    else:
+        result["wood_pct"] = round(band_power_share(freqs, power, 200.0, 800.0, total_power), 2)
+    result.update({
         "pluck_pct": round(pluck_pct, 2),
         "centroid_hz": round(centroid, 1),
         "rolloff_hz": round(rolloff, 1),
         "flatness": float(f"{flatness:.6f}"),
         "hpr_db": round(hpr_db, 2),
-        "noise700": round(noise700, 2),
+    })
+    if args.profile != "vocal":
+        result["noise700"] = round(
+            noise_700(y, sr, args.noise700_nfft, args.noise700_nfft // 4, args.noise700_scale), 2
+        )
+    result.update({
         "transients": transients,
         "spectral_contrast_db": round(contrast, 3),
         "max_jump": round(max_jump(y), 4),
-    }
+    })
 
     if reference is not None:
-        ref_y, ref_sr = reference["y"], reference["sr"]
+        ref_sr = reference["sr"]
         result["chroma_scale_pct"] = round(
             pentatonic_adherence(mean_chroma, reference["scale_classes"]), 2
         )
@@ -177,9 +232,12 @@ def analyze_file(path, args, reference=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", nargs="+", required=True)
+    parser.add_argument("--recursive", action="store_true", default=False)
+    parser.add_argument("--profile", choices=["instrument", "vocal"], default="instrument")
     parser.add_argument("--reference", default=None)
     parser.add_argument("--out_json", default=None)
     parser.add_argument("--out_csv", default=None)
+    parser.add_argument("--out_cross_csv", default=None)
     parser.add_argument("--sample_rate", type=int, default=44100)
     parser.add_argument("--n_fft", type=int, default=4096)
     parser.add_argument("--noise700_nfft", type=int, default=2048)
@@ -187,7 +245,10 @@ def main():
     parser.add_argument("--onset_delta", type=float, default=0.07)
     args = parser.parse_args()
 
-    files = list_audio(args.input)
+    files = list_audio(args.input, args.recursive)
+    if args.reference:
+        ref_abs = os.path.abspath(args.reference)
+        files = [f for f in files if os.path.abspath(f) != ref_abs]
     if not files:
         print("[ERROR] No audio files found in input")
         sys.exit(1)
@@ -205,45 +266,69 @@ def main():
         }
 
     rows = []
+    units = {}
+    paths_by_row = []
     if reference is not None:
-        rows.append(analyze_file(args.reference, args, reference=None))
+        ref_row = analyze_file(args.reference, args, reference=None)
+        ref_row["model"] = "reference"
+        rows.append(ref_row)
+        paths_by_row.append(None)
     for path in files:
         print(f"[ANALYZE] {path}", flush=True)
-        rows.append(analyze_file(path, args, reference=reference))
+        rows.append(analyze_file(path, args, reference=reference, units=units))
+        paths_by_row.append(path)
 
-    if reference is not None and len(files) >= 2:
-        pair_units = []
-        for path in files:
-            y, sr = load_audio(path, sr=args.sample_rate)
-            _, unit = chroma_stats(y, sr)
-            pair_units.append(unit)
-        cross_seed = cosine_similarity(pair_units[0], pair_units[1])
-        rows[-1]["cross_seed_note"] = f"cosine(first,last)={cross_seed:.2f}%"
+    cross = cross_seed_report(files, units)
+    by_group = {(c["model"], c["prompt"]): c for c in cross}
+    for row, path in zip(rows, paths_by_row):
+        if path is None:
+            continue
+        group = by_group.get(seed_group_key(path))
+        if group is not None:
+            row["cross_seed_min"] = group["cross_seed_min"]
+            row["cross_seed_mean"] = group["cross_seed_mean"]
 
-    fields = [
-        "file", "peak_db", "rms_db", "crest_db", "wood_pct", "pluck_pct",
-        "centroid_hz", "rolloff_hz", "flatness", "hpr_db", "noise700",
-        "transients", "spectral_contrast_db", "max_jump",
-        "chroma_scale_pct", "chroma_cosine_vs_ref", "rhythm_corr_pct", "cross_seed_note",
-    ]
+    band_field = "vocal_band_pct" if args.profile == "vocal" else "wood_pct"
+    fields = ["file", "model", "peak_db", "rms_db", "crest_db", band_field, "pluck_pct",
+              "centroid_hz", "rolloff_hz", "flatness", "hpr_db"]
+    if args.profile != "vocal":
+        fields.append("noise700")
+    fields += ["transients", "spectral_contrast_db", "max_jump",
+               "chroma_scale_pct", "chroma_cosine_vs_ref", "rhythm_corr_pct",
+               "cross_seed_min", "cross_seed_mean"]
 
-    width = max(len(f) for f in fields)
     print("\n" + " | ".join(f"{f[:14]:>14}" for f in fields))
     for row in rows:
         print(" | ".join(f"{str(row.get(f, ''))[:14]:>14}" for f in fields))
 
+    if cross:
+        print("\n[CROSS-SEED] model | prompt | seeds | min | mean")
+        for c in cross:
+            print(f"  {c['model']} | {c['prompt']} | {c['seeds']} | {c['cross_seed_min']} | {c['cross_seed_mean']}")
+    else:
+        print("\n[CROSS-SEED] no group has 2+ seeds (expects files named *_banN in one model folder)")
+
     if args.out_json:
         with open(args.out_json, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, ensure_ascii=False, indent=2)
+            json.dump({"profile": args.profile, "files": rows, "cross_seed": cross}, handle, ensure_ascii=False, indent=2)
         print(f"\n[SAVED] {args.out_json}")
 
     if args.out_csv:
         with open(args.out_csv, "w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
             writer.writeheader()
             for row in rows:
                 writer.writerow(row)
         print(f"[SAVED] {args.out_csv}")
+
+    if args.out_cross_csv:
+        with open(args.out_cross_csv, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["model", "prompt", "file_a", "file_b", "cosine"])
+            for c in cross:
+                for p in c["pairs"]:
+                    writer.writerow([c["model"], c["prompt"], p["a"], p["b"], p["cosine"]])
+        print(f"[SAVED] {args.out_cross_csv}")
 
 
 if __name__ == "__main__":
