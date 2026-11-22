@@ -73,7 +73,9 @@ def run_job(task_id: str, kind: str, params: dict):
         crud.update_task(db, task_id, status="done", result=result, finished=True)
         return result
     except Exception as e:
-        crud.update_task(db, task_id, status="error", error=str(e), finished=True)
+        from ..services.task_error import safe_task_error
+
+        crud.update_task(db, task_id, status="error", error=safe_task_error(e), finished=True)
         raise
     finally:
         db.close()

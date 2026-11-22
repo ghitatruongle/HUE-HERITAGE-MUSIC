@@ -10,7 +10,8 @@ import os
 import threading
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from ..database import crud
 from .. import rate_limit
 from .. import rate_limit, security_log
 from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
+from ..services import user_inflight
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +319,27 @@ def require_admin_fresh(admin_id: str = Depends(require_admin)) -> str:
     return admin_id
 
 
+def require_staff(request: Request, db: Session = Depends(get_db)) -> str:
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="authentication required")
+    user_id, epoch = parse_token(header[7:].strip())
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="unknown user")
+    if epoch != (user.token_epoch or 0):
+        raise HTTPException(status_code=401, detail="token revoked")
+    if getattr(user, "active", 1) == 0:
+        raise HTTPException(status_code=403, detail="account disabled")
+    if getattr(user, "must_change_password", 0) and request.method not in ("GET", "HEAD", "OPTIONS"):
+        path = request.url.path
+        if not any(path == p or path.startswith(p + "/") for p in FORCE_CHANGE_ALLOWED_PATHS):
+            raise HTTPException(status_code=403, detail="password change required")
+    if (user.role or "user") not in ("worker", "admin"):
+        raise HTTPException(status_code=403, detail="staff only")
+    return user.id
+
+
 def _bearer_user(request: Request, db: Session):
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
@@ -486,6 +509,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
         "email": user.email,
         "role": _role_of(user),
         "must_change_password": _must_change(user),
+        "avatar": _avatar_public_url(user),
         "token": make_token_for(user),
     }
 
@@ -501,10 +525,105 @@ def get_me(request: Request, db: Session = Depends(get_db)):
         "email": user.email,
         "role": _role_of(user),
         "must_change_password": _must_change(user),
+        "avatar": _avatar_public_url(user),
         "storage_used_bytes": crud.user_storage_bytes(db, user.id),
         "storage_quota_bytes": storage_quota_bytes,
         "token": make_token_for(user),
     }
+
+
+AVATAR_MAX_BYTES = max(1, int(settings.avatar_max_bytes))
+AVATAR_CONTENT_TYPES = {"image/png": "png", "image/jpeg": "jpg"}
+AVATAR_MAX_PIXELS = max(1, int(settings.avatar_max_pixels))
+
+
+def _avatar_public_url(user) -> str:
+    if not (getattr(user, "avatar", "") or ""):
+        return ""
+    return f"/api/avatars/{user.id}"
+
+
+def _avatar_magic_ok(raw: bytes, ext: str) -> bool:
+    if ext == "png":
+        return raw.startswith(b"\x89PNG\r\n\x1a\n")
+    return raw.startswith(b"\xff\xd8\xff")
+
+
+def _save_avatar_file(user_id: str, raw: bytes, ext: str) -> str:
+    from io import BytesIO
+
+    from PIL import Image
+
+    try:
+        image = Image.open(BytesIO(raw))
+        if image.width * image.height > AVATAR_MAX_PIXELS:
+            raise HTTPException(status_code=400, detail="image too large")
+        if ext == "jpg":
+            image = image.convert("RGB")
+        image.thumbnail((256, 256))
+        image.load()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid image")
+    target_dir = Path(settings.storage_dir) / "avatars"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    name = f"{user_id}.{ext}"
+    if ext == "jpg":
+        image.save(target_dir / name, quality=85)
+    else:
+        image.save(target_dir / name)
+    return name
+
+
+@router.post("/me/avatar")
+async def upload_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    staff_id: str = Depends(require_staff),
+    _write_slot: None = Depends(acquire_write_slot),
+):
+    user = crud.get_user_by_id(db, staff_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="unknown user")
+    if not user_inflight.try_acquire(user_inflight.user_key("avatar", user.id)):
+        raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
+    try:
+        raw = await file.read(AVATAR_MAX_BYTES + 1)
+        if len(raw) > AVATAR_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="file too large")
+        ext = AVATAR_CONTENT_TYPES.get((file.content_type or "").lower())
+        if ext is None or not _avatar_magic_ok(raw, ext):
+            raise HTTPException(status_code=400, detail="avatar must be png or jpeg")
+        name = _save_avatar_file(user.id, raw, ext)
+        old = user.avatar or ""
+        crud.set_user_avatar(db, user.id, name)
+        if old and old != name:
+            try:
+                (Path(settings.storage_dir) / "avatars" / Path(old).name).unlink(missing_ok=True)
+            except OSError:
+                pass
+        security_log.security_event("avatar_updated", user_id=user.id, username=user.username)
+    finally:
+        user_inflight.release(user_inflight.user_key("avatar", user.id))
+    return {"avatar": _avatar_public_url(user), "name": name}
+
+
+avatar_router = APIRouter(prefix="/avatars", tags=["avatars"])
+
+
+@avatar_router.get("/{user_id}")
+def get_avatar(user_id: str, request: Request, db: Session = Depends(get_db)):
+    _bearer_user(request, db)
+    target = crud.get_user_by_id(db, user_id)
+    if not target or not (target.avatar or ""):
+        raise HTTPException(status_code=404, detail="avatar not found")
+    path = Path(settings.storage_dir) / "avatars" / Path(target.avatar).name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="avatar not found")
+    media = "image/png" if path.suffix == ".png" else "image/jpeg"
+    return FileResponse(path, media_type=media)
 
 
 class InviteCreateRequest(BaseModel):
@@ -542,14 +661,14 @@ def list_invites(limit: int = 50, offset: int = 0, admin_id: str = Depends(requi
 
 
 @router.post("/invites")
-def create_invite(req: InviteCreateRequest, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def create_invite(req: InviteCreateRequest, staff_id: str = Depends(require_staff), db: Session = Depends(get_db)):
     code = req.code.strip() or _generate_invite_code()
     if len(code) < 4 or len(code) > 64:
         raise HTTPException(status_code=400, detail="code must be 4-64 characters")
     if crud.get_invite_code(db, code):
         raise HTTPException(status_code=409, detail="code already exists")
     row = crud.create_invite_code(db, code, req.note.strip())
-    security_log.security_event("invite_created", admin=admin_id, code=code)
+    security_log.security_event("invite_created", actor=staff_id, code=code)
     return {
         "id": row.id,
         "code": row.code,
@@ -650,6 +769,7 @@ class AdminCreateUserRequest(BaseModel):
     email: str = ""
     password: str = ""
     note: str = ""
+    role: str = "user"
 
 
 class AdminUnlockRequest(BaseModel):
@@ -696,6 +816,15 @@ def admin_create_user(req: AdminCreateUserRequest, admin_id: str = Depends(requi
         raise HTTPException(status_code=400, detail="username conflicts with the admin truong account")
     if u.lower().replace(".", "").replace("_", "") == admin_lower and u.lower() != admin_lower:
         raise HTTPException(status_code=400, detail="username impersonates the admin truong account")
+    role = (req.role or "user").strip().lower()
+    if role not in ("user", "worker"):
+        raise HTTPException(status_code=400, detail="role must be user or worker")
+    if role == "worker":
+        from ..database.models import User
+
+        active_workers = db.query(User).filter(User.role == "worker", User.active == 1).count()
+        if active_workers >= max(1, int(settings.worker_max_active)):
+            raise HTTPException(status_code=409, detail="worker limit reached")
     e = req.email.strip().lower()
     if e and not EMAIL_RE.fullmatch(e):
         raise HTTPException(status_code=400, detail="invalid email address")
@@ -711,10 +840,10 @@ def admin_create_user(req: AdminCreateUserRequest, admin_id: str = Depends(requi
     if e and crud.get_user_by_email(db, e):
         raise HTTPException(status_code=409, detail="email already registered")
     try:
-        user = crud.create_user(db, username=u, email=e, password_hash=hash_password(p), must_change_password=True)
+        user = crud.create_user(db, username=u, email=e, password_hash=hash_password(p), must_change_password=True, role=role)
     except IntegrityError:
         raise HTTPException(status_code=409, detail="username or email already exists")
-    security_log.security_event("user_created_by_admin", admin=admin_id, username=u, user_id=user.id, note=req.note.strip())
+    security_log.security_event("user_created_by_admin", admin=admin_id, username=u, user_id=user.id, role=role, note=req.note.strip())
     return {
         "id": user.id,
         "username": user.username,
@@ -751,6 +880,6 @@ def revoke_all_tokens(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/users")
-def list_users(limit: int = 50, offset: int = 0, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def list_users(limit: int = 50, offset: int = 0, staff_id: str = Depends(require_staff), db: Session = Depends(get_db)):
     total, rows = crud.list_users(db, limit=max(1, min(limit, 200)), offset=max(0, offset))
     return {"items": rows, "total": total}

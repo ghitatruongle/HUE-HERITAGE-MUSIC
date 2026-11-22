@@ -1,5 +1,68 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.5-beta1 (2026-11-22)
+
+> Đợt "Worker + Avatar + Học hát + Tốc độ tải": role Worker (tối đa 5, quyền cụ thể) · ảnh đại diện admin & worker (PIL resize 256, magic-byte, 2MB cap) · học hát nâng cấp (octave normalize, ngũ cung thật, per-word verdict, busy-gate, force-align timing) · tốc độ tải (startup song song, web gzip) · security hardening (rate-limit avatar, must-change gate, RIFF magic strict, env-tunable ×7) · review code toàn dự án (10 findings vá hết) · battery bảo mật D0→D16 CLEAN · loadtest B1+B2 SLO · gates C1→C8 xanh — pytest 435/435 · flutter 224/224 · parity 3.13 433+1skip · macOS release ✓.
+
+### T1 — Role Worker (tối đa 5)
+- Thêm role `worker` vào schema `users` (String(16)) qua MIGRATION_COLUMNS — ALTER tự động khi boot
+- Boot-guard giữ nguyên role worker qua restart (không tẩy về user) + clamp trần 5 (giữ newest 5, demote cũ hơn + epoch++)
+- Dependency `require_staff` (worker hoặc admin) — áp cho 5 endpoint: GET users/stats/storage/learning-stats + POST invites
+- `POST /auth/users` thêm param `role` (user/worker) + trần 5 active worker (409 khi vượt) + security_log ghi `role=`
+- Admin UI: `_CreateUserCard` thêm dropdown vai; UsersTab đếm Worker x/5; hiển thị role + avatar trong list
+- Worker chỉ xem danh sách tk đã đăng ký (read-only, không reset-password/khóa/tạo); xem database chỉ đọc (GET /admin/*); tạo mã mời (POST /invites)
+- Test khóa: `test_worker_role.py` 11 test (boot-guard, trần 5, forbillen 403 matrix, cap-active-only, must-change)
+
+### T2 — Ảnh đại diện (admin + worker)
+- Cột `avatar` VARCHAR(256) qua MIGRATION_COLUMNS
+- `POST /me/avatar`: chỉ admin/worker (user thường 403) · PIL resize 256×256 · magic-byte PNG/JPEG · trần 2MB → 413
+- `GET /api/avatars/{user_id}`: cần đăng nhập, FileResponse media-type đúng
+- `/me` + `/users` + login trả `avatar` URL
+- Client: `file_picker` chọn ảnh → `AuthEndpoints.uploadAvatar` (multipart) → `AvatarView` widget (cache + negative-cache TTL 60s + evict khi upload)
+- Settings: card "Tài khoản của tôi" + nút "Đổi ảnh đại diện" (chỉ admin/worker thấy)
+- Test khóa: `test_avatar.py` 8 test (upload/serve/403 user/bad-type/oversize/replace-removes-old/requires-auth)
+- Security: heavy-rate-limit `POST /me/avatar` (per-user 90/phút) + must-change-password gate
+
+### T3 — UI vai + avatar
+- Admin screen vai-aware: worker thấy 4 tab (Dashboard/Người dùng/Mã mời/Kho — chỉ xem); admin đủ 7 tab
+- `home_screen.dart:181`: tab Quản trị cho worker (`isAdmin || role == 'worker'`)
+- AccountManagerSection: avatar + chip vai + read-only mode cho worker
+- InviteManagerSection: `workerMode` — tạo mã mời, không list (list thuộc admin)
+- Settings: card "Tài khoản của tôi" (avatar + username + role badge + nút đổi ảnh)
+- `AvatarView` widget dùng chung (fallback icon + memory cache + negative-cache TTL)
+- `hue_icons.dart`: +icon `engineering` (Cộng tác viên) + 93 label VI
+
+### T4 — Học hát
+- `analyze-pitch` trần 15s→35s (`MAX_COMPARE_SECONDS`) + `truncated` flag + `duration_full` — client hiện ghi chú "đã cắt"
+- `my-progress` trả `server_today` — streak ghim theo ngày server (hết lệch TZ khi lên VPS)
+- Client map 422 `no_voice/too_quiet/too_short/align_failed/reference_invalid` → message VI thân thiện
+- Force-align timing đã có từ 0.0.5-preview — giữ nguyên (xác chứng)
+- Test khóa: `test_t4_sing_fixes.py` 4 test + `api_hardening_test.dart` 2 test
+
+### T5 — Tốc độ tải
+- Startup: 5 await tuần tự → `Future.wait` song song (main.dart:36-40) — harness 210ms→172ms
+- Web: transfer 1.08MB gzip (từ 3.7MB raw) — deferred loading chưa áp (rủi ro layout, track riêng)
+- Pagination: lessons list 13 items < trần 100 — chưa cần phân trang
+
+### T6 — UI polish + security hardening
+- **ShimmerScope**: 12 skeleton dùng chung 1 AnimationController (trước: 12 riêng) + reduced-motion tĩnh — test 3/3
+- **C1 contrast**: role chip + avatar fallback đổi sang M3 `primaryContainer/onPrimaryContainer` (light 6.65 · dark 6.30 — trước 2.43) — pin test
+- **Color gate**: `design_token_gate_test.dart` thêm RegExp `Color(0x|Colors.[a-zA-Z]+` + whitelist 9 file — chặn hardcode màu mới
+- **busy-gate**: nút "Đổi ảnh đại diện" disable-when-busy (`_avatarBusy` + `HueButton.loading`) — test khóa tap-đúp → 1 upload
+- **Security**: avatar upload vào `HEAVY_POST_PATHS` (per-user 90/phút) + `require_staff` thay `_bearer_user` (must-change gate) + RIFF size=0 strict magic + `safe_task_error` strip path/.py từ task.error
+- **env-tunable ×7**: AVATAR_MAX_BYTES/PIXELS, COMPARE_MAX_SECONDS, LARGE_BODY_LIMIT, SIGNED_URL_TTL_SECONDS, HERITAGE_UPLOAD_MAX_BYTES, THREAD_LIMITER_TOKENS — qua Settings + `.env.example`
+
+### Review code + battery bảo mật + loadtest
+- Code review A2→E1: 1 TRUNG body-limit avatar + 9 NHỎ (atomic write, queue dispatch, error mapping, compensating-delete, task_error sanitize, SSE gone skip, 403 map VI) — **vá hết có test khóa**
+- Battery D0→D16 trên sân `~/hue_bao_mat_007` :8004 (driver dựng mới): D0 143 security tests · D2 probe 26/26 · D3 SQLi 27k req bypass=0 · D4 XSS sink=0 · D5 CSRF 45k forged=0 · D6 PWD 19/19 · D7 IDOR 8/8 · D8 UPLOAD 12/12 · D9 RACE 5/5 · D10 TOKEN 16/16 · D11 DOS 7/7 · D12 RATE A/B 7/7 · D13 AMAX 13/13 · D14 KC · D15 FINAL — **0 breach, 0 5xx-thật, 0 Traceback**
+- Loadtest B1+B2 trên sân `~/hue_on_dinh_006` :8005 (driver dựng mới): SMOKE 49/49 · soak 109k req RSS 112MB p99 6.4ms · restart-bão recovery 3.0s · DSP-STORM plateau · MEGA burst/sawtooth/cold/restart 24k→29.5k SLO toàn xanh
+
+### Gates cuối
+- pytest server/tests: **435/435** (70 file)
+- flutter analyze: **0** · flutter test: **224/224** (37 file) · flutter build web: ✓ · flutter build macos --release: ✓ 55.6MB
+- Parity Python 3.13: 433+1skip (basic-pitch wheel) = ngang 3.12
+- Battery bảo mật D0→D16: 0 breach · 0 5xx-thật · 0 Traceback · invariant admins==1==ghitatruongle
+
 ## 0.0.5-alpha (2026-11-20)
 
 > Đợt "hoàn thiện chất lượng tổng thể": review code toàn dự án + 8 gate UI chất lượng (theme, layout, motion, điều hướng, polish) + battery bảo mật D0→D16 trên sân mới + dọn dẹp repo — 0 lỗ hổng mở, mọi gate xanh.

@@ -137,16 +137,33 @@ class MusicApi {
         if (idx < 0) break;
         final block = buffer.substring(0, idx);
         buffer = buffer.substring(idx + 2);
-        for (final line in const LineSplitter().convert(block)) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            final decoded = jsonDecode(line.substring(6));
-            if (decoded is Map) {
-              yield MusicTask.fromJson(Map<String, dynamic>.from(decoded));
-            }
-          } catch (_) {}
+        final task = MusicApi.parseSseBlock(block);
+        if (task != null) {
+          yield task;
         }
       }
     }
+  }
+
+  static MusicTask? parseSseBlock(String block) {
+    var eventName = '';
+    MusicTask? parsed;
+    for (final line in const LineSplitter().convert(block)) {
+      if (line.startsWith('event: ')) {
+        eventName = line.substring(7).trim();
+      } else if (line.startsWith('data: ')) {
+        try {
+          final decoded = jsonDecode(line.substring(6));
+          if (decoded is Map) {
+            final task = MusicTask.fromJson(Map<String, dynamic>.from(decoded));
+            if (eventName == 'gone' || task.id.isEmpty) {
+              return null;
+            }
+            parsed = task;
+          }
+        } catch (_) {}
+      }
+    }
+    return parsed;
   }
 }

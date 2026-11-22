@@ -556,6 +556,13 @@ class PracticeResult {
   }
 }
 
+class ProgressPage {
+  final List<ProgressEntry> items;
+  final String serverToday;
+
+  ProgressPage({required this.items, this.serverToday = ''});
+}
+
 class ProgressEntry {
   final String lessonId;
   final int section;

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 class AdminStats {
   final int usersTotal;
   final int usersActive;
+  final int workersActive;
   final int invitesTotal;
   final int invitesUnused;
   final int itemsTotal;
@@ -17,6 +18,7 @@ class AdminStats {
   AdminStats({
     required this.usersTotal,
     required this.usersActive,
+    required this.workersActive,
     required this.invitesTotal,
     required this.invitesUnused,
     required this.itemsTotal,
@@ -54,6 +56,7 @@ class AdminStats {
     return AdminStats(
       usersTotal: users(usersMap, 'total'),
       usersActive: users(usersMap, 'active'),
+      workersActive: users(usersMap, 'workers'),
       invitesTotal: users(invitesMap, 'total'),
       invitesUnused: users(invitesMap, 'unused'),
       itemsTotal: users(storageMap, 'items_total'),

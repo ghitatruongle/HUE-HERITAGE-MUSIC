@@ -1,6 +1,8 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/endpoints/auth_endpoints.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/auth_service.dart';
@@ -8,6 +10,7 @@ import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../services/theme_provider.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/avatar_view.dart';
 import '../../widgets/hue_button.dart';
 import '../../widgets/server_onboarding_dialog.dart';
 import '../../widgets/storage_quota_card.dart';
@@ -21,6 +24,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _avatarBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +50,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
+        if (auth.isLoggedIn) ...[
+          _sectionLabel(context, strings.accountAvatarTitle),
+          _buildAccountCard(context, strings, auth),
+          const SizedBox(height: 20),
+        ],
         _sectionLabel(context, strings.languageTitle),
         Card(
           margin: EdgeInsets.zero,
@@ -169,6 +179,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 24),
       ],
     );
+  }
+
+  Widget _buildAccountCard(BuildContext context, dynamic strings, AuthService auth) {
+    final scheme = Theme.of(context).colorScheme;
+    final roleLabel = auth.role == 'admin'
+        ? strings.adminRoleAdmin
+        : auth.role == 'worker'
+            ? strings.adminRoleWorker
+            : strings.adminRoleUser;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          children: [
+            AvatarView(
+              url: auth.avatar,
+              size: 56,
+              icon: auth.role == 'worker' ? HueIcons.engineering : HueIcons.accountCircle,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    auth.username ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  if ((auth.email ?? '').isNotEmpty)
+                    Text(
+                      auth.email!,
+                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                    ),
+                    child: Text(
+                      roleLabel,
+                      style: TextStyle(fontSize: 11, color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (auth.isStaff)
+              HueButton(
+                label: strings.accountAvatarChange,
+                icon: HueIcons.edit,
+                variant: HueButtonVariant.ghost,
+                loading: _avatarBusy,
+                onPressed: _avatarBusy ? null : () => _changeAvatar(strings, auth),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changeAvatar(dynamic strings, AuthService auth) async {
+    if (_avatarBusy) return;
+    setState(() => _avatarBusy = true);
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      final file = picked?.files.single;
+      final bytes = file?.bytes;
+      if (!mounted) return;
+      if (file == null || bytes == null || bytes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.accountAvatarPickFail)));
+        return;
+      }
+      final lower = file.name.toLowerCase();
+      final contentType = lower.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      final dio = context.read<ServerConfig>().api.dio;
+      final url = await AuthEndpoints(dio).uploadAvatar(
+        bytes: bytes,
+        filename: file.name,
+        contentType: contentType,
+      );
+      if (!mounted) return;
+      if (url.isNotEmpty) {
+        AvatarView.evict(url);
+        auth.setAvatar(url);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.accountAvatarUpdated)));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.accountAvatarFail)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.accountAvatarFail)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _avatarBusy = false);
+      }
+    }
   }
 
   Widget _buildServerSection(BuildContext context, dynamic strings) {

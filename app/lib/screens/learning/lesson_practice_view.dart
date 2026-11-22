@@ -103,6 +103,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
   List<ProgressEntry> _serverProgress = [];
   List<ProgressEntry> _allProgress = [];
   bool _serverProgressAvailable = false;
+  DateTime? _serverToday;
 
   List<ScaleInfo> _scales = [];
   ScaleInfo? _selectedScale;
@@ -453,9 +454,12 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
       List<ProgressEntry> progress = [];
       List<ProgressEntry> allProgress = [];
       bool serverOk = false;
+      DateTime? serverToday;
       try {
-        allProgress = await api.myProgress(limit: 400);
+        final page = await api.myProgress(limit: 400);
+        allProgress = page.items;
         progress = allProgress.where((e) => e.lessonId == lesson.id).toList();
+        serverToday = parsePracticeDate(page.serverToday);
         serverOk = true;
       } catch (_) {}
       if (!mounted) return;
@@ -464,6 +468,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         _serverProgress = progress;
         _allProgress = allProgress;
         _serverProgressAvailable = serverOk;
+        _serverToday = serverToday;
       });
     } catch (e) {
       if (mounted) setState(() => _error = ApiClient.describe(e));
@@ -877,11 +882,12 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
             ),
           );
       try {
-        final all = await api.myProgress(limit: 400);
+        final page = await api.myProgress(limit: 400);
         if (mounted && _selected?.id == detail.id) {
           setState(() {
-            _allProgress = all;
-            _serverProgress = all.where((e) => e.lessonId == detail.id).toList();
+            _allProgress = page.items;
+            _serverProgress = page.items.where((e) => e.lessonId == detail.id).toList();
+            _serverToday = parsePracticeDate(page.serverToday) ?? _serverToday;
           });
         }
       } catch (_) {}
@@ -2028,10 +2034,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     if (_serverProgressAvailable && serverEntries.isNotEmpty) {
       final es = serverEntries.take(10).toList().reversed.toList();
       scores = es.map((e) => e.score).toList();
-      pointDates = es
-          .map((e) => parsePracticeDate(e.createdAt, utcOffset: DateTime.now().timeZoneOffset))
-          .whereType<DateTime>()
-          .toList();
+      pointDates = es.map((e) => parsePracticeDate(e.createdAt)).whereType<DateTime>().toList();
       sourceLabel = strings.practiceServerProgress;
     } else {
       if (history.isEmpty) {
@@ -2055,9 +2058,8 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
     final avg = avgList.length >= 2 ? (avgList.reduce((a, b) => a + b) / avgList.length).toStringAsFixed(1) : null;
     final dates = <DateTime>[];
     if (_serverProgressAvailable) {
-      final utcOffset = DateTime.now().timeZoneOffset;
       for (final e in _allProgress) {
-        final d = parsePracticeDate(e.createdAt, utcOffset: utcOffset);
+        final d = parsePracticeDate(e.createdAt);
         if (d != null) dates.add(d);
       }
     } else {
@@ -2065,7 +2067,7 @@ class _LessonPracticeViewState extends State<LessonPracticeView> {
         if (e.kind == 'practice') dates.add(e.at);
       }
     }
-    final stats = practiceStatsFromDates(dates, DateTime.now());
+    final stats = practiceStatsFromDates(dates, _serverToday ?? DateTime.now());
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(

@@ -15,6 +15,7 @@ import '../../core/query_epoch.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/lesson.dart';
 import '../../services/admin_reauth.dart';
+import '../../services/auth_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/server_config.dart';
 import '../../widgets/audio_player_bar.dart';
@@ -43,11 +44,16 @@ class AdminScreen extends StatefulWidget {
 
 class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  late final List<String> _tabKeys;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    final isWorker = context.read<AuthService>().role == 'worker';
+    _tabKeys = isWorker
+        ? ['dashboard', 'users', 'invites', 'storage']
+        : ['dashboard', 'users', 'invites', 'storage', 'learning', 'security', 'crash'];
+    _tabController = TabController(length: _tabKeys.length, vsync: this);
   }
 
   @override
@@ -59,6 +65,24 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
+    final labels = {
+      'dashboard': strings.adminTabDashboard,
+      'users': strings.adminTabUsers,
+      'invites': strings.adminTabInvites,
+      'storage': strings.adminTabStorage,
+      'learning': strings.adminTabLearning,
+      'security': strings.adminTabSecurity,
+      'crash': strings.adminTabCrash,
+    };
+    final views = {
+      'dashboard': const _DashboardTab(),
+      'users': const _UsersTab(),
+      'invites': const _InvitesTab(),
+      'storage': const _StorageTab(),
+      'learning': const LearningSamplesTab(),
+      'security': const SecuritySection(),
+      'crash': const _CrashTab(),
+    };
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -77,29 +101,13 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               controller: _tabController,
               isScrollable: true,
               tabAlignment: TabAlignment.start,
-              tabs: [
-                Tab(text: strings.adminTabDashboard),
-                Tab(text: strings.adminTabUsers),
-                Tab(text: strings.adminTabInvites),
-                Tab(text: strings.adminTabStorage),
-                Tab(text: strings.adminTabLearning),
-                Tab(text: strings.adminTabSecurity),
-                Tab(text: strings.adminTabCrash),
-              ],
+              tabs: [for (final k in _tabKeys) Tab(text: labels[k]!)],
             ),
           ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: const [
-                _DashboardTab(),
-                _UsersTab(),
-                _InvitesTab(),
-                _StorageTab(),
-                LearningSamplesTab(),
-                SecuritySection(),
-                _CrashTab(),
-              ],
+              children: [for (final k in _tabKeys) views[k]!],
             ),
           ),
         ],
@@ -213,6 +221,12 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
               label: strings.adminStatUsers,
               value: '${s.usersTotal}',
               sub: '${strings.adminStatActive}: ${s.usersActive}',
+            ),
+            _StatCard(
+              icon: HueIcons.engineering,
+              label: strings.adminStatWorkers,
+              value: '${s.workersActive}',
+              sub: '${strings.adminStatWorkerCap}: 5',
             ),
             _StatCard(
               icon: HueIcons.confirmationNumber,
@@ -358,12 +372,15 @@ class _UsersTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final viewerWorker = context.watch<AuthService>().role == 'worker';
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      children: const [
-        _CreateUserCard(),
-        SizedBox(height: 12),
-        AccountManagerSection(),
+      children: [
+        if (!viewerWorker) ...[
+          const _CreateUserCard(),
+          const SizedBox(height: 12),
+        ],
+        const AccountManagerSection(),
       ],
     );
   }
@@ -382,6 +399,7 @@ class _CreateUserCardState extends State<_CreateUserCard> {
   final _passwordCtrl = TextEditingController();
   bool _busy = false;
   String? _message;
+  String _role = 'user';
 
   @override
   void dispose() {
@@ -416,6 +434,7 @@ class _CreateUserCardState extends State<_CreateUserCard> {
           username: username,
           email: email,
           password: _passwordCtrl.text,
+          role: _role,
         ),
       );
       if (!mounted) return;
@@ -478,6 +497,20 @@ class _CreateUserCardState extends State<_CreateUserCard> {
                 border: const OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _role,
+              isDense: true,
+              decoration: InputDecoration(
+                labelText: strings.adminCreateUserRole,
+                border: const OutlineInputBorder(),
+              ),
+              items: [
+                DropdownMenuItem(value: 'user', child: Text(strings.adminRoleUser, style: const TextStyle(fontSize: 13))),
+                DropdownMenuItem(value: 'worker', child: Text(strings.adminRoleWorker, style: const TextStyle(fontSize: 13))),
+              ],
+              onChanged: (v) => setState(() => _role = v ?? 'user'),
+            ),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -509,10 +542,11 @@ class _InvitesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final viewerWorker = context.watch<AuthService>().role == 'worker';
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      children: const [
-        InviteManagerSection(),
+      children: [
+        InviteManagerSection(workerMode: viewerWorker),
       ],
     );
   }

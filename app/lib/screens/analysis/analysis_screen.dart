@@ -181,6 +181,24 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 Text(strings.analysisF0Title, style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 PitchContourChart(data: _pitch!),
+                if (_pitch!.truncated) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    children: [
+                      const HueIcon(HueIcons.warning, size: 14, color: AppTheme.statusWarning),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          strings.analysisTruncatedNote(
+                            '${_pitch!.maxSeconds?.toStringAsFixed(0) ?? '35'}s',
+                            _pitch!.durationFull?.toStringAsFixed(1),
+                          ),
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.md),
                 Row(
                   children: [

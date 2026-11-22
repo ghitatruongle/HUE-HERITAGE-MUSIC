@@ -178,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     final auth = context.watch<AuthService>();
-    if (auth.isAdmin) {
+    if (auth.isAdmin || auth.role == 'worker') {
       destinations.add(
         const NavigationDestinationItem(
           icon: HueIcons.adminPanel,

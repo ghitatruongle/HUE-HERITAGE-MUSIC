@@ -269,6 +269,15 @@ void main() {
     expect(AppElevation.card(Brightness.light), isNotEmpty);
   });
 
+  test('Cặp mới đợt Worker/Avatar — role chip + avatar fallback đạt AA cả 2 theme', () {
+    for (final theme in [AppTheme.lightTheme, AppTheme.darkTheme]) {
+      final s = theme.colorScheme;
+      final label = theme.brightness == Brightness.dark ? 'dark' : 'light';
+      expectAA(s.onPrimaryContainer, s.primaryContainer, 4.5, '$label role chip text/primaryContainer');
+      expectAA(s.onPrimaryContainer, s.primaryContainer, 3.0, '$label avatar icon onPrimaryContainer/primaryContainer');
+    }
+  });
+
   testWidgets('HueButton danger — dark: ink sáng trên nền danger đạt 4.5', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

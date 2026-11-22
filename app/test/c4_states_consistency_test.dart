@@ -53,6 +53,7 @@ Future<void> _pumpSection(WidgetTester tester, ServerConfig server, Widget child
       providers: [
         ChangeNotifierProvider<ServerConfig>.value(value: server),
         ChangeNotifierProvider<LocaleProvider>.value(value: _viLocale()),
+        ChangeNotifierProvider<AuthService>.value(value: AuthService()),
       ],
       child: MaterialApp(home: Scaffold(body: SingleChildScrollView(child: child))),
     ),

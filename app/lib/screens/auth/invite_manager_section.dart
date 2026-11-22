@@ -15,7 +15,9 @@ import '../../widgets/hue_icons.dart';
 import '../../widgets/skeleton_loader.dart';
 
 class InviteManagerSection extends StatefulWidget {
-  const InviteManagerSection({super.key});
+  const InviteManagerSection({super.key, this.workerMode = false});
+
+  final bool workerMode;
 
   @override
   State<InviteManagerSection> createState() => _InviteManagerSectionState();
@@ -32,7 +34,9 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
   @override
   void initState() {
     super.initState();
-    _reload();
+    if (!widget.workerMode) {
+      _reload();
+    }
   }
 
   final QueryEpoch _queryEpoch = QueryEpoch();
@@ -93,24 +97,29 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '${strings.authInviteTitle} ($_total)',
+                widget.workerMode
+                    ? strings.authInviteTitle
+                    : '${strings.authInviteTitle} ($_total)',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
             ),
-            IconButton(
-              tooltip: strings.adminRefresh,
-              onPressed: _loading ? null : _reload,
-              icon: const HueIcon(HueIcons.refresh, size: 18),
-            ),
+            if (!widget.workerMode)
+              IconButton(
+                tooltip: strings.adminRefresh,
+                onPressed: _loading ? null : _reload,
+                icon: const HueIcon(HueIcons.refresh, size: 18),
+              ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
-          strings.authInviteManageHint,
+          widget.workerMode ? strings.authInviteWorkerHint : strings.authInviteManageHint,
           style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
-        if (_loading && _invites.isEmpty)
+        if (widget.workerMode && _invites.isEmpty)
+          EmptyState(icon: HueIcons.personAdd, title: strings.authInviteWorkerEmpty)
+        else if (_loading && _invites.isEmpty)
           const Column(
             children: [
               SkeletonLoader(height: 68),
@@ -169,16 +178,17 @@ class _InviteManagerSectionState extends State<InviteManagerSection> {
                     tooltip: strings.authInviteCopy,
                     onPressed: () => _copyInvite(inv),
                   ),
-                  IconButton(
-                    icon: const HueIcon(HueIcons.delete, size: 16),
-                    tooltip: strings.authInviteDelete,
-                    onPressed: () => _deleteInvite(strings, inv),
-                  ),
+                  if (!widget.workerMode)
+                    IconButton(
+                      icon: const HueIcon(HueIcons.delete, size: 16),
+                      tooltip: strings.authInviteDelete,
+                      onPressed: () => _deleteInvite(strings, inv),
+                    ),
                   ],
                 ),
               ),
             ),
-          if (_invites.length < _total)
+          if (!widget.workerMode && _invites.length < _total)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
               child: Center(

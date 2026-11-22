@@ -22,28 +22,55 @@ class SkeletonLoader extends StatefulWidget {
 
 class _SkeletonLoaderState extends State<SkeletonLoader>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  )..repeat(reverse: true);
+  AnimationController? _own;
+
+  Animation<double> _animation(BuildContext context) {
+    final shared = _ShimmerData.maybeOf(context);
+    if (shared != null) {
+      _own?.stop();
+      return CurvedAnimation(parent: shared.controller, curve: Curves.easeInOut);
+    }
+    final ctrl = _own ??= AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+    if (!ctrl.isAnimating) {
+      ctrl.repeat(reverse: true);
+    }
+    return CurvedAnimation(parent: ctrl, curve: Curves.easeInOut);
+  }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _own?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return Container(
+        margin: widget.margin,
+        width: widget.width,
+        height: widget.height,
+        child: Opacity(
+          opacity: 0.6,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(widget.radius),
+            ),
+          ),
+        ),
+      );
+    }
     return Container(
       margin: widget.margin,
       width: widget.width,
       height: widget.height,
       child: FadeTransition(
-        opacity: Tween<double>(begin: 0.35, end: 0.85).animate(
-          CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-        ),
+        opacity: Tween<double>(begin: 0.35, end: 0.85).animate(_animation(context)),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest,
@@ -53,6 +80,65 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
       ),
     );
   }
+}
+
+class ShimmerScope extends StatefulWidget {
+  final Widget child;
+
+  const ShimmerScope({super.key, required this.child});
+
+  @override
+  State<ShimmerScope> createState() => _ShimmerScopeState();
+}
+
+class _ShimmerScopeState extends State<ShimmerScope>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _ctrl;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disabled = MediaQuery.disableAnimationsOf(context);
+    if (disabled) {
+      _ctrl?.stop();
+    } else {
+      _ctrl ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1100),
+      )..repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = _ctrl;
+    if (ctrl == null) {
+      return widget.child;
+    }
+    return _ShimmerData(
+      controller: ctrl,
+      child: widget.child,
+    );
+  }
+}
+
+class _ShimmerData extends InheritedWidget {
+  final AnimationController controller;
+
+  const _ShimmerData({required this.controller, required super.child});
+
+  static _ShimmerData? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<_ShimmerData>();
+  }
+
+  @override
+  bool updateShouldNotify(_ShimmerData oldWidget) => false;
 }
 
 class SkeletonList extends StatelessWidget {
@@ -69,12 +155,14 @@ class SkeletonList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: padding,
-      itemCount: itemCount,
-      itemBuilder: (context, i) => SkeletonLoader(
-        height: itemHeight,
-        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+    return ShimmerScope(
+      child: ListView.builder(
+        padding: padding,
+        itemCount: itemCount,
+        itemBuilder: (context, i) => SkeletonLoader(
+          height: itemHeight,
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        ),
       ),
     );
   }

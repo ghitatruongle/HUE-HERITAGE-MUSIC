@@ -29,6 +29,7 @@ class HueIcons {
   static const IconData deleteSweep = Icons.delete_sweep_outlined;
   static const IconData dns = Icons.dns_outlined;
   static const IconData draw = Icons.draw_outlined;
+  static const IconData engineering = Icons.engineering_outlined;
   static const IconData edit = Icons.edit_outlined;
   static const IconData error = Icons.error_outlined;
   static const IconData expandMore = Icons.expand_more_outlined;
@@ -124,6 +125,7 @@ final Map<IconData, String> hueIconLabels = {
   HueIcons.deleteSweep: 'Xóa sạch',
   HueIcons.dns: 'Máy chủ',
   HueIcons.draw: 'Vẽ',
+  HueIcons.engineering: 'Cộng tác viên',
   HueIcons.edit: 'Sửa',
   HueIcons.error: 'Lỗi',
   HueIcons.expandMore: 'Mở rộng',

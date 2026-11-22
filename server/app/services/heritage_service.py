@@ -55,7 +55,15 @@ def ingest_saved(db: Session, path, digest: str, data_len: int, filename: str, t
             db, name, type, digest, path.name, data_len, artist=artist,
             owner_user_id=owner_user_id, visibility=visibility, **metadata,
         )
-        crud.create_audio(db, item.id, "original", str(path), digest, data_len)
+        try:
+            crud.create_audio(db, item.id, "original", str(path), digest, data_len)
+        except Exception:
+            db.rollback()
+            orphan = crud.get_by_sha(db, digest)
+            if orphan is not None and orphan.id == item.id:
+                db.delete(orphan)
+                db.commit()
+            raise
         return item, True
     except IntegrityError:
         db.rollback()

@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../api/endpoints/auth_endpoints.dart';
 import '../../services/admin_reauth.dart';
+import '../../services/auth_service.dart';
 import '../../services/clipboard_helper.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
 import '../../core/query_epoch.dart';
 import '../../services/server_config.dart';
+import '../../widgets/avatar_view.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/hue_icons.dart';
@@ -90,6 +92,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
   @override
   Widget build(BuildContext context) {
     final strings = context.watch<LocaleProvider>().strings;
+    final viewerWorker = context.watch<AuthService>().role == 'worker';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -111,7 +114,10 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
           ],
         ),
         const SizedBox(height: 4),
-        Text(strings.accountManagerHint, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        Text(
+          viewerWorker ? strings.accountManagerHintWorker : strings.accountManagerHint,
+          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
         const SizedBox(height: 10),
         if (_loading && _accounts.isEmpty)
           const Column(
@@ -136,6 +142,14 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                 margin: EdgeInsets.zero,
                 child: Row(
                   children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.sm),
+                    child: AvatarView(
+                      url: acc.avatar,
+                      size: 36,
+                      icon: acc.role == 'admin' ? HueIcons.adminPanel : (acc.role == 'worker' ? HueIcons.engineering : HueIcons.person),
+                    ),
+                  ),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,6 +160,8 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                             const SizedBox(width: 6),
                             if (acc.role == 'admin')
                               const HueIcon(HueIcons.adminPanel, size: 13, color: AppTheme.statusWarning)
+                            else if (acc.role == 'worker')
+                              const HueIcon(HueIcons.engineering, size: 13, color: AppTheme.statusInfo)
                             else
                               const HueIcon(HueIcons.person, size: 13, color: AppTheme.statusInfo),
                             if (!acc.active) ...[
@@ -159,20 +175,22 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const HueIcon(HueIcons.vpnKey, size: 16),
-                    tooltip: strings.accountResetPassword,
-                    onPressed: () => _resetAccountPassword(acc),
-                  ),
-                  IconButton(
-                    icon: const HueIcon(HueIcons.personRemove, size: 16, color: AppTheme.statusDanger),
-                    tooltip: strings.accountDeleteTitle,
-                    onPressed: acc.role == 'admin' ? null : () => _deleteAccount(acc),
-                  ),
-                  Switch(
-                    value: acc.active,
-                    onChanged: acc.role == 'admin' ? null : (v) => _toggleAccountActive(acc, v),
-                  ),
+                  if (!viewerWorker) ...[
+                    IconButton(
+                      icon: const HueIcon(HueIcons.vpnKey, size: 16),
+                      tooltip: strings.accountResetPassword,
+                      onPressed: () => _resetAccountPassword(acc),
+                    ),
+                    IconButton(
+                      icon: const HueIcon(HueIcons.personRemove, size: 16, color: AppTheme.statusDanger),
+                      tooltip: strings.accountDeleteTitle,
+                      onPressed: acc.role == 'admin' ? null : () => _deleteAccount(acc),
+                    ),
+                    Switch(
+                      value: acc.active,
+                      onChanged: acc.role == 'admin' ? null : (v) => _toggleAccountActive(acc, v),
+                    ),
+                  ],
                   ],
                 ),
               ),

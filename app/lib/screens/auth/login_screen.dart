@@ -85,6 +85,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         email: user.email,
         role: user.role,
         mustChangePassword: user.mustChangePassword,
+        avatar: user.avatar,
       );
       if (mounted) {
         Navigator.of(context).maybePop();
@@ -145,6 +146,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         email: user.email,
         role: user.role,
         mustChangePassword: user.mustChangePassword,
+        avatar: user.avatar,
       );
       if (mounted) {
         Navigator.of(context).maybePop();
@@ -392,7 +394,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           newPassword: newCtrl.text,
         );
         if (newToken.isNotEmpty) {
-          await auth.save(token: newToken, username: auth.username ?? '', email: auth.email, role: auth.isAdmin ? 'admin' : 'user');
+          await auth.save(token: newToken, username: auth.username ?? '', email: auth.email, role: auth.role, avatar: auth.avatar);
         }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordDone)));

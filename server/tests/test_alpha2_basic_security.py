@@ -71,7 +71,7 @@ def test_garbage_long_token_401(client):
 def test_normal_user_admin_users_403(client, user_token):
     r = client.get("/api/auth/users", headers={"Authorization": f"Bearer {user_token}"})
     assert r.status_code == 403
-    assert r.json()["detail"] == "admin truong only"
+    assert r.json()["detail"] == "staff only"
 
 
 def test_normal_user_admin_stats_403(client, user_token):

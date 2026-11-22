@@ -33,11 +33,13 @@ Future<void> main() async {
   final history = HistoryService();
   final locale = LocaleProvider();
   final auth = AuthService();
-  await config.load();
-  await theme.load();
-  await history.load();
-  await locale.load();
-  await auth.load();
+  await Future.wait([
+    config.load(),
+    theme.load(),
+    history.load(),
+    locale.load(),
+    auth.load(),
+  ]);
   try {
     final info = await PackageInfo.fromPlatform();
     if (info.version.isNotEmpty) {

@@ -235,11 +235,12 @@ def my_progress(
     db: Session = Depends(get_db),
 ):
     if not user_id:
-        return {"items": [], "server_history": False}
+        return {"items": [], "server_history": False, "server_today": time.strftime("%Y-%m-%d")}
     rows = crud.list_practice_sessions(db, user_id, lesson_id or None, limit=limit)
     return {
         "items": [crud.practice_session_to_dict(r) for r in rows],
         "server_history": True,
+        "server_today": time.strftime("%Y-%m-%d"),
     }
 
 
@@ -352,6 +353,7 @@ async def practice_section(
         raise HTTPException(status_code=422, detail={"code": e.code, "message": e.message})
     except ValueError as e:
         msg = str(e)
+        logging.getLogger(__name__).warning("practice section error: %s", msg)
         if "empty contour" in msg:
             raise HTTPException(status_code=400, detail="empty pitch contour (silence or unvoiced audio)")
         raise HTTPException(status_code=400, detail="wav decode failed")

@@ -58,5 +58,13 @@ def dispatch(kind: str, params: dict, user_id=None) -> str:
         finally:
             db.close()
     else:
-        _run_inline(task_id, kind, params)
+        try:
+            _run_inline(task_id, kind, params)
+        except Exception:
+            db = SessionLocal()
+            try:
+                crud.update_task(db, task_id, status="error", error="task failed to start", finished=True)
+            finally:
+                db.close()
+            raise
     return task_id

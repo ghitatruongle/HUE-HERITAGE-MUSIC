@@ -46,6 +46,14 @@ class ApiClient {
     return null;
   }
 
+  static const Map<String, String> _friendlyCodeDetails = {
+    'no_voice': 'Không nhận ra giọng hát — hãy hát to, gần mic và thu đủ dài hơn.',
+    'too_quiet': 'Âm thanh quá nhỏ — hãy hát to và gần mic hơn.',
+    'too_short': 'Bản thu quá ngắn — hãy thu trọn câu hát.',
+    'align_failed': 'Không đối chiếu được với bản mẫu — hãy thử thu lại.',
+    'reference_invalid': 'Bản mẫu không rõ giọng — hãy chọn câu khác hoặc nạp lại bài học.',
+  };
+
   static const Map<String, String> _friendlyDetails = {
     'wav decode failed': 'Tệp âm thanh không đọc được — hãy dùng tệp WAV chuẩn.',
     'empty pitch contour (silence or unvoiced audio)': 'Không nhận ra giọng hát — hãy hát to và gần mic hơn.',
@@ -71,12 +79,15 @@ class ApiClient {
           return 'Không kết nối được máy chủ AI. Kiểm tra kết nối mạng của bạn.';
         case DioExceptionType.badResponse:
           if (code == 401) return 'Cần đăng nhập hoặc token không hợp lệ.';
+          if (code == 403) return 'Bạn không có quyền thực hiện hành động này.';
           if (code == 404) return 'Không tìm thấy dữ liệu trên máy chủ.';
           if (code == 413) return 'Tệp quá lớn.';
           final detail = error.response?.data;
           if (detail is Map && detail['detail'] is Map) {
             final inner = detail['detail'] as Map;
             final codeKey = inner['code']?.toString();
+            final friendlyCode = codeKey != null ? _friendlyCodeDetails[codeKey] : null;
+            if (friendlyCode != null) return friendlyCode;
             final message = inner['message']?.toString();
             if (message != null && message.isNotEmpty && message != codeKey) {
               return 'Máy chủ từ chối yêu cầu. Thử lại sau ít phút.';

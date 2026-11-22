@@ -3,7 +3,7 @@ from pathlib import Path
 from ..config import settings
 
 ALLOWED_EXT = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
-MAX_SIZE = 50 * 1024 * 1024
+MAX_SIZE = max(1, int(settings.heritage_upload_max_bytes))
 MAX_ANALYSIS_BYTES = 15 * 1024 * 1024
 
 
@@ -100,7 +100,11 @@ def is_sha256(value: str) -> bool:
 def audio_magic_ok(ext: str, head: bytes) -> bool:
     ext = ext.lower()
     if ext == ".wav":
-        return len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WAVE"
+        if len(head) < 12 or head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+            return False
+        if head[4:8] == b"\x00\x00\x00\x00":
+            return False
+        return True
     if ext == ".flac":
         return head[:4] == b"fLaC"
     if ext == ".ogg":

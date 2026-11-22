@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     token_ttl_hours: int = 24
     admin_token_ttl_hours: int = 8
     admin_unlock_window_seconds: int = 600
+    worker_max_active: int = 5
     auth_flood_ip_limit: int = 120
     register_ip_rate_limit: int = 20
     register_failure_ip_limit: int = 30
@@ -38,6 +39,13 @@ class Settings(BaseSettings):
     invite_codes: str = ""
     admin_truong_username: str = "ghitatruongle"
     pbkdf2_iterations: int = 600_000
+    avatar_max_bytes: int = 2 * 1024 * 1024
+    avatar_max_pixels: int = 40_000_000
+    compare_max_seconds: float = 35.0
+    large_body_limit: int = 15 * 1024 * 1024
+    signed_url_ttl_seconds: int = 6 * 3600
+    heritage_upload_max_bytes: int = 50 * 1024 * 1024
+    thread_limiter_tokens: int = 192
     generation_concurrency: int = 1
     enable_docs: bool = False
     heavy_rate_limit: int = 30

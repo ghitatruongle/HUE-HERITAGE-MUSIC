@@ -68,9 +68,9 @@ def _clamp_offset(offset: int) -> int:
     return max(0, min(int(offset), 10**9))
 
 
-def list_items(db: Session, q: str = "", limit: int = 50, offset: int = 0, viewer=None):
+def list_items(db: Session, q: str = "", limit: int = 50, offset: int = 0, viewer=None, include_private: bool = False):
     query = db.query(HeritageItem)
-    vf = _visibility_filter(viewer)
+    vf = None if include_private else _visibility_filter(viewer)
     if vf is not None:
         query = query.filter(vf)
     sf = _search_filter(q)
@@ -84,9 +84,9 @@ def list_items(db: Session, q: str = "", limit: int = 50, offset: int = 0, viewe
     )
 
 
-def count_items(db: Session, q: str = "", viewer=None) -> int:
+def count_items(db: Session, q: str = "", viewer=None, include_private: bool = False) -> int:
     query = db.query(HeritageItem)
-    vf = _visibility_filter(viewer)
+    vf = None if include_private else _visibility_filter(viewer)
     if vf is not None:
         query = query.filter(vf)
     sf = _search_filter(q)
@@ -178,6 +178,7 @@ def list_users(db: Session, limit: int = 0, offset: int = 0):
             "role": u.role or "user",
             "active": (u.active if u.active is not None else 1) == 1,
             "must_change_password": bool(getattr(u, "must_change_password", 0)),
+            "avatar": f"/api/avatars/{u.id}" if (getattr(u, "avatar", "") or "") else "",
             "created_at": str(u.created_at),
         }
         for u in rows
@@ -287,10 +288,20 @@ def reset_user_password(db: Session, user_id: str, password_hash: str):
     return user
 
 
-def create_user(db: Session, username: str, password_hash: str, email: str = "", must_change_password: bool = False):
+def set_user_avatar(db: Session, user_id: str, avatar_name: str):
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    user.avatar = avatar_name
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def create_user(db: Session, username: str, password_hash: str, email: str = "", must_change_password: bool = False, role: str = "user"):
     from sqlalchemy.exc import IntegrityError
     safe_email = email.strip() or f"{username}@no-email.local"
-    user = User(username=username, email=safe_email, password_hash=password_hash, must_change_password=1 if must_change_password else 0)
+    user = User(username=username, email=safe_email, password_hash=password_hash, must_change_password=1 if must_change_password else 0, role=role if role in ("user", "worker") else "user")
     db.add(user)
     try:
         db.commit()

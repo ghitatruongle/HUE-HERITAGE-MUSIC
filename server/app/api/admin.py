@@ -12,7 +12,7 @@ from ..database.session import acquire_write_slot, get_db
 from ..database import crud
 from ..database.models import AudioFile, HeritageItem, InviteCode, Task, User
 from .. import security_log
-from .auth import require_admin, require_admin_fresh
+from .auth import require_admin, require_admin_fresh, require_staff
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -46,50 +46,52 @@ def _scan_generated_bytes() -> int:
 
 
 @router.get("/stats")
-def admin_stats(refresh: int = 0, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def admin_stats(refresh: int = 0, staff_id: str = Depends(require_staff), db: Session = Depends(get_db)):
     now = time.time()
-    if not refresh and _stats_cache["data"] is not None and now - _stats_cache["ts"] < STATS_TTL_SECONDS:
-        return _stats_cache["data"]
+    cached = _stats_cache["data"]
+    if refresh or cached is None or now - _stats_cache["ts"] >= STATS_TTL_SECONDS:
+        invites_total = db.query(InviteCode).count()
+        invites_unused = db.query(InviteCode).filter(InviteCode.used_by.is_(None)).count()
+        items_total = db.query(HeritageItem).count()
+        items_bytes = db.query(sqlfunc.coalesce(sqlfunc.sum(HeritageItem.size), 0)).scalar() or 0
+        derived_files = db.query(AudioFile).filter(AudioFile.kind != "original").count()
+        derived_bytes = (
+            db.query(sqlfunc.coalesce(sqlfunc.sum(AudioFile.size), 0))
+            .filter(AudioFile.kind != "original")
+            .scalar()
+            or 0
+        )
+        tasks_by_status = {row[0] or "unknown": row[1] for row in db.query(Task.status, sqlfunc.count()).group_by(Task.status).all()}
+        tasks_by_kind = {row[0] or "unknown": row[1] for row in db.query(Task.kind, sqlfunc.count()).group_by(Task.kind).all()}
+        generated_bytes = _stats_cache["generated"]
+        if generated_bytes is None or now - _stats_cache["generated_ts"] > GENERATED_TTL_SECONDS:
+            generated_bytes = _scan_generated_bytes()
+            _stats_cache["generated"] = generated_bytes
+            _stats_cache["generated_ts"] = now
+        cached = {
+            "invites": {"total": invites_total, "unused": invites_unused},
+            "storage": {
+                "items_total": items_total,
+                "items_bytes": items_bytes,
+                "derived_files": derived_files,
+                "derived_bytes": derived_bytes,
+                "generated_bytes": generated_bytes,
+            },
+            "tasks": {"by_status": tasks_by_status, "by_kind": tasks_by_kind},
+            "engine_online": _engine_online(),
+        }
+        _stats_cache["data"] = cached
+        _stats_cache["ts"] = now
     users_total = db.query(User).count()
     users_active = db.query(User).filter(User.active == 1).count()
-    invites_total = db.query(InviteCode).count()
-    invites_unused = db.query(InviteCode).filter(InviteCode.used_by.is_(None)).count()
-    items_total = db.query(HeritageItem).count()
-    items_bytes = db.query(sqlfunc.coalesce(sqlfunc.sum(HeritageItem.size), 0)).scalar() or 0
-    derived_files = db.query(AudioFile).filter(AudioFile.kind != "original").count()
-    derived_bytes = (
-        db.query(sqlfunc.coalesce(sqlfunc.sum(AudioFile.size), 0))
-        .filter(AudioFile.kind != "original")
-        .scalar()
-        or 0
-    )
-    tasks_by_status = {row[0] or "unknown": row[1] for row in db.query(Task.status, sqlfunc.count()).group_by(Task.status).all()}
-    tasks_by_kind = {row[0] or "unknown": row[1] for row in db.query(Task.kind, sqlfunc.count()).group_by(Task.kind).all()}
-    generated_bytes = _stats_cache["generated"]
-    if generated_bytes is None or now - _stats_cache["generated_ts"] > GENERATED_TTL_SECONDS:
-        generated_bytes = _scan_generated_bytes()
-        _stats_cache["generated"] = generated_bytes
-        _stats_cache["generated_ts"] = now
-    payload = {
-        "users": {"total": users_total, "active": users_active},
-        "invites": {"total": invites_total, "unused": invites_unused},
-        "storage": {
-            "items_total": items_total,
-            "items_bytes": items_bytes,
-            "derived_files": derived_files,
-            "derived_bytes": derived_bytes,
-            "generated_bytes": generated_bytes,
-        },
-        "tasks": {"by_status": tasks_by_status, "by_kind": tasks_by_kind},
-        "engine_online": _engine_online(),
-    }
-    _stats_cache["data"] = payload
-    _stats_cache["ts"] = now
+    workers_active = db.query(User).filter(User.role == "worker", User.active == 1).count()
+    payload = dict(cached)
+    payload["users"] = {"total": users_total, "active": users_active, "workers": workers_active}
     return payload
 
 
-def _admin_user(db: Session, admin_id: str):
-    return crud.get_user_by_id(db, admin_id)
+def _staff_viewer(db: Session, staff_id: str):
+    return crud.get_user_by_id(db, staff_id)
 
 
 @router.get("/storage")
@@ -97,13 +99,13 @@ def admin_storage(
     q: str = "",
     limit: int = 100,
     offset: int = 0,
-    admin_id: str = Depends(require_admin),
+    staff_id: str = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
-    admin_user = _admin_user(db, admin_id)
+    admin_user = _staff_viewer(db, staff_id)
     lim = max(1, min(limit, 200))
-    items = crud.list_items(db, q, lim, offset=max(0, offset), viewer=admin_user)
-    total = crud.count_items(db, q, viewer=admin_user)
+    items = crud.list_items(db, q, lim, offset=max(0, offset), viewer=admin_user, include_private=True)
+    total = crud.count_items(db, q, viewer=admin_user, include_private=True)
     item_ids = [i.id for i in items]
     files_map: dict = {}
     if item_ids:
@@ -287,7 +289,7 @@ def admin_clear_crash_reports(
 
 
 @router.get("/learning/stats")
-def admin_learning_stats(admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def admin_learning_stats(staff_id: str = Depends(require_staff), db: Session = Depends(get_db)):
     return crud.learning_stats(db)
 
 

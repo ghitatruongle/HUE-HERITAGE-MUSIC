@@ -25,6 +25,7 @@ class AccountEntry {
   final String role;
   final bool active;
   final bool mustChangePassword;
+  final String avatar;
 
   AccountEntry({
     required this.id,
@@ -33,6 +34,7 @@ class AccountEntry {
     required this.role,
     required this.active,
     this.mustChangePassword = false,
+    this.avatar = '',
   });
 
   static AccountEntry fromJson(Map<String, dynamic> j) => AccountEntry(
@@ -42,6 +44,7 @@ class AccountEntry {
         role: j['role']?.toString() ?? 'user',
         active: j['active'] != false,
         mustChangePassword: j['must_change_password'] == true,
+        avatar: j['avatar']?.toString() ?? '',
       );
 }
 
@@ -51,6 +54,7 @@ class CreatedAccount {
   final String email;
   final String tempPassword;
   final bool generated;
+  final String role;
 
   CreatedAccount({
     required this.id,
@@ -58,6 +62,7 @@ class CreatedAccount {
     required this.email,
     required this.tempPassword,
     required this.generated,
+    this.role = 'user',
   });
 
   static CreatedAccount fromJson(Map<String, dynamic> j) => CreatedAccount(
@@ -66,6 +71,7 @@ class CreatedAccount {
         email: j['email']?.toString() ?? '',
         tempPassword: j['temp_password']?.toString() ?? '',
         generated: j['generated'] == true,
+        role: j['role']?.toString() ?? 'user',
       );
 }
 
@@ -207,11 +213,28 @@ class AuthEndpoints {
     String email = '',
     String password = '',
     String note = '',
+    String role = 'user',
   }) async {
     final res = await dio.post(
       '/api/auth/users',
-      data: {'username': username, 'email': email, 'password': password, 'note': note},
+      data: {'username': username, 'email': email, 'password': password, 'note': note, 'role': role},
     );
     return CreatedAccount.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<String> uploadAvatar({
+    required List<int> bytes,
+    required String filename,
+    required String contentType,
+  }) async {
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: DioMediaType.parse(contentType),
+      ),
+    });
+    final res = await dio.post('/api/auth/me/avatar', data: form);
+    return (res.data as Map)['avatar']?.toString() ?? '';
   }
 }

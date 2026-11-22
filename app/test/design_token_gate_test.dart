@@ -97,4 +97,46 @@ void main() {
       reason: 'Icon phải qua HueIcon để có semanticLabel từ map: ${violations.take(20).join(' | ')}',
     );
   });
+
+  test('Design token gate: màu hardcode chỉ nằm whitelist (token/gradient/motif/ink có test)', () {
+    const whitelistFiles = {
+      'lib/core/theme/app_theme.dart',
+      'lib/widgets/heritage_motif.dart',
+      'lib/widgets/hue_button.dart',
+      'lib/screens/home/home_screen.dart',
+      'lib/screens/heritage/heritage_list_screen.dart',
+      'lib/screens/creation/creation_screen.dart',
+      'lib/screens/history/history_screen.dart',
+      'lib/widgets/feature_header.dart',
+      'lib/widgets/responsive_layout.dart',
+    };
+    final colorRe = RegExp(r'Color\(0x|Colors\.[a-zA-Z]+');
+    final violations = <String>[];
+    final files = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    for (final f in files) {
+      final normalized = f.path.replaceAll('\\', '/');
+      if (whitelistFiles.contains(normalized)) {
+        continue;
+      }
+      final lines = f.readAsStringSync().split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        for (final m in colorRe.allMatches(lines[i])) {
+          if (m.group(0) == 'Colors.transparent') {
+            continue;
+          }
+          violations.add('${f.path}:${i + 1} ${m.group(0)}');
+        }
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason: 'Màu phải qua AppTheme/ColorScheme; whitelist: token source, gradient brand, palette motif, danger ink có test: ${violations.take(20).join(' | ')}',
+    );
+  });
 }

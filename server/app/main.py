@@ -34,7 +34,7 @@ AUDIO_SUFFIXES = (
 )
 
 HEAVY_POST_PREFIXES = ("/api/music/", "/api/lessons/")
-HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload", "/api/crash-reports")
+HEAVY_POST_PATHS = ("/api/task", "/api/heritage/upload", "/api/crash-reports", "/api/auth/me/avatar")
 LARGE_BODY_PREFIXES = ("/api/lessons/",)
 LARGE_BODY_PATHS = (
     "/api/music/analyze-pitch",
@@ -44,7 +44,7 @@ LARGE_BODY_PATHS = (
     "/api/music/transcribe",
     "/api/music/evaluate",
 )
-LARGE_BODY_LIMIT = 15 * 1024 * 1024
+LARGE_BODY_LIMIT = max(1, int(settings.large_body_limit))
 COMPARE_BODY_LIMIT = _storage_manager.COMPARE_BODY_LIMIT
 
 
@@ -156,6 +156,10 @@ class BodyLimitMiddleware:
             return 50 * 1024 * 1024 + 2 * 1024 * 1024
         if path == "/api/music/compare":
             return COMPARE_BODY_LIMIT
+        if path == "/api/auth/me/avatar":
+            from .api.auth import AVATAR_MAX_BYTES
+
+            return AVATAR_MAX_BYTES + 64 * 1024
         if path.startswith(LARGE_BODY_PREFIXES) or path in LARGE_BODY_PATHS:
             return LARGE_BODY_LIMIT
         return self.default_limit
@@ -432,7 +436,7 @@ def create_app() -> FastAPI:
         import anyio.to_thread
 
         limiter = anyio.to_thread.current_default_thread_limiter()
-        limiter.total_tokens = 192
+        limiter.total_tokens = max(1, int(settings.thread_limiter_tokens))
         threading.Thread(target=_warmup_lessons, daemon=True).start()
         if settings.basic_pitch_warmup:
             threading.Thread(target=_warmup_basic_pitch, daemon=True, name="hue-bp-warmup").start()
@@ -444,8 +448,8 @@ def create_app() -> FastAPI:
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.5-alpha",
-            "stage": "0.0.5-alpha",
+            "version": "0.0.5-beta1",
+            "stage": "0.0.5-beta1",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio

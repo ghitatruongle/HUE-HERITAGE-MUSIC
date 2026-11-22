@@ -12,7 +12,7 @@ from .database import crud
 from .database.session import get_db
 from .api.auth import parse_token, resolve_bearer_user
 
-SIGNED_URL_TTL_SECONDS = 6 * 3600
+SIGNED_URL_TTL_SECONDS = max(60, int(settings.signed_url_ttl_seconds))
 
 HERITAGE_AUDIO_RE = re.compile(r"^/api/heritage/([A-Za-z0-9-]+)/audio$")
 

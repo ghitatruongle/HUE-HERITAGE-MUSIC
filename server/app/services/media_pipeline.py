@@ -29,13 +29,19 @@ def extract_notes(data, bpm, engine="basic_pitch"):
 
 
 def write_artifacts(data, notes, bpm, source_stem, digest=None):
+    import os
+
     if digest is None:
         digest = manager.sha256_bytes(data)
     stem = f"{digest}_{int(bpm)}"
     mid = manager.midi_dir() / (stem + ".mid")
-    mid.write_bytes(midi_service.write_midi(notes, bpm))
+    mid_part = manager.midi_dir() / (stem + ".mid.part")
+    mid_part.write_bytes(midi_service.write_midi(notes, bpm))
+    os.replace(mid_part, mid)
     xm = manager.xml_dir() / (stem + ".musicxml")
-    xm.write_text(musicxml_service.build_musicxml(notes, bpm, source_stem), encoding="utf-8")
+    xm_part = manager.xml_dir() / (stem + ".musicxml.part")
+    xm_part.write_text(musicxml_service.build_musicxml(notes, bpm, source_stem), encoding="utf-8")
+    os.replace(xm_part, xm)
     return digest, stem, mid, xm
 
 

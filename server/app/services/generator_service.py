@@ -145,7 +145,9 @@ def _run_generation(tid, db_task_id, prompt, duration, seed, lora="", strength=0
             if task is not None:
                 task["status"] = "error"
                 task["reason"] = str(e)
-        crud.update_task(db, db_task_id, status="error", error=str(e), finished=True)
+        from ..services.task_error import safe_task_error
+
+        crud.update_task(db, db_task_id, status="error", error=safe_task_error(e), finished=True)
     finally:
         if entered:
             _GENERATION_SEMAPHORE.release()

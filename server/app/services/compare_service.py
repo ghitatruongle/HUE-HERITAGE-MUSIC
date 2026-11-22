@@ -7,7 +7,7 @@ from ..config import settings
 from . import pitch_service, amt_service
 
 MAX_POINTS = 300
-MAX_COMPARE_SECONDS = 35.0
+MAX_COMPARE_SECONDS = max(1.0, float(settings.compare_max_seconds))
 REF_SMOOTH_WINDOW = 17
 REF_DELTA_CENTS = 100.0
 REF_MIN_DUR = 0.12

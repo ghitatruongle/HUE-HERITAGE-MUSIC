@@ -14,6 +14,7 @@ class AuthService extends ChangeNotifier {
   static const String _userKey = 'hue_auth_user';
   static const String _emailKey = 'hue_auth_email';
   static const String _roleKey = 'hue_auth_role';
+  static const String _avatarKey = 'hue_auth_avatar';
   static const String _mcpKey = 'hue_auth_mcp';
   static const String _legacyFileName = '.hue_auth.json';
   static const String _probeKey = 'hue_storage_probe';
@@ -29,6 +30,7 @@ class AuthService extends ChangeNotifier {
   String? _username;
   String? _email;
   String _role = 'user';
+  String _avatar = '';
   bool _isGuest = false;
   bool _loaded = false;
   bool _secureStorageBroken = false;
@@ -50,7 +52,9 @@ class AuthService extends ChangeNotifier {
   String? get username => _username;
   String? get email => _email;
   String get role => _role;
+  String get avatar => _avatar;
   bool get isAdmin => _role == 'admin' && !_isGuest;
+  bool get isStaff => !_isGuest && (_role == 'admin' || _role == 'worker');
   bool get isGuest => _isGuest;
   bool get isLoggedIn => _token != null && _token!.isNotEmpty && !_isGuest;
   bool get isLoaded => _loaded;
@@ -92,6 +96,7 @@ class AuthService extends ChangeNotifier {
       username = await _storage.read(key: _userKey);
       email = await _storage.read(key: _emailKey);
       role = await _storage.read(key: _roleKey) ?? 'user';
+      _avatar = await _storage.read(key: _avatarKey) ?? '';
       mcp = await _storage.read(key: _mcpKey) ?? '0';
       if (token == null || token.isEmpty) {
         await _migrateLegacyFile(token: token, username: username, email: email, role: role, seq: seq);
@@ -154,7 +159,9 @@ class AuthService extends ChangeNotifier {
         final data = Map<String, dynamic>.from(res.data as Map);
         _username = (data['username'] ?? _username ?? '').toString();
         _email = (data['email'] ?? _email ?? '').toString();
-        _role = (data['role'] ?? _role).toString() == 'admin' ? 'admin' : 'user';
+        final freshRole = (data['role'] ?? _role).toString();
+        _role = (freshRole == 'admin' || freshRole == 'worker') ? freshRole : 'user';
+        _avatar = (data['avatar'] ?? '').toString();
         _mustChangePassword = data['must_change_password'] == true;
         final usedRaw = data['storage_used_bytes'];
         final quotaRaw = data['storage_quota_bytes'];
@@ -173,6 +180,7 @@ class AuthService extends ChangeNotifier {
           await _storage.write(key: _userKey, value: _username ?? '');
           await _storage.write(key: _emailKey, value: _email ?? '');
           await _storage.write(key: _roleKey, value: _role);
+          await _storage.write(key: _avatarKey, value: _avatar);
           await _storage.write(key: _mcpKey, value: _mustChangePassword ? '1' : '0');
         } on PlatformException {
           _secureStorageBroken = true;
@@ -255,12 +263,14 @@ class AuthService extends ChangeNotifier {
     String? email,
     String role = 'user',
     bool mustChangePassword = false,
+    String avatar = '',
   }) async {
     _stateSeq++;
     _token = token;
     _username = username;
     _email = email ?? '';
-    _role = role == 'admin' ? 'admin' : 'user';
+    _role = (role == 'admin' || role == 'worker') ? role : 'user';
+    _avatar = avatar;
     _isGuest = false;
     _mustChangePassword = mustChangePassword;
     _storageUsedBytes = null;
@@ -272,10 +282,17 @@ class AuthService extends ChangeNotifier {
       await _storage.write(key: _userKey, value: username);
       await _storage.write(key: _emailKey, value: email ?? '');
       await _storage.write(key: _roleKey, value: _role);
+      await _storage.write(key: _avatarKey, value: _avatar);
       await _storage.write(key: _mcpKey, value: _mustChangePassword ? '1' : '0');
     } on PlatformException {
       _secureStorageBroken = true;
     } catch (_) {}
+    notifyListeners();
+  }
+
+  void setAvatar(String url) {
+    _avatar = url;
+    _storage.write(key: _avatarKey, value: _avatar).catchError((_) {});
     notifyListeners();
   }
 
@@ -285,6 +302,7 @@ class AuthService extends ChangeNotifier {
     _username = null;
     _email = null;
     _role = 'user';
+    _avatar = '';
     _isGuest = false;
     _mustChangePassword = false;
     _storageUsedBytes = null;
@@ -295,6 +313,7 @@ class AuthService extends ChangeNotifier {
       await _storage.delete(key: _userKey);
       await _storage.delete(key: _emailKey);
       await _storage.delete(key: _roleKey);
+      await _storage.delete(key: _avatarKey);
       await _storage.delete(key: _mcpKey);
     } catch (_) {}
     if (!kIsWeb) {

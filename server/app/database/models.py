@@ -16,6 +16,7 @@ class User(Base):
     active: Mapped[int] = mapped_column(Integer, default=1)
     token_epoch: Mapped[int] = mapped_column(Integer, default=0)
     must_change_password: Mapped[int] = mapped_column(Integer, default=0)
+    avatar: Mapped[str] = mapped_column(String(256), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

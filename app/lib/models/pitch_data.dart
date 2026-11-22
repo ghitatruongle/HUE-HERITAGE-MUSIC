@@ -3,12 +3,18 @@ class PitchData {
   final int frames;
   final List<double> times;
   final List<double> f0;
+  final bool truncated;
+  final double? durationFull;
+  final double? maxSeconds;
 
   PitchData({
     required this.meanF0,
     required this.frames,
     required this.times,
     required this.f0,
+    this.truncated = false,
+    this.durationFull,
+    this.maxSeconds,
   });
 
   static List<double> _doubles(dynamic v) {
@@ -33,6 +39,9 @@ class PitchData {
       frames: (json['frames'] as num?)?.toInt() ?? 0,
       times: _doubles(json['times']),
       f0: _doubles(json['f0']),
+      truncated: json['truncated'] == true,
+      durationFull: (json['duration_full'] as num?)?.toDouble(),
+      maxSeconds: (json['max_seconds'] as num?)?.toDouble(),
     );
   }
 }

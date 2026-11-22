@@ -53,6 +53,7 @@ MIGRATION_COLUMNS = {
         "active": "INTEGER DEFAULT 1 NOT NULL",
         "token_epoch": "INTEGER DEFAULT 0 NOT NULL",
         "must_change_password": "INTEGER DEFAULT 0 NOT NULL",
+        "avatar": "VARCHAR(256) DEFAULT '' NOT NULL",
     },
     "heritage_items": {
         "genre": "VARCHAR(128) DEFAULT '' NOT NULL",
@@ -130,8 +131,18 @@ def _enforce_admin_truong():
                 {"id": row.id},
             )
         conn.execute(
-            text("UPDATE users SET role = 'user' WHERE username <> :name AND (role IS NULL OR role <> 'user')"),
+            text(
+                "UPDATE users SET role = 'user' WHERE username <> :name "
+                "AND (role IS NULL OR (role <> 'user' AND role <> 'worker'))"
+            ),
             {"name": settings.admin_truong_username},
+        )
+        conn.execute(
+            text(
+                "UPDATE users SET role = 'user', token_epoch = token_epoch + 1 WHERE role = 'worker' AND id NOT IN ("
+                "SELECT id FROM users WHERE role = 'worker' ORDER BY created_at DESC, id DESC LIMIT :cap)"
+            ),
+            {"cap": max(1, int(settings.worker_max_active))},
         )
 
 

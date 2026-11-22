@@ -111,7 +111,7 @@ class LessonApi {
     return '${dio.options.baseUrl}/api/lessons/$lessonId/sections/$section/sample.wav';
   }
 
-  Future<List<ProgressEntry>> myProgress({String lessonId = '', int limit = 100}) async {
+  Future<ProgressPage> myProgress({String lessonId = '', int limit = 100}) async {
     final res = await dio.get(
       '/api/lessons/my-progress',
       queryParameters: {'lesson_id': lessonId, 'limit': limit},
@@ -125,6 +125,7 @@ class LessonApi {
         }
       }
     }
-    return items;
+    final serverToday = data is Map ? (data['server_today']?.toString() ?? '') : '';
+    return ProgressPage(items: items, serverToday: serverToday);
   }
 }

@@ -79,6 +79,9 @@ class AppStrings {
   String get analysisPickBtn => isVi ? 'Chọn tệp âm thanh' : 'Choose audio file';
   String analysisFileLabel(String name) => isVi ? 'Tệp: $name' : 'File: $name';
   String get analysisF0Title => isVi ? 'Đường cao độ F0' : 'F0 Pitch Curve';
+  String analysisTruncatedNote(String cut, String? full) => isVi
+      ? 'Bản thu dài hơn $cut${full == null ? '' : ' (dài $full)'} — chỉ phân tích đoạn đầu, phần sau không có trong biểu đồ.'
+      : 'Recording is longer than $cut${full == null ? '' : ' (full $full)'} — only the first part was analyzed.';
   String analysisMeanF0(String hz) => isVi ? 'F0 trung bình: $hz Hz' : 'Mean F0: $hz Hz';
   String learnFrames(int n) => isVi ? '$n khung' : '$n frames';
   String get analysisInstrumentsTitle => isVi ? 'Nhạc cụ nhận diện được' : 'Detected Instruments';
@@ -600,6 +603,26 @@ class AppStrings {
   String get accountManagerHint => isVi
       ? 'Vô hiệu hóa/kích hoạt tài khoản, đặt lại mật khẩu hộ (mật khẩu tạm tự sinh).'
       : 'Disable/enable accounts, reset a password (a temporary one is generated).';
+  String get accountManagerHintWorker => isVi
+      ? 'Chế độ cộng tác viên: chỉ xem danh sách tài khoản đã đăng ký.'
+      : 'Worker mode: view registered accounts only.';
+  String get adminCreateUserRole => isVi ? 'Vai trò' : 'Role';
+  String get adminRoleUser => isVi ? 'Người dùng' : 'User';
+  String get adminRoleWorker => isVi ? 'Cộng tác viên' : 'Worker';
+  String get adminRoleAdmin => isVi ? 'Quản trị trưởng' : 'Admin';
+  String get adminStatWorkers => isVi ? 'Cộng tác viên' : 'Workers';
+  String get adminStatWorkerCap => isVi ? 'trên trần 5' : 'of 5 cap';
+  String get authInviteWorkerHint => isVi
+      ? 'Bấm tạo để nhận mã mời mới (dùng cho người đăng ký). Danh sách mã thuộc quyền admin.'
+      : 'Tap create to get a new invite code (for registrations). The code list belongs to the admin.';
+  String get authInviteWorkerEmpty => isVi
+      ? 'Chưa tạo mã mời nào trong phiên này.'
+      : 'No invite codes created in this session yet.';
+  String get accountAvatarTitle => isVi ? 'Tài khoản của tôi' : 'My account';
+  String get accountAvatarChange => isVi ? 'Đổi ảnh đại diện' : 'Change avatar';
+  String get accountAvatarUpdated => isVi ? 'Đã cập nhật ảnh đại diện.' : 'Avatar updated.';
+  String get accountAvatarFail => isVi ? 'Cập nhật ảnh đại diện thất bại.' : 'Avatar update failed.';
+  String get accountAvatarPickFail => isVi ? 'Không chọn được ảnh.' : 'Could not pick an image.';
   String get accountResetPassword => isVi ? 'Đặt lại mật khẩu' : 'Reset password';
   String get accountResetConfirm => isVi ? 'Đặt lại mật khẩu cho' : 'Reset password for';
   String get accountTempPassword => isVi ? 'Mật khẩu tạm' : 'Temporary password';

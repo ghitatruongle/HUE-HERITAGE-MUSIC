@@ -263,6 +263,17 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
           Text(strings.analysisMeanF0(_result!.meanF0.toStringAsFixed(1))),
           Text(strings.learnFrames(_result!.frames), style: Theme.of(context).textTheme.bodySmall),
           PitchContourChart(data: _result!),
+          if (_result!.truncated)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                strings.analysisTruncatedNote(
+                  '${_result!.maxSeconds?.toStringAsFixed(0) ?? '35'}s',
+                  _result!.durationFull?.toStringAsFixed(1),
+                ),
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ),
         ],
       ],
     );
