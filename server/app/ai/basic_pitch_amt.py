@@ -36,8 +36,22 @@ def _candidates():
     return [str(base / "nmp.tflite"), str(base / "nmp")]
 
 
-def _load():
+def _load_unlocked():
     global MODEL
+    if MODEL is not None:
+        return MODEL
+    from basic_pitch.inference import Model
+    last_error = None
+    for path in _candidates():
+        try:
+            MODEL = Model(path)
+            return MODEL
+        except Exception as e:
+            last_error = e
+    raise last_error or RuntimeError("no basic-pitch model candidates found")
+
+
+def _load():
     cached = MODEL
     if cached is not None:
         return cached
@@ -47,19 +61,12 @@ def _load():
         )
         raise EngineBusy("basic-pitch engine busy (model load wait timeout)")
     try:
-        if MODEL is not None:
-            return MODEL
-        from basic_pitch.inference import Model
-        last_error = None
-        for path in _candidates():
-            try:
-                MODEL = Model(path)
-                return MODEL
-            except Exception as e:
-                last_error = e
-        raise last_error or RuntimeError("no basic-pitch model candidates found")
+        return _load_unlocked()
     finally:
         LOCK.release()
+
+
+_DEFAULT_LOAD = _load
 
 
 def _selfheal():
@@ -112,40 +119,42 @@ def transcribe(samples, sr: int) -> list:
         scipy.signal.gaussian = scipy.signal.windows.gaussian
 
     log = logging.getLogger(__name__)
-    _selfheal()
-    model = _load()
     audio = np.clip(np.asarray(samples, dtype=np.float32), -1.0, 1.0)
     target_sr = 22050
-    if sr != target_sr:
+    if sr > 0 and sr != target_sr:
         try:
             import math as _math
 
             from scipy.signal import resample_poly as _resample_poly
 
             g = _math.gcd(target_sr, int(sr))
-            audio = _resample_poly(audio.astype(np.float64), target_sr // g, int(sr) // g).astype(np.float32)
-            sr = target_sr
+            up = target_sr // g
+            down = int(sr) // g
+            if max(up, down) <= 1000:
+                audio = _resample_poly(audio.astype(np.float64), up, down).astype(np.float32)
+                sr = target_sr
         except Exception:
             pass
-    pcm = (audio * 32767.0).astype("<i2")
-    fd, tmp_path = tempfile.mkstemp(suffix=".wav")
-    os.close(fd)
-    with wave.open(tmp_path, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sr)
-        w.writeframes(pcm.tobytes())
     if not LOCK.acquire(timeout=max(1.0, float(settings.basic_pitch_lock_wait_timeout))):
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
         log.warning("basic-pitch lock wait exceeded %.0fs; failing fast", settings.basic_pitch_lock_wait_timeout)
         raise EngineBusy("basic-pitch engine busy (lock wait timeout)")
     stalled = False
+    tmp_path = None
     try:
         from basic_pitch.inference import predict
 
+        _selfheal()
+        model = _load_unlocked() if _load is _DEFAULT_LOAD else _load()
         if _stalled and _stalled_thread is not None and _stalled_thread.is_alive():
             raise EngineBusy("basic-pitch engine stalled earlier; waiting for stalled worker to exit")
+        pcm = (audio * 32767.0).astype("<i2")
+        fd, tmp_path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        with wave.open(tmp_path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            w.writeframes(pcm.tobytes())
         box = {}
         helper = threading.Thread(
             target=_predict_job, args=(predict, tmp_path, model, box), daemon=True, name="hue-basic-pitch"
@@ -169,7 +178,7 @@ def transcribe(samples, sr: int) -> list:
         log.info("basic-pitch predict ok in %.1fs", time.monotonic() - started)
     finally:
         LOCK.release()
-        if not stalled and os.path.exists(tmp_path):
+        if not stalled and tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
             except OSError:

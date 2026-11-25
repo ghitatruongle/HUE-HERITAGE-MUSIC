@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import wave
 from pathlib import Path
@@ -21,6 +22,29 @@ SILENCE_GAP_SECONDS = 0.7
 SECTION_SR = 16000
 LINE_GAP_MAX = 0.45
 LINE_MIN_SEG = 0.12
+CLEAN_LYRICS_VERSION = 2
+_TAG_LINE_RE = re.compile(r"^\[[^\]]+\]$")
+
+
+def clean_lyric_lines(text: str) -> List[str]:
+    return [
+        ln.strip()
+        for ln in (text or "").splitlines()
+        if ln and ln.strip() and not _TAG_LINE_RE.match(ln.strip())
+    ]
+
+
+def is_instrumental_item(item: HeritageItem) -> bool:
+    if bool(getattr(item, "is_instrumental", False)):
+        return True
+    raw = (getattr(item, "lyrics_with_ornaments", None) or getattr(item, "lyrics", None) or "").strip()
+    if raw.lower() == "[instrumental]":
+        return True
+    cleaned = clean_lyric_lines(raw)
+    if cleaned:
+        return False
+    kind = (getattr(item, "type", None) or "").lower()
+    return any(tok in kind for tok in ("nhạc cụ", "nhac cu", "hòa tấu", "hoa tau", "instrumental"))
 
 
 def _voiced_segments(times, f0, start, end):
@@ -232,7 +256,7 @@ def build_lesson(item: HeritageItem) -> dict:
     times, f0 = pitch_service.estimate_f0(samples, sr, hop=CONTOUR_HOP)
     ct, cf = _downsample_contour(times, f0)
     lyrics_text = (item.lyrics_with_ornaments or item.lyrics or "").strip()
-    lines = [ln.strip() for ln in lyrics_text.splitlines() if ln.strip()]
+    lines = clean_lyric_lines(lyrics_text)
     lyrics_parts = _assign_lyrics(lines, sections)
     payload_sections = []
     sec_dir = lessons_dir() / (item.sha256 or item.id)
@@ -241,7 +265,7 @@ def build_lesson(item: HeritageItem) -> dict:
         wav_path = sec_dir / f"{idx:02d}.wav"
         if not wav_path.exists() or _wav_sample_rate(wav_path) != SECTION_SR:
             _write_wav16(wav_path, samples[int(a * sr):int(b * sr)], sr)
-        sec_lines = [ln for ln in lyrics_parts[idx].splitlines() if ln.strip()]
+        sec_lines = clean_lyric_lines(lyrics_parts[idx])
         payload_sections.append(
             {
                 "index": idx,
@@ -258,6 +282,7 @@ def build_lesson(item: HeritageItem) -> dict:
         "contour": {"times": ct, "f0": cf},
         "sections": payload_sections,
         "sample_rate": sr,
+        "clean_lyrics_v": CLEAN_LYRICS_VERSION,
     }
     import os
     import tempfile
@@ -287,6 +312,8 @@ def _try_cached_lesson(item: HeritageItem) -> Optional[dict]:
     if cached.exists():
         try:
             data = json.loads(cached.read_text(encoding="utf-8"))
+            if data.get("clean_lyrics_v") != CLEAN_LYRICS_VERSION:
+                return None
             sec_dir = lessons_dir() / (item.sha256 or item.id)
             sections = data.get("sections", [])
             if sections and all((sec_dir / f"{s['index']:02d}.wav").exists() for s in sections):
@@ -313,7 +340,7 @@ def get_lesson(item: HeritageItem) -> Optional[dict]:
 
 
 def lesson_summary(item: HeritageItem) -> Optional[dict]:
-    if _audio_path(item) is None:
+    if is_instrumental_item(item) or _audio_path(item) is None:
         return None
     cache_ready = _lesson_cache_path(item).exists()
     sec_dir = lessons_dir() / (item.sha256 or item.id)
@@ -361,7 +388,7 @@ def _word_windows(a, b, words):
     return spans
 
 
-def word_feedback(section, result):
+def word_feedback(section, result, octave_normalize=True):
     import bisect
 
     from . import compare_service as _cmp
@@ -369,12 +396,12 @@ def word_feedback(section, result):
     if not section:
         return []
     lyrics = section.get("lyrics") or ""
-    lines = [ln.strip() for ln in lyrics.splitlines() if ln.strip()]
+    lines = clean_lyric_lines(lyrics)
     line_times = section.get("line_times") or []
     warped = result.get("user_warped_full") or {}
     w_times = warped.get("times") or []
     w_f0 = warped.get("f0") or []
-    sample = result.get("sample") or {}
+    sample = result.get("sample_full") or result.get("sample") or {}
     s_times = sample.get("times") or []
     s_f0 = sample.get("f0") or []
     if not lines or not line_times or not w_times or not s_times:
@@ -401,10 +428,13 @@ def word_feedback(section, result):
             slo = bisect.bisect_left(s_times, rwa - 1e-6)
             shi = bisect.bisect_right(s_times, rwb + 1e-6)
             ref_frames = [f for f in s_f0[slo:shi] if f > 0]
+            octave_diff = False
             if len(frames) >= 3 and total and ratio >= WORD_VOICED_MIN_RATIO and ref_frames:
                 u_med = sorted(frames)[len(frames) // 2]
                 r_med = sorted(ref_frames)[len(ref_frames) // 2]
                 err = round(_cmp.to_cents(u_med) - _cmp.to_cents(r_med), 1)
+                if octave_normalize:
+                    err, octave_diff = _cmp._fold_octave_cents(err)
                 code = _cmp.verdict_code(err)
             else:
                 err = None
@@ -417,6 +447,7 @@ def word_feedback(section, result):
                 "end": round(wb, 3),
                 "voiced_ratio": ratio,
                 "err_cents": err,
+                "octave_diff": octave_diff,
                 "verdict_code": code,
                 "verdict": _cmp.VERDICT_TEXT[code],
             })

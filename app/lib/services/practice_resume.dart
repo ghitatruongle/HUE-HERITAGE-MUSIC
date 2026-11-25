@@ -7,6 +7,10 @@ class PracticeResume {
 
   static final ValueNotifier<String?> lessonId = ValueNotifier<String?>(null);
 
+  static void clear() {
+    lessonId.value = null;
+  }
+
   static HistoryEntry? pickLatest(List<HistoryEntry> entries) {
     for (final e in entries) {
       if (e.kind == 'practice' && e.detail.isNotEmpty && !e.detail.startsWith('scale:')) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import '../core/constants/app_constants.dart';
 import '../services/auth_service.dart';
@@ -35,6 +37,13 @@ class ApiClient {
     }
   }
 
+  static Map<String, dynamic> requireMap(dynamic data, RequestOptions requestOptions) {
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    throw DioException(requestOptions: requestOptions, error: 'Invalid response from server');
+  }
+
   static String? errorCode(Object error) {
     if (error is DioException) {
       final detail = error.response?.data;
@@ -65,6 +74,32 @@ class ApiClient {
     'too many requests': 'Quá nhiều yêu cầu cùng lúc — chờ ít phút rồi thử lại.',
     'section not found': 'Không tìm thấy câu hát trong bài học — hãy nạp lại bài học.',
     'lesson not found': 'Không tìm thấy bài học — hãy nạp lại danh sách.',
+    'password must be at least 8 characters and contain letters and digits':
+        'Mật khẩu phải từ 8 ký tự trở lên và gồm cả chữ cái lẫn chữ số.',
+    'admin password must be at least 12 characters and contain letters and digits':
+        'Mật khẩu quản trị phải từ 12 ký tự trở lên và gồm cả chữ cái lẫn chữ số.',
+    'username already exists': 'Tên tài khoản này đã có người sử dụng.',
+    'email already registered': 'Địa chỉ email này đã được đăng ký.',
+    'username or email already exists': 'Tên tài khoản hoặc email đã tồn tại.',
+    'invalid invitation code': 'Mã mời không hợp lệ, đã hết lượt hoặc đã hết hạn.',
+    'invalid email address': 'Địa chỉ email không hợp lệ.',
+    'username must be 3-32 characters': 'Tên tài khoản phải dài từ 3 đến 32 ký tự.',
+    'username may only contain letters, digits, dot, underscore, hyphen':
+        'Tên tài khoản chỉ được chứa chữ, số, dấu chấm, gạch dưới và gạch ngang.',
+    'username is reserved': 'Tên tài khoản này thuộc danh sách hệ thống, không thể đăng ký.',
+    'username conflicts with the admin truong account': 'Tên tài khoản trùng với tài khoản quản trị trưởng.',
+    'username impersonates the admin truong account': 'Tên tài khoản không được giả danh quản trị trưởng.',
+    'wrong password': 'Mật khẩu không đúng.',
+    'wrong credentials': 'Tên đăng nhập hoặc mật khẩu không đúng.',
+    'account disabled': 'Tài khoản đã bị vô hiệu hóa — liên hệ quản trị viên.',
+    'worker limit reached': 'Số lượng cộng tác viên đang hoạt động đã đạt giới hạn.',
+    'max_uses must be 0 or 1-10000': 'Số lượt sử dụng phải bằng 0 (không giới hạn) hoặc từ 1 đến 10000.',
+    'invalid invite expiration': 'Thời hạn mã mời không hợp lệ.',
+    'cannot change admin truong role': 'Không thể thay đổi vai trò của quản trị trưởng.',
+    'role must be user or worker': 'Vai trò chỉ có thể là người dùng hoặc cộng tác viên.',
+    'password change required': 'Tài khoản đang dùng mật khẩu tạm — cần đổi mật khẩu trước khi thao tác.',
+    'admin reauth required': 'Cần mở khóa lại quyền quản trị bằng mật khẩu trước khi thực hiện thao tác này.',
+    'too many compare requests': 'Đang đối chiếu âm thanh khác — vui lòng chờ giây lát.',
   };
 
   static String describe(Object error) {
@@ -78,11 +113,24 @@ class ApiClient {
         case DioExceptionType.connectionError:
           return 'Không kết nối được máy chủ AI. Kiểm tra kết nối mạng của bạn.';
         case DioExceptionType.badResponse:
-          if (code == 401) return 'Cần đăng nhập hoặc token không hợp lệ.';
+          final detail = error.response?.data;
+          if (code == 401) {
+            if (detail is Map && detail['detail'] is String) {
+              final raw401 = (detail['detail'] as String).trim();
+              if (raw401 == 'wrong password' || raw401 == 'wrong credentials') {
+                return _friendlyDetails[raw401]!;
+              }
+            }
+            return 'Cần đăng nhập hoặc token không hợp lệ.';
+          }
+          if (detail is Map && detail['detail'] is String) {
+            final raw = (detail['detail'] as String).trim();
+            final friendly = _friendlyDetails[raw];
+            if (friendly != null) return friendly;
+          }
           if (code == 403) return 'Bạn không có quyền thực hiện hành động này.';
           if (code == 404) return 'Không tìm thấy dữ liệu trên máy chủ.';
           if (code == 413) return 'Tệp quá lớn.';
-          final detail = error.response?.data;
           if (detail is Map && detail['detail'] is Map) {
             final inner = detail['detail'] as Map;
             final codeKey = inner['code']?.toString();
@@ -95,9 +143,6 @@ class ApiClient {
             return 'Máy chủ từ chối yêu cầu. Thử lại sau ít phút.';
           }
           if (detail is Map && detail['detail'] is String) {
-            final raw = (detail['detail'] as String).trim();
-            final friendly = _friendlyDetails[raw];
-            if (friendly != null) return friendly;
             return 'Máy chủ từ chối yêu cầu. Thử lại sau ít phút.';
           }
           return 'Máy chủ trả lỗi $code.';
@@ -105,15 +150,13 @@ class ApiClient {
           return 'Lỗi không xác định khi gọi API.';
       }
     }
-    return 'Lỗi không xác định: ${_sanitize(error.toString())}';
-  }
-
-  static String _sanitize(String raw) {
-    return raw
-        .replaceAll(RegExp(r'https?://\S+'), '…')
-        .replaceAll(RegExp(r'\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b'), '…')
-        .replaceAll(RegExp(r'/(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,6}'), '…')
-        .replaceAll(RegExp(r'\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:local|lan|internal)\b'), '…');
+    if (error is TimeoutException) {
+      return 'Kết nối máy chủ quá chậm hoặc quá hạn.';
+    }
+    if (error is FormatException) {
+      return 'Dữ liệu phản hồi không đúng định dạng.';
+    }
+    return 'Lỗi không xác định khi gọi API.';
   }
 }
 
@@ -202,7 +245,7 @@ class _AuthInterceptor extends Interceptor {
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       if ((res.statusCode == 401 || res.statusCode == 403) && AuthService.currentToken == token) {
-        await auth.clearToken();
+        await auth.clearToken(expired: true);
       }
     } catch (_) {
     } finally {

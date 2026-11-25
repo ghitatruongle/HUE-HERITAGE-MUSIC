@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hue_heritage_music/api/api_client.dart';
 import 'package:hue_heritage_music/api/endpoints/admin_endpoints.dart';
@@ -61,14 +62,26 @@ void main() {
     expect(PracticeResume.pickLatest([lessonEntry]), same(lessonEntry));
   });
 
-  testWidgets('Settings screen shows AI server section without inline config form', (tester) async {
+  testWidgets('Settings screen shows AI server section only for admin/worker without inline config form', (tester) async {
+    const secureChannel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      secureChannel,
+      (call) async => null,
+    );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        secureChannel,
+        null,
+      );
+    });
     final locale = LocaleProvider();
+    final auth = AuthService();
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
           ChangeNotifierProvider<LocaleProvider>.value(value: locale),
-          ChangeNotifierProvider<AuthService>.value(value: AuthService()),
+          ChangeNotifierProvider<AuthService>.value(value: auth),
           ChangeNotifierProvider<ServerConfig>.value(value: ServerConfig()),
         ],
         child: const MaterialApp(
@@ -78,6 +91,15 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text('Máy chủ AI'), findsNothing);
+    expect(find.text('Đổi máy chủ'), findsNothing);
+
+    await auth.save(token: 'tok-user', username: 'user01', role: 'user');
+    await tester.pump();
+    expect(find.text('Máy chủ AI'), findsNothing);
+
+    await auth.save(token: 'tok-worker', username: 'worker01', role: 'worker');
+    await tester.pump();
     expect(find.text('Máy chủ AI'), findsOneWidget);
     expect(find.text('Chưa cấu hình máy chủ.'), findsOneWidget);
     expect(find.text('Đổi máy chủ'), findsOneWidget);

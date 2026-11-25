@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../api/endpoints/auth_endpoints.dart';
 import '../core/localization/app_strings.dart';
+import '../core/theme/app_theme.dart';
 import '../services/locale_provider.dart';
 import '../services/server_config.dart';
 
@@ -76,7 +77,7 @@ class _AdminReauthDialogState extends State<_AdminReauthDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.strings.adminReauthBody, style: const TextStyle(fontSize: 13)),
+          Text(widget.strings.adminReauthBody, style: const TextStyle(fontSize: AppFontSize.md)),
           const SizedBox(height: 12),
           TextField(
             controller: _ctrl,

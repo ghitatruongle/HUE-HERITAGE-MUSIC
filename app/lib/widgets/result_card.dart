@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
 import 'hue_chip.dart';
+import 'hue_icons.dart';
 
 class ResultSummaryCard extends StatelessWidget {
   final String title;
@@ -41,22 +42,26 @@ class ResultSummaryCard extends StatelessWidget {
             child: Row(
               children: [
                 if (leadingIcon != null) ...[
-                  Icon(leadingIcon, size: 18, color: scheme.primary),
+                  HueIcon(leadingIcon!, size: 18, color: scheme.primary),
                   const SizedBox(width: 8),
                 ],
                 Expanded(
                   child: Text(
                     title,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                if (status != null)
-                  HueChip(
-                    label: statusLabel ?? status!.name,
-                    kind: status,
+                if (status != null) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: HueChip(
+                      label: statusLabel ?? status!.name,
+                      kind: status,
+                    ),
                   ),
+                ],
               ],
             ),
           ),
@@ -211,7 +216,7 @@ class GaugeScore extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: AppTheme.displayFontFamily,
                   fontFamilyFallback: const [AppTheme.bodyFontFamily],
-                  fontSize: 22,
+                  fontSize: AppFontSize.headline,
                   fontWeight: FontWeight.w700,
                   color: scheme.onSurface,
                 ),

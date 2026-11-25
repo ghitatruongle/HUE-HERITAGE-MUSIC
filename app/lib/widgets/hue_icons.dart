@@ -197,8 +197,16 @@ class HueIcon extends StatelessWidget {
   final double? size;
   final Color? color;
   final String? semanticLabel;
+  final bool decorative;
 
-  const HueIcon(this.icon, {super.key, this.size, this.color, this.semanticLabel});
+  const HueIcon(
+    this.icon, {
+    super.key,
+    this.size,
+    this.color,
+    this.semanticLabel,
+    this.decorative = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +214,7 @@ class HueIcon extends StatelessWidget {
       icon,
       size: size,
       color: color,
-      semanticLabel: semanticLabel ?? hueIconLabels[icon],
+      semanticLabel: decorative ? null : (semanticLabel ?? hueIconLabels[icon]),
     );
   }
 }

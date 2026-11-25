@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_client.dart';
 import '../../api/endpoints/admin_endpoints.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
@@ -71,9 +72,9 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
         _summary = summary;
       });
     } catch (_) {
-      if (mounted) setState(() => _hasError = true);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _hasError = true);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loading = false);
     }
   }
 
@@ -95,9 +96,14 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
         _total = page.total;
         _truncated = page.truncated;
       });
-    } catch (_) {
+    } catch (e) {
+      if (mounted && _queryEpoch.isCurrent(epoch)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.describe(e))),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loadingMore = false);
     }
   }
 
@@ -111,11 +117,11 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
   }
 
   Color _eventColor(String event, BuildContext context) {
-    if (event.contains('flood') || event.contains('rate_limited')) return AppTheme.statusDanger;
-    if (event.contains('failed')) return AppTheme.statusWarning;
+    if (event.contains('flood') || event.contains('rate_limited')) return AppTheme.statusReadable(context, AppStatusKind.danger);
+    if (event.contains('failed')) return AppTheme.statusReadable(context, AppStatusKind.warning);
     if (event.startsWith('admin_')) return AppTheme.goldReadable(context);
-    if (event.contains('success') || event.contains('changed')) return AppTheme.emeraldGreen;
-    return AppTheme.statusInfo;
+    if (event.contains('success') || event.contains('changed')) return AppTheme.emeraldReadable(context);
+    return AppTheme.statusReadable(context, AppStatusKind.info);
   }
 
   String _eventSubtitle(SecurityEvent e) {
@@ -144,7 +150,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
               Expanded(
                 child: Text(
                   strings.securityTitle,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.lg),
                 ),
               ),
               IconButton(
@@ -173,13 +179,13 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                       ),
                       child: Text(
                         '${strings.securityEventLabel(entry.key)}: ${entry.value}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        style: const TextStyle(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600),
                       ),
                     ),
                   if (summary.counts.isEmpty)
                     Text(
                       strings.securityQuietWindow,
-                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                      style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant),
                     ),
                 ],
               ),
@@ -192,7 +198,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
               alignment: Alignment.centerLeft,
               child: Text(
                 '${strings.securityLastAdminLogin}: ${summary!.lastAdminLoginTs}',
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant),
               ),
             ),
           ),
@@ -223,11 +229,11 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                     value: _eventFilter,
                     underline: const SizedBox.shrink(),
                     items: [
-                      DropdownMenuItem(value: '', child: Text(strings.securityFilterAll, style: const TextStyle(fontSize: 12))),
+                      DropdownMenuItem(value: '', child: Text(strings.securityFilterAll, style: const TextStyle(fontSize: AppFontSize.sm))),
                       for (final k in keys)
                         DropdownMenuItem(
                           value: k,
-                          child: Text(strings.securityEventLabel(k), style: const TextStyle(fontSize: 12)),
+                          child: Text(strings.securityEventLabel(k), style: const TextStyle(fontSize: AppFontSize.sm)),
                         ),
                     ],
                     onChanged: (v) {
@@ -240,6 +246,11 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
             ],
           ),
         ),
+        if (_hasError && _events.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+            child: ErrorPanel(message: strings.adminLoadFail, onRetry: _loading ? null : _reload),
+          ),
         Expanded(
           child: _loading && _events.isEmpty
               ? const SkeletonList(itemCount: 7, itemHeight: 60)
@@ -279,16 +290,16 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
                                 child: ListTile(
                                   dense: true,
-                                  leading: Icon(_eventIcon(e.event), color: color, size: 20),
+                                  leading: HueIcon(_eventIcon(e.event), color: color, size: 20),
                                   title: Text(
                                     strings.securityEventLabel(e.event),
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                                    style: const TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.w700),
                                   ),
                                   subtitle: Text(
                                     '${e.ts}\n${_eventSubtitle(e)}',
                                     maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 11, height: 1.35),
+                                    style: const TextStyle(fontSize: AppFontSize.xs, height: 1.35),
                                   ),
                                   isThreeLine: true,
                                 ),
@@ -302,7 +313,7 @@ class _SecuritySectionState extends State<SecuritySection> with AutomaticKeepAli
             padding: const EdgeInsets.only(bottom: AppSpacing.sm),
             child: Text(
               strings.securityTruncated,
-              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              style: TextStyle(fontSize: AppFontSize.xs, color: scheme.onSurfaceVariant),
             ),
           ),
       ],

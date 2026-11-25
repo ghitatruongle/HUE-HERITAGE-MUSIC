@@ -11,10 +11,7 @@ WEIGHT_FILES = ("lokr_weights.safetensors", "adapter_model.safetensors")
 
 def lora_root() -> Path:
     d = settings.models_dir / "lora"
-    if not d.exists():
-        return settings.models_dir
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return d if d.exists() else settings.models_dir
 
 
 def _find_weight(directory: Path) -> Optional[Path]:
@@ -68,12 +65,12 @@ def resolve(name: str):
     if not name:
         return None
     cleaned = name.strip()
-    if not cleaned or "\0" in cleaned or ".." in cleaned:
+    if not cleaned or cleaned in (".", "..") or "\0" in cleaned or ".." in cleaned:
         return None
     root = lora_root().resolve()
     try:
         target = (root / cleaned).resolve()
-        if not target.is_relative_to(root):
+        if target == root or not target.is_relative_to(root):
             return None
     except (ValueError, OSError):
         return None

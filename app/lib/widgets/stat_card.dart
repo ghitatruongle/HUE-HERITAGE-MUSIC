@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import 'hue_icons.dart';
 
 class StatCard extends StatelessWidget {
   final IconData icon;
@@ -36,7 +37,7 @@ class StatCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.md),
               color: accentColor.withValues(alpha: AppAlpha.selected),
             ),
-            child: Icon(icon, size: 18, color: accentColor),
+            child: HueIcon(icon, size: 18, color: accentColor),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -46,14 +47,14 @@ class StatCard extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),

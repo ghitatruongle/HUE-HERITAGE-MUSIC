@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -23,6 +24,7 @@ class AudioPlayerBar extends StatefulWidget {
   final bool compact;
   final Dio? dio;
   final ValueNotifier<bool>? pauseSignal;
+  final ValueNotifier<int>? playSignal;
 
   const AudioPlayerBar({
     super.key,
@@ -34,6 +36,7 @@ class AudioPlayerBar extends StatefulWidget {
     this.compact = false,
     this.dio,
     this.pauseSignal,
+    this.playSignal,
   });
 
   @override
@@ -54,6 +57,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.pauseSignal?.addListener(_onPauseSignal);
+    widget.playSignal?.addListener(_onPlaySignal);
     _load();
   }
 
@@ -63,6 +67,19 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
         _player.pause();
       } catch (_) {}
     }
+  }
+
+  void _onPlaySignal() {
+    if (_ready && mounted) {
+      unawaited(_replayFromStart());
+    }
+  }
+
+  Future<void> _replayFromStart() async {
+    try {
+      await _player.seek(Duration.zero);
+      await _player.play();
+    } catch (_) {}
   }
 
   @override
@@ -80,6 +97,10 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
     if (oldWidget.pauseSignal != widget.pauseSignal) {
       oldWidget.pauseSignal?.removeListener(_onPauseSignal);
       widget.pauseSignal?.addListener(_onPauseSignal);
+    }
+    if (oldWidget.playSignal != widget.playSignal) {
+      oldWidget.playSignal?.removeListener(_onPlaySignal);
+      widget.playSignal?.addListener(_onPlaySignal);
     }
     if (oldWidget.url != widget.url ||
         oldWidget.filePath != widget.filePath ||
@@ -152,6 +173,8 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
       if (mounted) {
         setState(() {
           _ready = false;
+          _dragging = false;
+          _dragValue = 0;
           _error = null;
         });
       }
@@ -160,7 +183,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
       if (widget.url != null && widget.url!.isNotEmpty) {
         var finalUrl = _normalizeUrl(widget.url!);
         final signed = await _signedUrl(finalUrl, forceResign: forceResign);
-        if (gen != _loadGen) return;
+        if (gen != _loadGen || !mounted) return;
         if (signed != null) {
           finalUrl = _normalizeUrl(signed);
         }
@@ -168,7 +191,12 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
       } else if (widget.filePath != null && widget.filePath!.isNotEmpty) {
         await _player.setFilePath(widget.filePath!);
       } else if (widget.bytes != null) {
-        await _player.setAudioSource(await _bytesSource(widget.bytes!));
+        final src = await _bytesSource(widget.bytes!);
+        if (gen != _loadGen || !mounted) {
+          await _cleanupTempPlayFile();
+          return;
+        }
+        await _player.setAudioSource(src);
       } else {
         throw StateError('no audio source');
       }
@@ -204,9 +232,22 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
     return AudioSource.uri(Uri.file(file.path));
   }
 
+  Future<void> _cleanupTempPlayFile() async {
+    final path = _lastTempPlayPath;
+    _lastTempPlayPath = null;
+    if (path == null) return;
+    try {
+      final f = File(path);
+      if (await f.exists()) {
+        await f.delete();
+      }
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     widget.pauseSignal?.removeListener(_onPauseSignal);
+    widget.playSignal?.removeListener(_onPlaySignal);
     WidgetsBinding.instance.removeObserver(this);
     final stale = _lastTempPlayPath;
     if (stale != null) {
@@ -265,10 +306,12 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2.2),
                 )
-              : Icon(playing ? HueIcons.pauseCircle : HueIcons.playCircle),
+              : HueIcon(playing ? HueIcons.pauseCircle : HueIcons.playCircle, decorative: true),
           onPressed: () {
             if (playing) {
               _player.pause();
+            } else if (state == ProcessingState.completed) {
+              unawaited(_replayFromStart());
             } else {
               _player.play();
             }
@@ -284,7 +327,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> with WidgetsBindingObse
         final maxMs = total.inMilliseconds.toDouble();
         final cap = maxMs > 0 ? maxMs : 1.0;
         final cur = _dragging
-            ? _dragValue
+            ? _dragValue.clamp(0.0, cap).toDouble()
             : pos.inMilliseconds.toDouble().clamp(0.0, cap).toDouble();
         return Row(
           children: [

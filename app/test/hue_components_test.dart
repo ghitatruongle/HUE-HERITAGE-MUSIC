@@ -165,12 +165,20 @@ void main() {
   });
 
   test('StatCard accent: icon màu accent đọc được trên nền accent alpha-14 blend surface (3.0)', () {
-    for (final theme in [AppTheme.lightTheme, AppTheme.darkTheme]) {
+    final lightPairs = (
+      AppTheme.lightTheme,
+      [AppTheme.lightTheme.colorScheme.primary, AppTheme.statusSuccess, AppTheme.statusDanger],
+    );
+    final darkPairs = (
+      AppTheme.darkTheme,
+      [AppTheme.darkTheme.colorScheme.primary, AppTheme.statusSuccessDark, AppTheme.statusDangerDark],
+    );
+    for (final (theme, accents) in [lightPairs, darkPairs]) {
       final surface = theme.colorScheme.surface;
-      for (final accent in [theme.colorScheme.primary, AppTheme.statusSuccessDark, AppTheme.statusDangerDark]) {
+      for (final accent in accents) {
         final bg = Color.alphaBlend(accent.withValues(alpha: 0.14), surface);
         final ratio = contrast(accent, bg);
-        expect(ratio >= 1.6, isTrue, reason: 'accent $accent blend = ${ratio.toStringAsFixed(2)}');
+        expect(ratio >= 3.0, isTrue, reason: '${theme.brightness} accent $accent blend = ${ratio.toStringAsFixed(2)}');
       }
     }
   });

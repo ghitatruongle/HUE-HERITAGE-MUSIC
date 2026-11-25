@@ -510,7 +510,8 @@ class AppStrings {
   String get authLoginIdLabel => isVi ? 'Tên tài khoản hoặc Email' : 'Username or Email';
   String get authLoginIdHint => isVi ? 'user123 hoặc abc@gmail.com' : 'user123 or abc@gmail.com';
   String get authPasswordLabel => isVi ? 'Mật khẩu' : 'Password';
-  String get authPasswordMinLabel => isVi ? 'Mật khẩu (tối thiểu 6 ký tự)' : 'Password (min 6 characters)';
+  String get authPasswordMinLabel =>
+      isVi ? 'Mật khẩu (tối thiểu 8 ký tự, gồm chữ và số)' : 'Password (min 8 chars, letters & digits)';
   String get authUsernameLabel => isVi ? 'Tên tài khoản' : 'Username';
   String get authGmailLabel => 'Email';
   String get authGmailHint => isVi ? 'vidu@tenmien.vn' : 'you@example.com';
@@ -572,13 +573,38 @@ class AppStrings {
   String get authRoleUser => isVi ? 'Người dùng' : 'User';
   String get authInviteTitle => isVi ? 'Quản lý mã mời (Admin)' : 'Invite Code Management (Admin)';
   String get authInviteManageHint => isVi
-      ? 'Mã dùng một lần — người được tặng đăng ký xong mã tự vô hiệu. Tạo, sao chép, hoặc xóa tại đây.'
-      : 'One-time codes — they disable themselves after one registration. Create, copy or delete here.';
+      ? 'Hỗ trợ mã dùng 1 lần, nhiều lần (hoặc không giới hạn) và đặt thời hạn tự hết hiệu lực. Tạo, sao chép hoặc xóa tại đây.'
+      : 'Supports single-use, multi-use (or unlimited) codes and expiration times. Create, copy or delete here.';
   String get authInviteEmpty => isVi ? 'Chưa có mã mời nào trong cơ sở dữ liệu.' : 'No invite codes in the database yet.';
   String get accountEmpty => isVi ? 'Chưa có tài khoản nào trong cơ sở dữ liệu.' : 'No accounts in the database yet.';
   String get authInviteCreate => isVi ? 'Tạo mã mời mới' : 'Create new invite code';
   String get authInviteUsed => isVi ? 'Đã dùng' : 'Used';
+  String get authInviteExhausted => isVi ? 'Hết lượt' : 'Exhausted';
+  String get authInviteExpired => isVi ? 'Hết hạn' : 'Expired';
   String get authInviteAvailable => isVi ? 'Còn hiệu lực' : 'Available';
+  String get authInviteUnlimited => isVi ? 'Không giới hạn lượt' : 'Unlimited uses';
+  String get authInviteUsesUnit => isVi ? 'lượt' : 'uses';
+  String get authInviteExpiresAt => isVi ? 'Hết hạn:' : 'Expires:';
+  String get authInviteNeverExpires => isVi ? 'Không hết hạn' : 'No expiry';
+  String get authInviteCodeLabel => isVi ? 'Mã tùy chỉnh (để trống = tự sinh)' : 'Custom code (blank = auto)';
+  String get authInviteNoteLabel => isVi ? 'Ghi chú (không bắt buộc)' : 'Note (optional)';
+  String get authInviteUsesLabel => isVi ? 'Số lượt sử dụng tối đa' : 'Maximum uses';
+  String get authInviteCustomUsesLabel => isVi ? 'Nhập số lượt (0 = không giới hạn, 1-10000)' : 'Enter uses (0 = unlimited, 1-10000)';
+  String get authInviteExpiryLabel => isVi ? 'Thời hạn hiệu lực' : 'Expiration duration';
+  String get authInviteCustomExpiryLabel => isVi ? 'Thời hạn tùy chỉnh' : 'Custom duration';
+  String get authInviteDurationMinutes => isVi ? 'Phút' : 'Minutes';
+  String get authInviteDurationHours => isVi ? 'Giờ' : 'Hours';
+  String get authInvitePresetOne => isVi ? '1 lượt' : '1 use';
+  String get authInvitePresetUnlimited => isVi ? 'Không giới hạn' : 'Unlimited';
+  String get authInvitePresetCustom => isVi ? 'Tùy chỉnh' : 'Custom';
+  String get authInvitePreset30m => isVi ? '30 phút' : '30 min';
+  String get authInvitePreset2h => isVi ? '2 giờ' : '2 hours';
+  String get authInvitePreset24h => isVi ? '24 giờ' : '24 hours';
+  String get authInvitePreset7d => isVi ? '7 ngày' : '7 days';
+  String get authInvitePreset30d => isVi ? '30 ngày' : '30 days';
+  String get authInviteInvalidCode => isVi ? 'Mã tùy chỉnh phải từ 4 đến 64 ký tự.' : 'Custom code must be 4-64 characters.';
+  String get authInviteInvalidUses => isVi ? 'Số lượt phải là 0 hoặc từ 1 đến 10000.' : 'Uses must be 0 or 1-10000.';
+  String get authInviteInvalidExpiry => isVi ? 'Thời hạn phải lớn hơn 0 (tối đa 365 ngày).' : 'Expiration must be > 0 (max 365 days).';
   String get authInviteCopy => isVi ? 'Sao chép' : 'Copy';
   String get authInviteCopied => isVi ? 'Đã sao chép' : 'Copied';
   String get authInviteCopyFail => isVi ? 'Không sao chép được tự động — hãy ghi tay mã' : 'Auto-copy failed — please note the code manually';
@@ -586,13 +612,15 @@ class AppStrings {
   String get authInviteDeleteConfirm => isVi ? 'Xóa mã mời' : 'Delete invite code';
   String get authInviteCreated => isVi ? 'Đã tạo mã mời' : 'Invite code created';
   String get authInviteLoadFail => isVi ? 'Không tải được danh sách mã mời' : 'Failed to load invite codes';
+  String get accountManagerLoadFail => isVi ? 'Không tải được danh sách tài khoản' : 'Failed to load accounts';
   String get changePasswordBtn => isVi ? 'Đổi mật khẩu' : 'Change password';
   String get changePasswordOld => isVi ? 'Mật khẩu hiện tại' : 'Current password';
-  String get changePasswordNew => isVi ? 'Mật khẩu mới (tối thiểu 6 ký tự)' : 'New password (min 6 characters)';
+  String get changePasswordNew =>
+      isVi ? 'Mật khẩu mới (tối thiểu 8 ký tự, gồm chữ và số)' : 'New password (min 8 chars, letters & digits)';
   String get changePasswordConfirm => isVi ? 'Nhập lại mật khẩu mới' : 'Confirm new password';
   String get changePasswordMismatch => isVi
-      ? 'Mật khẩu mới chưa khớp hoặc ngắn hơn 6 ký tự.'
-      : 'New passwords do not match or are shorter than 6 characters.';
+      ? 'Mật khẩu mới chưa khớp hoặc chưa đủ 8 ký tự gồm cả chữ và số.'
+      : 'New passwords do not match or lack 8+ chars with letters and digits.';
   String get changePasswordDone => isVi ? 'Đã đổi mật khẩu — các thiết bị khác bị đăng xuất.' : 'Password changed — other devices were signed out.';
   String get logoutEverywhereBtn => isVi ? 'Đăng xuất mọi thiết bị' : 'Sign out on all devices';
   String get logoutEverywhereConfirm => isVi
@@ -601,11 +629,21 @@ class AppStrings {
   String get logoutEverywhereDone => isVi ? 'Đã thu hồi toàn bộ phiên.' : 'All sessions revoked.';
   String get accountManagerTitle => isVi ? 'Danh sách tài khoản (Admin)' : 'Accounts (Admin)';
   String get accountManagerHint => isVi
-      ? 'Vô hiệu hóa/kích hoạt tài khoản, đặt lại mật khẩu hộ (mật khẩu tạm tự sinh).'
-      : 'Disable/enable accounts, reset a password (a temporary one is generated).';
+      ? 'Vô hiệu hóa/kích hoạt tài khoản, chọn cộng tác viên, hoặc đặt lại mật khẩu hộ.'
+      : 'Disable/enable accounts, assign worker role, or reset a password.';
   String get accountManagerHintWorker => isVi
       ? 'Chế độ cộng tác viên: chỉ xem danh sách tài khoản đã đăng ký.'
       : 'Worker mode: view registered accounts only.';
+  String get accountMakeWorker => isVi ? 'Chọn làm cộng tác viên' : 'Assign as worker';
+  String get accountRevokeWorker => isVi ? 'Hạ về người dùng thường' : 'Set as regular user';
+  String get accountRoleChangeTitle => isVi ? 'Thay đổi vai trò' : 'Change account role';
+  String get accountRolePromoteConfirm => isVi
+      ? 'Cấp quyền cộng tác viên cho'
+      : 'Grant worker role to';
+  String get accountRoleDemoteConfirm => isVi
+      ? 'Chuyển về tài khoản người dùng thường cho'
+      : 'Demote to regular user for';
+  String get accountRoleUpdated => isVi ? 'Đã cập nhật vai trò' : 'Updated role for';
   String get adminCreateUserRole => isVi ? 'Vai trò' : 'Role';
   String get adminRoleUser => isVi ? 'Người dùng' : 'User';
   String get adminRoleWorker => isVi ? 'Cộng tác viên' : 'Worker';
@@ -652,8 +690,8 @@ class AppStrings {
       ? 'Địa chỉ email không hợp lệ'
       : 'Invalid email address';
   String get authErrPasswordShort => isVi
-      ? 'Mật khẩu phải có ít nhất 6 ký tự'
-      : 'Password must be at least 6 characters';
+      ? 'Mật khẩu phải từ 8 ký tự trở lên và gồm cả chữ cái lẫn chữ số'
+      : 'Password must be at least 8 characters and contain letters and digits';
   String get authErrInvite => isVi ? 'Vui lòng nhập mã mời hợp lệ' : 'Please enter a valid invite code';
 
   String get sessionExpired => isVi
@@ -831,4 +869,18 @@ class AppStrings {
     }
     return en[event] ?? event;
   }
+
+  String get authRoleWorker => isVi ? 'Cộng tác viên' : 'Worker';
+  String get overlayFoldOctave => isVi ? 'Chuẩn hóa quãng tám' : 'Normalize octave';
+  String get overlayShowRaw => isVi ? 'Cao độ gốc' : 'Raw pitch';
+  String overlayOctaveShifted(double mult) =>
+      isVi ? 'Dịch ${mult.toStringAsFixed(2)}x' : '${mult.toStringAsFixed(2)}x octave';
+  String get practiceLiveCoachLabel => isVi ? 'Cao độ trực tiếp' : 'Live pitch';
+  String get practiceLiveCoachListening => isVi ? 'Đang lắng nghe giọng hát...' : 'Listening for voice...';
+  String get wordOctaveDiffHint => isVi ? 'Lệch 1 quãng tám' : '1 octave offset';
+  String practiceLiveCoachInTune(String note, double hz, int cents) => isVi
+      ? '$note (${hz.toStringAsFixed(0)} Hz) · ${cents >= 0 ? '+' : ''}${cents}c'
+      : '$note (${hz.toStringAsFixed(0)} Hz) · ${cents >= 0 ? '+' : ''}${cents}c';
+  String practiceLiveCoachNoteOnly(String note, double hz) =>
+      '$note (${hz.toStringAsFixed(0)} Hz)';
 }

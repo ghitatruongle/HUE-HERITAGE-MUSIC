@@ -51,7 +51,7 @@ def admin_stats(refresh: int = 0, staff_id: str = Depends(require_staff), db: Se
     cached = _stats_cache["data"]
     if refresh or cached is None or now - _stats_cache["ts"] >= STATS_TTL_SECONDS:
         invites_total = db.query(InviteCode).count()
-        invites_unused = db.query(InviteCode).filter(InviteCode.used_by.is_(None)).count()
+        invites_unused = crud.count_active_invites(db)
         items_total = db.query(HeritageItem).count()
         items_bytes = db.query(sqlfunc.coalesce(sqlfunc.sum(HeritageItem.size), 0)).scalar() or 0
         derived_files = db.query(AudioFile).filter(AudioFile.kind != "original").count()

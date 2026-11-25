@@ -1,10 +1,66 @@
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:hue_heritage_music/core/localization/app_strings.dart';
 import 'package:hue_heritage_music/core/theme/app_theme.dart';
+import 'package:hue_heritage_music/screens/creation/creation_screen.dart';
+import 'package:hue_heritage_music/screens/home/home_screen.dart';
+import 'package:hue_heritage_music/services/auth_service.dart';
+import 'package:hue_heritage_music/services/history_service.dart';
+import 'package:hue_heritage_music/services/locale_provider.dart';
+import 'package:hue_heritage_music/services/server_config.dart';
+import 'package:hue_heritage_music/services/session_media.dart';
+import 'package:hue_heritage_music/services/theme_provider.dart';
+import 'package:hue_heritage_music/widgets/feature_header.dart';
 import 'package:hue_heritage_music/widgets/hue_button.dart';
+import 'package:hue_heritage_music/widgets/hue_icons.dart';
+
+class _TuneMockAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    if (options.path.contains('/api/music/models')) {
+      return ResponseBody.fromString(
+        '{"base":"base","base_ready":true,"mode":"test","adapters":[]}',
+        200,
+        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      );
+    }
+    if (options.path.contains('/api/music/heritage-tunes') ||
+        options.path.contains('/api/heritage')) {
+      return ResponseBody.fromString(
+        jsonEncode([
+          {
+            'id': 'contrast-1',
+            'title': 'Hò Mái Nhì',
+            'type': 'Ca Huế',
+            'artist': 'Nghệ nhân',
+            'lyrics': 'Tình tang',
+            'sha256': 'abcd',
+            'size': 10,
+            'created_at': '2026-11-11T00:00:00Z',
+          }
+        ]),
+        200,
+        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      );
+    }
+    return ResponseBody.fromString('{}', 200, headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 double _lin(double c) {
   c /= 255.0;
@@ -49,23 +105,40 @@ void main() {
     expectAA(s.onSecondary, s.secondary, 4.5, 'light onSecondary/secondary');
   });
 
-  test('Cặp control (nút/pill) đạt ngưỡng UI 3.0 ở cả 2 theme', () {
+  test('Cặp control và scheme chính (primary/tertiary/error) đạt AA ở cả 2 theme', () {
     final dark = AppTheme.darkTheme.colorScheme;
     final light = AppTheme.lightTheme.colorScheme;
-    expectAA(dark.onPrimary, dark.primary, 3.0, 'dark onPrimary/primary');
-    expectAA(light.onPrimary, light.primary, 3.0, 'light onPrimary/primary');
-    expectAA(dark.onErrorContainer, dark.errorContainer, 3.0, 'dark onErrorContainer/errorContainer');
-    expectAA(light.onErrorContainer, light.errorContainer, 3.0, 'light onErrorContainer/errorContainer');
+    expectAA(dark.onPrimary, dark.primary, 4.5, 'dark onPrimary/primary');
+    expectAA(light.onPrimary, light.primary, 4.5, 'light onPrimary/primary');
+    expectAA(dark.primary, dark.surface, 4.5, 'dark primary/surface');
+    expectAA(dark.primary, dark.surfaceContainerHighest, 4.5, 'dark primary/containerHighest');
+    expectAA(dark.tertiary, dark.surface, 4.5, 'dark tertiary/surface');
+    expectAA(dark.tertiary, AppTheme.darkBg, 4.5, 'dark tertiary/darkBg');
+    expectAA(dark.onTertiary, dark.tertiary, 4.5, 'dark onTertiary/tertiary');
+    expectAA(light.tertiary, light.surface, 4.5, 'light tertiary/surface');
+    expectAA(light.onTertiary, light.tertiary, 4.5, 'light onTertiary/tertiary');
+    expectAA(dark.error, dark.surface, 4.5, 'dark error/surface');
+    expectAA(dark.error, dark.surfaceContainerHighest, 4.5, 'dark error/containerHighest');
+    expectAA(dark.onError, dark.error, 4.5, 'dark onError/error');
+    expectAA(light.error, light.surface, 4.5, 'light error/surface');
+    expectAA(light.error, light.surfaceContainerHighest, 4.5, 'light error/containerHighest');
+    expectAA(light.onError, light.error, 4.5, 'light onError/error');
+    expectAA(dark.onErrorContainer, dark.errorContainer, 4.5, 'dark onErrorContainer/errorContainer');
+    expectAA(light.onErrorContainer, light.errorContainer, 4.5, 'light onErrorContainer/errorContainer');
   });
 
-  test('4 màu trạng thái đọc được trên surface ở cả 2 theme (ngưỡng 3.0)', () {
+  test('4 màu trạng thái đạt AA 4.5 đúng cặp sáng/tối trên surface, bg và chip', () {
     final dark = AppTheme.darkTheme.colorScheme;
     final light = AppTheme.lightTheme.colorScheme;
     for (final c in [AppTheme.statusSuccess, AppTheme.statusWarning, AppTheme.statusDanger, AppTheme.statusInfo]) {
-      expectAA(c, dark.surface, 3.0, 'dark status/$c');
-      expectAA(c, light.surface, 3.0, 'light status/$c');
-      expectAA(c, AppTheme.darkBg, 3.0, 'darkBg status/$c');
-      expectAA(c, AppTheme.lightBg, 3.0, 'lightBg status/$c');
+      expectAA(c, light.surface, 4.5, 'light status/$c');
+      expectAA(c, AppTheme.lightBg, 4.5, 'lightBg status/$c');
+      expectAA(c, Color.alphaBlend(c.withAlpha(40), light.surface), 4.5, 'light chip40 status/$c');
+    }
+    for (final c in [AppTheme.statusSuccessDark, AppTheme.statusWarningDark, AppTheme.statusDangerDark, AppTheme.statusInfoDark]) {
+      expectAA(c, dark.surface, 4.5, 'dark status/$c');
+      expectAA(c, AppTheme.darkBg, 4.5, 'darkBg status/$c');
+      expectAA(c, Color.alphaBlend(c.withAlpha(40), dark.surface), 4.5, 'dark chip40 status/$c');
     }
   });
 
@@ -79,14 +152,18 @@ void main() {
     expect(dark.textTheme.bodyMedium!.fontSize, light.textTheme.bodyMedium!.fontSize);
   });
 
-  test('Chip verdict: chữ onSurface đọc được trên nền status alpha-40 ở cả 2 theme', () {
+  test('Chip verdict: chữ onSurface đọc được trên nền status alpha-40 ở cả 2 theme (AA 4.5)', () {
     final dark = AppTheme.darkTheme;
     final light = AppTheme.lightTheme;
-    for (final theme in [dark, light]) {
+    final pairs = [
+      (dark, [AppTheme.statusSuccessDark, AppTheme.statusWarningDark, AppTheme.statusDangerDark, AppTheme.statusInfoDark]),
+      (light, [AppTheme.statusSuccess, AppTheme.statusWarning, AppTheme.statusDanger, AppTheme.statusInfo]),
+    ];
+    for (final (theme, colors) in pairs) {
       final bg = theme.scaffoldBackgroundColor;
-      for (final c in [AppTheme.statusSuccess, AppTheme.statusWarning, AppTheme.statusDanger, AppTheme.statusInfo]) {
+      for (final c in colors) {
         final chipBg = Color.alphaBlend(c.withAlpha(40), bg);
-        expectAA(theme.colorScheme.onSurface, chipBg, 3.0, '${theme.brightness} verdict ${c.toARGB32()}');
+        expectAA(theme.colorScheme.onSurface, chipBg, 4.5, '${theme.brightness} verdict ${c.toARGB32()}');
       }
     }
   });
@@ -194,14 +271,19 @@ void main() {
     expectAA(AppTheme.imperialGold, AppTheme.darkSurfaceVariant, 4.5, 'gold/darkSurfaceVariant');
   });
 
-  test('Chip BETA: nền goldReadable alpha-20 blend surface, chữ goldReadable đạt 3.0 ở cả 2 theme', () {
+  test('Chip BETA: nền goldReadable blend ở cả 2 theme đạt AA 4.5', () {
     final dark = AppTheme.darkTheme;
     final light = AppTheme.lightTheme;
     const goldDark = AppTheme.imperialGold;
     const goldLight = AppTheme.imperialGoldInk;
     for (final (theme, gold, name) in [(dark, goldDark, 'dark'), (light, goldLight, 'light')]) {
-      final chipBg = Color.alphaBlend(gold.withAlpha(51), theme.colorScheme.surface);
-      expectAA(gold, chipBg, 3.0, '$name BETA gold/blend');
+      final chipSurface = Color.alphaBlend(gold.withAlpha(51), theme.colorScheme.surface);
+      final chipVar = Color.alphaBlend(gold.withAlpha(51), theme.colorScheme.surfaceContainerHighest);
+      expectAA(gold, chipSurface, 4.5, '$name BETA gold/surface20');
+      expectAA(gold, chipVar, 4.5, '$name BETA gold/surfaceVariant20');
+      final banner = Color.alphaBlend(AppTheme.amberGold.withValues(alpha: 0.08), theme.scaffoldBackgroundColor);
+      final chipBanner = Color.alphaBlend(gold.withValues(alpha: AppAlpha.selected), banner);
+      expectAA(gold, chipBanner, 4.5, '$name BETA gold/banner14');
     }
   });
 
@@ -219,39 +301,42 @@ void main() {
     expectAA(AppTheme.amberGold, const Color(0xFF4A2B78), 3.0, 'amberGold/gradientMid');
   });
 
-  test('amberGoldReadable: cặp dark/light đọc được trên surface + bg theme tương ứng (3.0)', () {
-    expectAA(AppTheme.amberGold, AppTheme.darkTheme.colorScheme.surface, 3.0, 'amberGold/darkSurface');
-    expectAA(AppTheme.amberGold, AppTheme.darkBg, 3.0, 'amberGold/darkBg');
-    expectAA(AppTheme.amberGoldInk, AppTheme.lightTheme.colorScheme.surface, 3.0, 'amberGoldInk/lightSurface');
-    expectAA(AppTheme.amberGoldInk, AppTheme.lightBg, 3.0, 'amberGoldInk/lightBg');
+  test('amberGoldReadable: cặp dark/light đọc được trên surface + bg theme tương ứng (4.5)', () {
+    expectAA(AppTheme.amberGold, AppTheme.darkTheme.colorScheme.surface, 4.5, 'amberGold/darkSurface');
+    expectAA(AppTheme.amberGold, AppTheme.darkBg, 4.5, 'amberGold/darkBg');
+    expectAA(AppTheme.amberGoldInk, AppTheme.lightTheme.colorScheme.surface, 4.5, 'amberGoldInk/lightSurface');
+    expectAA(AppTheme.amberGoldInk, AppTheme.lightBg, 4.5, 'amberGoldInk/lightBg');
   });
 
-  test('emeraldReadable: cặp dark/light đọc được trên surface + bg theme tương ứng (3.0)', () {
-    expectAA(AppTheme.emeraldBright, AppTheme.darkTheme.colorScheme.surface, 3.0, 'emeraldBright/darkSurface');
-    expectAA(AppTheme.emeraldBright, AppTheme.darkBg, 3.0, 'emeraldBright/darkBg');
-    expectAA(AppTheme.emeraldGreen, AppTheme.lightTheme.colorScheme.surface, 3.0, 'emeraldGreen/lightSurface');
-    expectAA(AppTheme.emeraldGreen, AppTheme.lightBg, 3.0, 'emeraldGreen/lightBg');
+  test('emeraldReadable: cặp dark/light đọc được trên surface + bg theme tương ứng (4.5)', () {
+    expectAA(AppTheme.emeraldBright, AppTheme.darkTheme.colorScheme.surface, 4.5, 'emeraldBright/darkSurface');
+    expectAA(AppTheme.emeraldBright, AppTheme.darkBg, 4.5, 'emeraldBright/darkBg');
+    expectAA(AppTheme.emeraldGreen, AppTheme.lightTheme.colorScheme.surface, 4.5, 'emeraldGreen/lightSurface');
+    expectAA(AppTheme.emeraldGreen, AppTheme.lightBg, 4.5, 'emeraldGreen/lightBg');
   });
 
-  test('statusReadable: cặp sáng/tối mới đọc được trên surface + bg theme tương ứng (3.0)', () {
+  test('statusReadable: cặp sáng/tối mới đọc được trên surface, bg và chip blend (4.5)', () {
     final dark = AppTheme.darkTheme.colorScheme;
     final light = AppTheme.lightTheme.colorScheme;
-    expectAA(AppTheme.statusSuccessDark, dark.surface, 3.0, 'statusSuccessDark/darkSurface');
-    expectAA(AppTheme.statusWarningDark, dark.surface, 3.0, 'statusWarningDark/darkSurface');
-    expectAA(AppTheme.statusDangerDark, dark.surface, 3.0, 'statusDangerDark/darkSurface');
-    expectAA(AppTheme.statusInfoDark, dark.surface, 3.0, 'statusInfoDark/darkSurface');
-    expectAA(AppTheme.statusSuccess, light.surface, 3.0, 'statusSuccess/lightSurface');
-    expectAA(AppTheme.statusWarning, light.surface, 3.0, 'statusWarning/lightSurface');
-    expectAA(AppTheme.statusDanger, light.surface, 3.0, 'statusDanger/lightSurface');
-    expectAA(AppTheme.statusInfo, light.surface, 3.0, 'statusInfo/lightSurface');
+    for (final c in [AppTheme.statusSuccessDark, AppTheme.statusWarningDark, AppTheme.statusDangerDark, AppTheme.statusInfoDark]) {
+      expectAA(c, dark.surface, 4.5, '$c/darkSurface');
+      expectAA(c, AppTheme.darkBg, 4.5, '$c/darkBg');
+      expectAA(c, Color.alphaBlend(c.withAlpha(40), dark.surface), 4.5, '$c/darkChip40');
+    }
+    final lightTileBg = Color.alphaBlend(light.surfaceContainerHighest.withValues(alpha: 0.45), AppTheme.lightBg);
+    for (final c in [AppTheme.statusSuccess, AppTheme.statusWarning, AppTheme.statusDanger, AppTheme.statusInfo]) {
+      expectAA(c, light.surface, 4.5, '$c/lightSurface');
+      expectAA(c, AppTheme.lightBg, 4.5, '$c/lightBg');
+      expectAA(c, Color.alphaBlend(c.withAlpha(40), light.surface), 4.5, '$c/lightChip40');
+      expectAA(c, Color.alphaBlend(c.withValues(alpha: 0.14), lightTileBg), 4.5, '$c/lightHomeChip14');
+    }
   });
 
-  test('Chữ trắng đọc được trên mọi stop của brandGradient cả 2 theme (AA 4.5)', () {
-    for (final c in AppTheme.brandGradientColors) {
-      expectAA(Colors.white, c, 4.5, 'white/dark gradient stop ${c.toARGB32()}');
-    }
-    for (final c in AppTheme.brandGradientColorsLight) {
-      expectAA(Colors.white, c, 4.5, 'white/light gradient stop ${c.toARGB32()}');
+  test('Chữ trắng, trắng mờ 0.88 và gradientAccentGold đọc được trên mọi stop brandGradient cả 2 theme (AA 4.5)', () {
+    for (final c in [...AppTheme.brandGradientColors, ...AppTheme.brandGradientColorsLight]) {
+      expectAA(Colors.white, c, 4.5, 'white/gradient stop ${c.toARGB32()}');
+      expectAA(Color.alphaBlend(Colors.white.withValues(alpha: 0.88), c), c, 4.5, 'white88/gradient stop ${c.toARGB32()}');
+      expectAA(AppTheme.gradientAccentGold, c, 4.5, 'gradientAccentGold/gradient stop ${c.toARGB32()}');
     }
   });
 
@@ -278,35 +363,162 @@ void main() {
     }
   });
 
-  testWidgets('HueButton danger — dark: ink sáng trên nền danger đạt 4.5', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.darkTheme,
-        home: Scaffold(
-          body: HueButton(label: 'Xoá', variant: HueButtonVariant.danger, onPressed: () {}),
+  testWidgets('HueButton tất cả 4 variant + Theme buttons đạt AA 4.5 cả 2 theme', (tester) async {
+    for (final theme in [AppTheme.lightTheme, AppTheme.darkTheme]) {
+      final tag = theme.brightness == Brightness.dark ? 'dark' : 'light';
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey(tag),
+          theme: theme,
+          home: Scaffold(
+            body: Column(
+              children: [
+                HueButton(label: 'Chính', variant: HueButtonVariant.primary, onPressed: () {}),
+                HueButton(label: 'Vàng', variant: HueButtonVariant.gold, onPressed: () {}),
+                HueButton(label: 'Xoá', variant: HueButtonVariant.danger, onPressed: () {}),
+                HueButton(label: 'Mờ', variant: HueButtonVariant.ghost, onPressed: () {}),
+                ElevatedButton(onPressed: () {}, child: const Text('Elevated')),
+                FilledButton(onPressed: () {}, child: const Text('Filled')),
+              ],
+            ),
+          ),
         ),
-      ),
-    );
-    final filled = tester.widget<FilledButton>(find.byType(FilledButton));
-    final fg = filled.style!.foregroundColor!.resolve(<WidgetState>{})!;
-    final bg = filled.style!.backgroundColor!.resolve(<WidgetState>{})!;
-    expect(fg, AppTheme.darkSurface, reason: 'dark danger phải dùng ink tối');
-    expectAA(fg, bg, 4.5, 'dark danger foreground/background');
+      );
+      await tester.pumpAndSettle();
+      final filledList = tester.widgetList<FilledButton>(find.byType(FilledButton)).toList();
+      final pFg = filledList[0].style!.foregroundColor!.resolve(<WidgetState>{})!;
+      final pBg = filledList[0].style!.backgroundColor!.resolve(<WidgetState>{})!;
+      expectAA(pFg, pBg, 4.5, '$tag HueButton primary');
+
+      final dFg = filledList[1].style!.foregroundColor!.resolve(<WidgetState>{})!;
+      final dBg = filledList[1].style!.backgroundColor!.resolve(<WidgetState>{})!;
+      if (theme.brightness == Brightness.dark) {
+        expect(dFg, AppTheme.darkSurface, reason: 'dark danger phải dùng ink tối');
+      } else {
+        expect(dFg, Colors.white, reason: 'light danger phải dùng chữ trắng');
+      }
+      expectAA(dFg, dBg, 4.5, '$tag HueButton danger');
+
+      final goldBtn = tester.widget<OutlinedButton>(find.byType(OutlinedButton));
+      final gFg = goldBtn.style!.foregroundColor!.resolve(<WidgetState>{})!;
+      expectAA(gFg, theme.colorScheme.surface, 4.5, '$tag HueButton gold');
+
+      final ghostBtn = tester.widget<TextButton>(find.byType(TextButton));
+      final ghFg = ghostBtn.style!.foregroundColor!.resolve(<WidgetState>{})!;
+      expectAA(ghFg, theme.colorScheme.surface, 4.5, '$tag HueButton ghost');
+
+      final elStyle = theme.elevatedButtonTheme.style!;
+      expectAA(
+        elStyle.foregroundColor!.resolve(<WidgetState>{})!,
+        elStyle.backgroundColor!.resolve(<WidgetState>{})!,
+        4.5,
+        '$tag elevatedButtonTheme',
+      );
+      final flStyle = theme.filledButtonTheme.style!;
+      expectAA(
+        flStyle.foregroundColor!.resolve(<WidgetState>{})!,
+        flStyle.backgroundColor!.resolve(<WidgetState>{})!,
+        4.5,
+        '$tag filledButtonTheme',
+      );
+    }
   });
 
-  testWidgets('HueButton danger — light: chữ trắng trên nền danger đạt 4.5', (tester) async {
+  testWidgets('FeatureHeader subtitle dùng alpha >= 0.88 đạt 4.5 trên light gradient', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
-        home: Scaffold(
-          body: HueButton(label: 'Xoá', variant: HueButtonVariant.danger, onPressed: () {}),
+        home: const Scaffold(
+          body: FeatureHeader(
+            title: 'Tiêu đề',
+            subtitle: 'Phụ đề ngắn',
+            icon: HueIcons.musicNote,
+          ),
         ),
       ),
     );
-    final filled = tester.widget<FilledButton>(find.byType(FilledButton));
-    final fg = filled.style!.foregroundColor!.resolve(<WidgetState>{})!;
-    final bg = filled.style!.backgroundColor!.resolve(<WidgetState>{})!;
-    expect(fg, Colors.white, reason: 'light danger phải dùng chữ trắng');
-    expectAA(fg, bg, 4.5, 'light danger foreground/background');
+    final sub = tester.widget<Text>(find.text('Phụ đề ngắn'));
+    final fg = sub.style!.color!;
+    for (final stop in AppTheme.brandGradientColorsLight) {
+      expectAA(Color.alphaBlend(fg, stop), stop, 4.5, 'FeatureHeader subtitle on ${stop.toARGB32()}');
+    }
+  });
+
+  testWidgets('HomeScreen dark mode: RecentTile icon dùng primaryPurpleGlow + Hero pill đạt 4.5', (tester) async {
+    SharedPreferences.setMockInitialValues({'hue_server_url': 'http://127.0.0.1:8005'});
+    final server = ServerConfig();
+    await server.load();
+    server.api.dio.httpClientAdapter = _TuneMockAdapter();
+    final history = HistoryService();
+    await history.add(
+      HistoryEntry(id: 'h1', kind: 'restore', title: 'Bản thu mẫu', status: 'done', at: DateTime(2026, 11, 24)),
+    );
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: server),
+          ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()..setMode(ThemeMode.dark)),
+          ChangeNotifierProvider<HistoryService>.value(value: history),
+          ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
+          ChangeNotifierProvider<AuthService>.value(value: AuthService()),
+          ChangeNotifierProvider<SessionMedia>(create: (_) => SessionMedia()),
+        ],
+        child: MaterialApp(theme: AppTheme.darkTheme, home: const HomeScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final tileRow = find.ancestor(of: find.text('Bản thu mẫu'), matching: find.byType(Row)).first;
+    final recentIcon = tester.widget<Icon>(find.descendant(of: tileRow, matching: find.byType(Icon)).first);
+    expect(recentIcon.color, isNot(AppTheme.primaryPurple));
+    expect(recentIcon.color, AppTheme.darkTheme.colorScheme.primary);
+
+    final onlineText = const AppStrings('vi').serverOnline;
+    final statusFinder = find.byWidgetPredicate(
+      (w) => w is Text && w.data == onlineText && w.style?.color == AppTheme.emeraldBright,
+    );
+    final statusLabel = tester.widget<Text>(statusFinder);
+    final pillContainer = tester.widget<Container>(
+      find.ancestor(of: statusFinder, matching: find.byType(Container)).first,
+    );
+    final pillBg = (pillContainer.decoration as BoxDecoration).color!;
+    for (final stop in [...AppTheme.brandGradientColorsLight, ...AppTheme.brandGradientColors]) {
+      expectAA(statusLabel.style!.color!, Color.alphaBlend(pillBg, stop), 4.5, 'Home pill on ${stop.toARGB32()}');
+    }
+  });
+
+  testWidgets('CreationScreen light mode: nút nghe bản gốc dùng goldReadable (>= 4.5) thay vì imperialGold', (tester) async {
+    SharedPreferences.setMockInitialValues({'hue_server_url': 'http://127.0.0.1:8005'});
+    final server = ServerConfig();
+    await server.load();
+    server.api.dio.httpClientAdapter = _TuneMockAdapter();
+    tester.view.physicalSize = const Size(1024, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ServerConfig>.value(value: server),
+          ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
+          ChangeNotifierProvider<HistoryService>.value(value: HistoryService()),
+          ChangeNotifierProvider<LocaleProvider>.value(value: LocaleProvider()..setLocale('vi')),
+          ChangeNotifierProvider<AuthService>.value(value: AuthService()),
+          ChangeNotifierProvider<SessionMedia>(create: (_) => SessionMedia()),
+        ],
+        child: MaterialApp(theme: AppTheme.lightTheme, home: const Scaffold(body: CreationScreen())),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final listenText = tester.widget<Text>(find.textContaining('Nghe Bản Gốc'));
+    expect(listenText.style!.color, AppTheme.imperialGoldInk);
+    expect(listenText.style!.color, isNot(AppTheme.imperialGold));
+    expectAA(listenText.style!.color!, AppTheme.lightTheme.colorScheme.surface, 4.5, 'Creation listen btn on lightSurface');
   });
 }

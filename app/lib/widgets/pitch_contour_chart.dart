@@ -27,14 +27,19 @@ class PitchContourChart extends StatelessWidget {
     for (var i = 0; i < data.times.length && i < data.f0.length; i += step) {
       final t = data.times[i];
       final f = data.f0[i];
-      if (t.isFinite && f.isFinite) {
+      if (t.isFinite && f.isFinite && f > 0) {
         spots.add(FlSpot(t, f));
+      } else if (spots.isNotEmpty && spots.last != FlSpot.nullSpot) {
+        spots.add(FlSpot.nullSpot);
       }
+    }
+    if (spots.isNotEmpty && spots.last == FlSpot.nullSpot) {
+      spots.removeLast();
     }
     final palette = ChartPalette.of(context);
     var peak = 100.0;
     for (final f in data.f0) {
-      if (f > peak) {
+      if (f.isFinite && f > peak) {
         peak = f;
       }
     }

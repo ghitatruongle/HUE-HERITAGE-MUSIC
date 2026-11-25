@@ -98,19 +98,13 @@ void main() {
     );
   });
 
-  test('Design token gate: màu hardcode chỉ nằm whitelist (token/gradient/motif/ink có test)', () {
-    const whitelistFiles = {
+  test('Design token gate: màu hardcode chỉ nằm whitelist (token/motif/trắng-nền-thương-hiệu/transparent)', () {
+    const tokenPaletteFiles = {
       'lib/core/theme/app_theme.dart',
       'lib/widgets/heritage_motif.dart',
-      'lib/widgets/hue_button.dart',
-      'lib/screens/home/home_screen.dart',
-      'lib/screens/heritage/heritage_list_screen.dart',
-      'lib/screens/creation/creation_screen.dart',
-      'lib/screens/history/history_screen.dart',
-      'lib/widgets/feature_header.dart',
-      'lib/widgets/responsive_layout.dart',
     };
     final colorRe = RegExp(r'Color\(0x|Colors\.[a-zA-Z]+');
+    final shadowLineRe = RegExp(r'Colors\.black\d*(?:\.withValues|\s*[,)])');
     final violations = <String>[];
     final files = Directory('lib')
         .listSync(recursive: true)
@@ -120,23 +114,116 @@ void main() {
       ..sort((a, b) => a.path.compareTo(b.path));
     for (final f in files) {
       final normalized = f.path.replaceAll('\\', '/');
-      if (whitelistFiles.contains(normalized)) {
+      if (tokenPaletteFiles.contains(normalized)) {
         continue;
       }
       final lines = f.readAsStringSync().split('\n');
       for (var i = 0; i < lines.length; i++) {
-        for (final m in colorRe.allMatches(lines[i])) {
-          if (m.group(0) == 'Colors.transparent') {
+        final line = lines[i];
+        for (final m in colorRe.allMatches(line)) {
+          final tok = m.group(0)!;
+          if (tok == 'Colors.transparent' || tok == 'Colors.white') {
             continue;
           }
-          violations.add('${f.path}:${i + 1} ${m.group(0)}');
+          if (tok.startsWith('Colors.black') && shadowLineRe.hasMatch(line)) {
+            continue;
+          }
+          violations.add('${f.path}:${i + 1} $tok');
         }
       }
     }
     expect(
       violations,
       isEmpty,
-      reason: 'Màu phải qua AppTheme/ColorScheme; whitelist: token source, gradient brand, palette motif, danger ink có test: ${violations.take(20).join(' | ')}',
+      reason: 'Màu phải qua AppTheme/ColorScheme; chỉ whitelist Colors.white, Colors.transparent, shadow Colors.black và source palette: ${violations.take(20).join(' | ')}',
     );
+  });
+
+  test('Design token gate (C6-1): cấm mọi lời gọi Icon( trực tiếp (kể cả đa dòng/biến) ngoài hue_icons.dart', () {
+    final directIconRe = RegExp(r'(?<![A-Za-z])Icon\(');
+    final violations = <String>[];
+    final files = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    for (final f in files) {
+      final normalized = f.path.replaceAll('\\', '/');
+      if (normalized.endsWith('widgets/hue_icons.dart')) {
+        continue;
+      }
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (directIconRe.hasMatch(lines[i])) {
+          violations.add('$normalized:${i + 1}');
+        }
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason: 'Mọi icon phải qua HueIcon(...) để quản lý semanticLabel thống nhất: ${violations.take(20).join(' | ')}',
+    );
+  });
+
+  test('Design token gate (C8-1): toàn bộ lib (trừ định nghĩa AppFontSize) không chứa fontSize số cứng', () {
+    final rawFontRe = RegExp(r'fontSize:\s*\d');
+    final violations = <String>[];
+    final files = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    for (final f in files) {
+      final normalized = f.path.replaceAll('\\', '/');
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (normalized.endsWith('core/theme/app_theme.dart') &&
+            lines[i].contains('static const double')) {
+          continue;
+        }
+        if (rawFontRe.hasMatch(lines[i])) {
+          violations.add('$normalized:${i + 1}');
+        }
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason: 'Mọi fontSize phải dùng AppFontSize.*: ${violations.take(20).join(' | ')}',
+    );
+  });
+
+  test('Design token gate (C8-2): cấm package icon ngoài và cấm Icons.* ngoài hue_icons.dart', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final externalIconPkgRe = RegExp(
+      r'^\s*(cupertino_icons|font_awesome_flutter|lucide_icons|phosphor_flutter|heroicons|eva_icons_flutter|feather_icons|material_design_icons_flutter|flutter_vector_icons)\s*:',
+      multiLine: true,
+    );
+    expect(externalIconPkgRe.hasMatch(pubspec), isFalse, reason: 'Không cài icon pack ngoài trong pubspec.yaml');
+
+    final rawIconsRe = RegExp(r'(?<!Hue)Icons\.');
+    final violations = <String>[];
+    final files = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    for (final f in files) {
+      final normalized = f.path.replaceAll('\\', '/');
+      if (normalized.endsWith('widgets/hue_icons.dart')) {
+        continue;
+      }
+      final lines = f.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        if (rawIconsRe.hasMatch(lines[i])) {
+          violations.add('$normalized:${i + 1}');
+        }
+      }
+    }
+    expect(violations, isEmpty, reason: 'Chỉ được khai báo Icons.* trong hue_icons.dart: $violations');
   });
 }

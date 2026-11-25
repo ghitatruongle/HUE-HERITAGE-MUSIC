@@ -23,25 +23,37 @@ class SkeletonLoader extends StatefulWidget {
 class _SkeletonLoaderState extends State<SkeletonLoader>
     with SingleTickerProviderStateMixin {
   AnimationController? _own;
+  CurvedAnimation? _curved;
+  Animation<double>? _opacity;
+  AnimationController? _parentCtrl;
 
-  Animation<double> _animation(BuildContext context) {
+  void _syncAnimation(BuildContext context) {
     final shared = _ShimmerData.maybeOf(context);
+    final AnimationController target;
     if (shared != null) {
       _own?.stop();
-      return CurvedAnimation(parent: shared.controller, curve: Curves.easeInOut);
+      target = shared.controller;
+    } else {
+      final ctrl = _own ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1100),
+      );
+      if (!ctrl.isAnimating) {
+        ctrl.repeat(reverse: true);
+      }
+      target = ctrl;
     }
-    final ctrl = _own ??= AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    );
-    if (!ctrl.isAnimating) {
-      ctrl.repeat(reverse: true);
+    if (!identical(target, _parentCtrl)) {
+      _curved?.dispose();
+      _parentCtrl = target;
+      _curved = CurvedAnimation(parent: target, curve: Curves.easeInOut);
+      _opacity = Tween<double>(begin: 0.35, end: 0.85).animate(_curved!);
     }
-    return CurvedAnimation(parent: ctrl, curve: Curves.easeInOut);
   }
 
   @override
   void dispose() {
+    _curved?.dispose();
     _own?.dispose();
     super.dispose();
   }
@@ -50,6 +62,7 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (MediaQuery.disableAnimationsOf(context)) {
+      _own?.stop();
       return Container(
         margin: widget.margin,
         width: widget.width,
@@ -65,12 +78,13 @@ class _SkeletonLoaderState extends State<SkeletonLoader>
         ),
       );
     }
+    _syncAnimation(context);
     return Container(
       margin: widget.margin,
       width: widget.width,
       height: widget.height,
       child: FadeTransition(
-        opacity: Tween<double>(begin: 0.35, end: 0.85).animate(_animation(context)),
+        opacity: _opacity!,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest,

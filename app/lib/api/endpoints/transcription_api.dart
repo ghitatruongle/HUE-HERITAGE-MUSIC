@@ -47,11 +47,11 @@ class TranscriptionApi {
   }
 
   String midiUrl(String sha, {double bpm = 60}) {
-    return '${dio.options.baseUrl}/api/music/midi/$sha?bpm=${bpm.round()}';
+    return '${dio.options.baseUrl}/api/music/midi/$sha?bpm=${bpm.truncate()}';
   }
 
   String xmlUrl(String sha, {double bpm = 60}) {
-    return '${dio.options.baseUrl}/api/music/musicxml/$sha?bpm=${bpm.round()}';
+    return '${dio.options.baseUrl}/api/music/musicxml/$sha?bpm=${bpm.truncate()}';
   }
 
   Future<String> download(String url, String savePath) async {

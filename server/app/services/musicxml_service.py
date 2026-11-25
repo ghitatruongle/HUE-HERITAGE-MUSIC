@@ -52,30 +52,29 @@ def append_rest(m, dur_div):
 
 
 def split_bars(notes):
-    bars = []
-    cur = []
-    idx = 0
+    by_bar = {}
+    max_bar = 0
     for nt in notes:
-        s = nt["start"]
-        e = nt["end"]
-        while (idx + 1) * BEATS_PER_BAR <= s + 0.000001:
-            bars.append(cur)
-            cur = []
-            idx += 1
+        s = max(0.0, float(nt["start"]))
+        e = float(nt["end"])
+        if e <= s + 0.000001:
+            continue
+        b_idx = int((s + 0.000001) // BEATS_PER_BAR)
         while s < e - 0.000001:
-            edge = (idx + 1) * BEATS_PER_BAR
+            edge = (b_idx + 1) * BEATS_PER_BAR
             cut = e if e <= edge else edge
-            cur.append({"midi": nt["midi"], "pos": s - idx * BEATS_PER_BAR, "dur": cut - s})
+            by_bar.setdefault(b_idx, []).append({
+                "midi": nt["midi"],
+                "pos": max(0.0, s - b_idx * BEATS_PER_BAR),
+                "dur": cut - s,
+            })
+            if b_idx > max_bar:
+                max_bar = b_idx
             s = cut
-            if s >= edge - 0.000001:
-                bars.append(cur)
-                cur = []
-                idx += 1
-    if cur:
-        bars.append(cur)
-    if not bars:
-        bars.append([])
-    return bars
+            b_idx += 1
+    if not by_bar:
+        return [[]]
+    return [by_bar.get(bi, []) for bi in range(max_bar + 1)]
 
 
 def build_musicxml(notes, bpm, title):

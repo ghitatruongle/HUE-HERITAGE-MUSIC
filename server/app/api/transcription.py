@@ -13,7 +13,7 @@ from ..database import crud
 from ..ai import basic_pitch_amt
 from ..services import amt_eval, media_pipeline, user_inflight
 from ..storage import manager
-from ..audio_access import require_audio_access
+from ..audio_access import require_sha_audio_access, sha_viewable
 from .auth import require_user, resolve_bearer_user
 
 router = APIRouter(tags=["transcription"])
@@ -29,6 +29,38 @@ def xml_dir():
     return manager.xml_dir()
 
 
+def _check_heritage_transcribe(heritage_id: str, digest: str, user_id: Optional[str], request: Request):
+    if not heritage_id:
+        return None, 200, ""
+    db = SessionLocal()
+    try:
+        item = crud.get_item(db, heritage_id)
+        if not item:
+            return None, 200, ""
+        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+        if not crud.can_view_item(item, viewer):
+            return None, 404, "not found"
+        if item.sha256 != digest:
+            return None, 400, "sha mismatch with heritage item"
+        return item.id, 200, ""
+    finally:
+        db.close()
+
+
+def _record_transcribe_db(item_id: Optional[str], user_id: Optional[str], digest: str, mid_path: str, mid_size: int, xm_path: str, xm_size: int) -> None:
+    db = SessionLocal()
+    try:
+        if item_id:
+            if not crud.has_audio(db, item_id, "midi", mid_path):
+                crud.create_audio(db, item_id, "midi", mid_path, digest, mid_size)
+            if not crud.has_audio(db, item_id, "musicxml", xm_path):
+                crud.create_audio(db, item_id, "musicxml", xm_path, digest, xm_size)
+        else:
+            crud.record_artifact_owner(db, digest, user_id, kind="transcribe")
+    finally:
+        db.close()
+
+
 @router.post("/music/transcribe")
 async def transcribe(
     request: Request,
@@ -38,20 +70,23 @@ async def transcribe(
     engine: str = Form("basic_pitch"),
     user_id: Optional[str] = Depends(require_user),
 ):
+    if engine not in media_pipeline.VALID_ENGINES:
+        raise HTTPException(status_code=400, detail="bad engine")
     if manager.content_length_exceeds(request, MAX_BYTES):
         raise HTTPException(status_code=413, detail="file too large")
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="file too large")
+    data = await manager.read_upload_limited(file, MAX_BYTES)
     if not math.isfinite(bpm) or bpm < 1 or bpm > 300:
         raise HTTPException(status_code=400, detail="bad bpm")
+    digest = await asyncio.to_thread(manager.sha256_bytes, data)
+    item_id, status_err, detail_err = await asyncio.to_thread(
+        _check_heritage_transcribe, heritage_id, digest, user_id, request
+    )
+    if status_err != 200:
+        raise HTTPException(status_code=status_err, detail=detail_err)
     if not user_inflight.try_acquire(user_inflight.user_key("transcribe", user_id)):
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     cached = False
     try:
-        digest = await asyncio.to_thread(manager.sha256_bytes, data)
         try:
             hit = await asyncio.to_thread(media_pipeline.load_cached_notes, digest, bpm, engine)
         except Exception:
@@ -61,7 +96,7 @@ async def transcribe(
             cached = True
         else:
             try:
-                notes, used, engine_error = await asyncio.to_thread(
+                notes, used, engine_error = await user_inflight.run_dsp(
                     media_pipeline.extract_notes, data, bpm, engine
                 )
             except ValueError:
@@ -71,37 +106,19 @@ async def transcribe(
             await asyncio.to_thread(media_pipeline.save_cached_notes, digest, bpm, engine, notes, used, engine_error)
     finally:
         user_inflight.release(user_inflight.user_key("transcribe", user_id))
-    item = None
-    if heritage_id:
-        db = SessionLocal()
-        try:
-            item = crud.get_item(db, heritage_id)
-            if item:
-                viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
-                if not crud.can_view_item(item, viewer):
-                    raise HTTPException(status_code=404, detail="not found")
-                if item.sha256 != digest:
-                    raise HTTPException(status_code=400, detail="sha mismatch with heritage item")
-        finally:
-            db.close()
     _, stem, mid, xm = await asyncio.to_thread(
         media_pipeline.write_artifacts, data, notes, bpm, file.filename or "hue", digest
     )
-    if item:
-        db = SessionLocal()
-        try:
-            if not crud.has_audio(db, item.id, "midi", str(mid)):
-                crud.create_audio(db, item.id, "midi", str(mid), digest, mid.stat().st_size)
-            if not crud.has_audio(db, item.id, "musicxml", str(xm)):
-                crud.create_audio(db, item.id, "musicxml", str(xm), digest, xm.stat().st_size)
-        finally:
-            db.close()
-    else:
-        db = SessionLocal()
-        try:
-            crud.record_artifact_owner(db, digest, user_id, kind="transcribe")
-        finally:
-            db.close()
+    await asyncio.to_thread(
+        _record_transcribe_db,
+        item_id,
+        user_id,
+        digest,
+        str(mid),
+        mid.stat().st_size,
+        str(xm),
+        xm.stat().st_size,
+    )
     result = {
         "label": LABEL,
         "engine": used,
@@ -139,15 +156,12 @@ def _safe_bpm(bpm: float) -> float:
 
 
 def _sha_viewable(db: Session, request: Request, sha: str) -> bool:
-    from ..audio_access import sha_viewable
-
     return sha_viewable(db, request, sha)
 
 
 @router.get("/music/midi/{sha}")
-def download_midi(sha: str, request: Request, bpm: float = 0.0, db: Session = Depends(get_db), access=Depends(require_audio_access)):
-    if not _sha_viewable(db, request, sha):
-        raise HTTPException(status_code=404, detail="not found")
+def download_midi(sha: str, request: Request, bpm: float = 0.0, db: Session = Depends(get_db)):
+    require_sha_audio_access(request, db, sha)
     path = _find_artifact(midi_dir(), sha, "mid", _safe_bpm(bpm))
     if not path:
         raise HTTPException(status_code=404, detail="not found")
@@ -155,9 +169,8 @@ def download_midi(sha: str, request: Request, bpm: float = 0.0, db: Session = De
 
 
 @router.get("/music/musicxml/{sha}")
-def download_xml(sha: str, request: Request, bpm: float = 0.0, db: Session = Depends(get_db), access=Depends(require_audio_access)):
-    if not _sha_viewable(db, request, sha):
-        raise HTTPException(status_code=404, detail="not found")
+def download_xml(sha: str, request: Request, bpm: float = 0.0, db: Session = Depends(get_db)):
+    require_sha_audio_access(request, db, sha)
     path = _find_artifact(xml_dir(), sha, "musicxml", _safe_bpm(bpm))
     if not path:
         raise HTTPException(status_code=404, detail="not found")
@@ -166,30 +179,31 @@ def download_xml(sha: str, request: Request, bpm: float = 0.0, db: Session = Dep
 
 @router.post("/music/evaluate")
 async def evaluate_transcription(
+    request: Request,
     file: UploadFile = File(...),
     truth: str = Form("[]"),
     bpm: float = Form(60.0),
     engine: str = Form("basic_pitch"),
     user_id: Optional[str] = Depends(require_user),
 ):
+    if engine not in media_pipeline.VALID_ENGINES:
+        raise HTTPException(status_code=400, detail="bad engine")
+    if manager.content_length_exceeds(request, MAX_BYTES):
+        raise HTTPException(status_code=413, detail="file too large")
+    data = await manager.read_upload_limited(file, MAX_BYTES)
+    if not math.isfinite(bpm) or bpm <= 0 or bpm > 300:
+        raise HTTPException(status_code=400, detail="bad bpm")
+    try:
+        items = json.loads(truth)
+    except Exception:
+        raise HTTPException(status_code=400, detail="bad truth")
+    if not amt_eval.valid_truth(items):
+        raise HTTPException(status_code=400, detail="bad truth")
     if not user_inflight.try_acquire(user_inflight.user_key("evaluate", user_id)):
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
-        data = await file.read()
-        if len(data) == 0:
-            raise HTTPException(status_code=400, detail="empty file")
-        if len(data) > MAX_BYTES:
-            raise HTTPException(status_code=413, detail="file too large")
-        if not math.isfinite(bpm) or bpm <= 0 or bpm > 300:
-            raise HTTPException(status_code=400, detail="bad bpm")
         try:
-            items = json.loads(truth)
-        except Exception:
-            raise HTTPException(status_code=400, detail="bad truth")
-        if not amt_eval.valid_truth(items):
-            raise HTTPException(status_code=400, detail="bad truth")
-        try:
-            notes, used, _ = await asyncio.to_thread(
+            notes, used, _ = await user_inflight.run_dsp(
                 media_pipeline.extract_notes, data, bpm, engine
             )
         except ValueError:

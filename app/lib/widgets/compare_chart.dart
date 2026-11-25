@@ -33,9 +33,14 @@ class CompareChart extends StatelessWidget {
     for (var i = 0; i < times.length && i < f0.length; i += step) {
       final t = times[i];
       final f = f0[i];
-      if (t.isFinite && f.isFinite) {
+      if (t.isFinite && f.isFinite && f > 0) {
         out.add(FlSpot(t, f));
+      } else if (out.isNotEmpty && out.last != FlSpot.nullSpot) {
+        out.add(FlSpot.nullSpot);
       }
+    }
+    if (out.isNotEmpty && out.last == FlSpot.nullSpot) {
+      out.removeLast();
     }
     return out;
   }
@@ -49,22 +54,38 @@ class CompareChart extends StatelessWidget {
     final palette = ChartPalette.of(context);
     var peak = 100.0;
     for (final f in sampleF0) {
-      if (f > peak) {
+      if (f.isFinite && f > peak) {
         peak = f;
       }
     }
     for (final f in warpedF0) {
-      if (f > peak) {
+      if (f.isFinite && f > peak) {
         peak = f;
       }
     }
     return Column(
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Text(sampleLabel ?? strings.compareChartSample, style: TextStyle(color: palette.reference, fontWeight: FontWeight.w600, fontSize: 12)),
-            Text(targetLabel ?? strings.compareChartTarget, style: TextStyle(color: palette.user, fontWeight: FontWeight.w600, fontSize: 12)),
+            Expanded(
+              child: Text(
+                sampleLabel ?? strings.compareChartSample,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: palette.reference, fontWeight: FontWeight.w600, fontSize: AppFontSize.sm),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                targetLabel ?? strings.compareChartTarget,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: palette.user, fontWeight: FontWeight.w600, fontSize: AppFontSize.sm),
+              ),
+            ),
           ],
         ),
         SizedBox(

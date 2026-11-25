@@ -36,6 +36,7 @@ class ResponsiveScaffold extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final Widget? floatingActionButton;
+  final int sessionEpoch;
 
   const ResponsiveScaffold({
     super.key,
@@ -43,6 +44,7 @@ class ResponsiveScaffold extends StatefulWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     this.floatingActionButton,
+    this.sessionEpoch = 0,
   });
 
   @override
@@ -50,8 +52,28 @@ class ResponsiveScaffold extends StatefulWidget {
 }
 
 class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
+  final GlobalKey _contentKey = GlobalKey();
   bool _isSidebarCollapsed = false;
   final Set<int> _visitedTabs = {};
+
+  @override
+  void didUpdateWidget(covariant ResponsiveScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final maxLen = widget.destinations.length;
+    if (maxLen <= 0) {
+      _visitedTabs.clear();
+      return;
+    }
+    final clamped = widget.selectedIndex.clamp(0, maxLen - 1);
+    if (oldWidget.sessionEpoch != widget.sessionEpoch) {
+      _visitedTabs
+        ..clear()
+        ..add(clamped);
+    } else {
+      _visitedTabs.removeWhere((i) => i >= maxLen);
+      _visitedTabs.add(clamped);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +81,10 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     final isDesktop = width >= AppBreakpoints.desktop;
     final locale = context.watch<LocaleProvider>();
     final server = context.watch<ServerConfig>();
-    _visitedTabs.add(widget.selectedIndex.clamp(0, widget.destinations.length - 1));
+    if (widget.destinations.isNotEmpty) {
+      _visitedTabs.add(widget.selectedIndex.clamp(0, widget.destinations.length - 1));
+    }
+    final contentArea = _buildContentArea();
 
     return PopScope(
       canPop: widget.selectedIndex == 0,
@@ -74,8 +99,8 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
         children: [
           Expanded(
             child: isDesktop
-                ? _buildDesktopLayout(context, locale, server)
-                : _buildMobileLayout(context, locale, server),
+                ? _buildDesktopLayout(context, locale, server, contentArea)
+                : _buildMobileLayout(contentArea),
           ),
         ],
       ),
@@ -84,10 +109,33 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     );
   }
 
+  Widget _buildContentArea() {
+    if (widget.destinations.isEmpty) {
+      return SizedBox.shrink(key: _contentKey);
+    }
+    final clamped = widget.selectedIndex.clamp(0, widget.destinations.length - 1);
+    return KeyedSubtree(
+      key: _contentKey,
+      child: ContentMaxWidth(
+        maxWidth: 1360,
+        child: _TabMotion(
+          index: clamped,
+          child: _LazyIndexedStack(
+            key: ValueKey<int>(widget.sessionEpoch),
+            index: clamped,
+            visited: _visitedTabs,
+            children: [for (final d in widget.destinations) d.screen],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDesktopLayout(
     BuildContext context,
     LocaleProvider locale,
     ServerConfig server,
+    Widget contentArea,
   ) {
     final sidebarBg = Theme.of(context).colorScheme.surfaceContainerHighest;
     final borderColor = Theme.of(context).colorScheme.outline;
@@ -95,7 +143,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     return Row(
       children: [
         AnimatedContainer(
-          duration: AppMotion.base,
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppMotion.base,
           width: _isSidebarCollapsed ? 72 : 250,
           decoration: BoxDecoration(
             color: sidebarBg,
@@ -106,7 +154,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: _isSidebarCollapsed ? 12 : 16,
-                  vertical: AppSpacing.xl,
+                  vertical: AppSpacing.sm,
                 ),
                 child: _isSidebarCollapsed
                     ? Column(
@@ -167,7 +215,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 14,
+                                    fontSize: AppFontSize.lg,
                                     fontFamily: AppTheme.displayFontFamily,
                                     color: Theme.of(context).colorScheme.onSurface,
                                   ),
@@ -175,7 +223,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                                 Text(
                                   locale.strings.sidebarTagline,
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: AppFontSize.xs,
                                     color: AppTheme.goldReadable(context),
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -200,7 +248,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                         itemBuilder: (context, index) => _collapsedNavTile(context, index),
                       )
                     : ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                         children: _groupedNavRows(context, locale, collapsed: false),
                       ),
               ),
@@ -208,7 +256,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: _isSidebarCollapsed ? 8 : 14,
-                  vertical: AppSpacing.md,
+                  vertical: AppSpacing.xs,
                 ),
                 child: _isSidebarCollapsed
                     ? Tooltip(
@@ -218,12 +266,12 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                           height: 8,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+                            color: server.hasServer ? AppTheme.emeraldReadable(context) : AppTheme.statusReadable(context, AppStatusKind.danger),
                           ),
                         ),
                       )
                     : Container(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -236,14 +284,14 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                               height: 8,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: server.hasServer ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+                                color: server.hasServer ? AppTheme.emeraldReadable(context) : AppTheme.statusReadable(context, AppStatusKind.danger),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 server.hasServer ? locale.strings.serverOnline : locale.strings.serverOffline,
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                style: TextStyle(fontSize: AppFontSize.xs, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -256,17 +304,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
           ),
         ),
         Expanded(
-          child: ContentMaxWidth(
-            maxWidth: 1360,
-            child: _TabMotion(
-              index: widget.selectedIndex.clamp(0, widget.destinations.length - 1),
-              child: _LazyIndexedStack(
-                index: widget.selectedIndex.clamp(0, widget.destinations.length - 1),
-                visited: _visitedTabs,
-                children: [for (final d in widget.destinations) d.screen],
-              ),
-            ),
-          ),
+          child: contentArea,
         ),
       ],
     );
@@ -292,7 +330,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       if (indices.isEmpty) continue;
       rows.add(
         Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.sm, AppSpacing.xs),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.sm, AppSpacing.xs),
           child: Text(
             groupLabel.toUpperCase(),
             maxLines: 1,
@@ -319,27 +357,33 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     final label = _resolveNavLabel(item.labelKey, context.read<LocaleProvider>());
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Tooltip(
-        message: label,
-        preferBelow: false,
-        child: Material(
-          color: isSelected
-              ? AppTheme.primaryPurple.withValues(alpha: isDark ? 0.3 : 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: label,
+        child: Tooltip(
+          message: label,
+          preferBelow: false,
+          child: Material(
+            color: isSelected
+                ? AppTheme.primaryPurple.withValues(alpha: isDark ? 0.3 : 0.15)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(AppRadius.md),
-            onTap: () => widget.onDestinationSelected(index),
-            child: Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              child: Icon(
-                isSelected ? item.selectedIcon : item.icon,
-                size: 22,
-                color: isSelected
-                    ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              onTap: () => widget.onDestinationSelected(index),
+              child: Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                child: HueIcon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  size: 22,
+                  color: isSelected
+                      ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                  decorative: true,
+                ),
               ),
             ),
           ),
@@ -356,25 +400,31 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     final label = _resolveNavLabel(item.labelKey, locale);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-      child: Material(
-        color: isSelected
-            ? AppTheme.primaryPurple.withValues(alpha: isDark ? 0.25 : 0.15)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: InkWell(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        child: Material(
+          color: isSelected
+              ? AppTheme.primaryPurple.withValues(alpha: isDark ? 0.25 : 0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.md),
-          onTap: () => widget.onDestinationSelected(index),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-            child: Row(
-              children: [
-                Icon(
-                  isSelected ? item.selectedIcon : item.icon,
-                  size: 20,
-                  color: isSelected
-                      ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            onTap: () => widget.onDestinationSelected(index),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                child: Row(
+                children: [
+                  HueIcon(
+                    isSelected ? item.selectedIcon : item.icon,
+                    size: 20,
+                    color: isSelected
+                        ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    decorative: true,
+                  ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Row(
@@ -386,7 +436,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                            fontSize: 13,
+                            fontSize: AppFontSize.md,
                             color: isSelected
                                 ? (isDark ? AppTheme.primaryPurpleGlow : AppTheme.primaryPurple)
                                 : Theme.of(context).colorScheme.onSurface,
@@ -402,7 +452,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                             borderRadius: BorderRadius.circular(AppRadius.xs),
                             border: Border.all(color: AppTheme.goldReadable(context), width: 0.8),
                           ),
-                          child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 11, fontWeight: FontWeight.bold)),
+                          child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: AppFontSize.xs, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ],
@@ -418,6 +468,8 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                     ),
                   ),
               ],
+              ),
+              ),
             ),
           ),
         ),
@@ -425,23 +477,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
     );
   }
 
-  Widget _buildMobileLayout(
-    BuildContext context,
-    LocaleProvider locale,
-    ServerConfig server,
-  ) {
-    return ContentMaxWidth(
-      maxWidth: 1360,
-      child: _TabMotion(
-        index: widget.selectedIndex.clamp(0, widget.destinations.length - 1),
-        child: _LazyIndexedStack(
-          index: widget.selectedIndex.clamp(0, widget.destinations.length - 1),
-          visited: _visitedTabs,
-          children: [for (final d in widget.destinations) d.screen],
-        ),
-      ),
-    );
-  }
+  Widget _buildMobileLayout(Widget contentArea) => contentArea;
 
   void _showAllDestinationsSheet(BuildContext context, LocaleProvider locale) {
     showModalBottomSheet<void>(
@@ -534,10 +570,12 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
   Widget _sheetTile(BuildContext context, int i, LocaleProvider locale) {
     final item = widget.destinations[i];
     final isSelected = widget.selectedIndex == i;
+    final primary = Theme.of(context).colorScheme.primary;
     return ListTile(
-      leading: Icon(
+      leading: HueIcon(
         isSelected ? item.selectedIcon : item.icon,
-        color: isSelected ? AppTheme.primaryPurple : null,
+        color: isSelected ? primary : null,
+        decorative: true,
       ),
       title: Row(
         children: [
@@ -546,7 +584,7 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
               _resolveNavLabel(item.labelKey, locale),
               style: TextStyle(
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? AppTheme.primaryPurple : null,
+                color: isSelected ? primary : null,
               ),
             ),
           ),
@@ -559,13 +597,13 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
                 borderRadius: BorderRadius.circular(AppRadius.xs),
                 border: Border.all(color: AppTheme.goldReadable(context), width: 0.8),
               ),
-              child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 11, fontWeight: FontWeight.bold)),
+              child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: AppFontSize.xs, fontWeight: FontWeight.bold)),
             ),
           ],
         ],
       ),
       trailing: isSelected
-          ? const HueIcon(HueIcons.check, color: AppTheme.primaryPurple, size: 20)
+          ? HueIcon(HueIcons.check, color: primary, size: 20)
           : null,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
       onTap: () {
@@ -583,8 +621,8 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
         destinations: [
           for (final item in widget.destinations)
             NavigationDestination(
-              icon: Icon(item.icon),
-              selectedIcon: Icon(item.selectedIcon),
+              icon: HueIcon(item.icon, decorative: true),
+              selectedIcon: HueIcon(item.selectedIcon, decorative: true),
               label: _resolveNavLabel(item.labelKey, locale),
             ),
         ],
@@ -618,8 +656,8 @@ class _ResponsiveScaffoldState extends State<ResponsiveScaffold> {
       destinations: [
         for (final i in topIndices)
           NavigationDestination(
-            icon: Icon(widget.destinations[i].icon),
-            selectedIcon: Icon(widget.destinations[i].selectedIcon),
+            icon: HueIcon(widget.destinations[i].icon, decorative: true),
+            selectedIcon: HueIcon(widget.destinations[i].selectedIcon, decorative: true),
             label: _resolveNavLabel(widget.destinations[i].labelKey, locale),
           ),
         NavigationDestination(
@@ -673,7 +711,7 @@ class _TabMotionState extends State<_TabMotion> with SingleTickerProviderStateMi
   void didUpdateWidget(covariant _TabMotion oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.index != widget.index) {
-      if (MediaQuery.of(context).disableAnimations) {
+      if (MediaQuery.disableAnimationsOf(context)) {
         _ctrl.stop();
         _ctrl.value = 1.0;
       } else {
@@ -713,6 +751,7 @@ class _LazyIndexedStack extends StatelessWidget {
   final List<Widget> children;
 
   const _LazyIndexedStack({
+    super.key,
     required this.index,
     required this.visited,
     required this.children,

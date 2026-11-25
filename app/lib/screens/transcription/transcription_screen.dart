@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ import '../../widgets/sheet_music_view.dart';
 import '../../widgets/waveform_view.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/hue_icons.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class TranscriptionScreen extends StatefulWidget {
   const TranscriptionScreen({super.key});
@@ -39,20 +41,40 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   Uint8List? _pickedBytes;
   WaveformData? _waveform;
   bool _busy = false;
+  bool _picking = false;
+  String? _savingKind;
   TranscribeResult? _result;
   String? _error;
+  VoidCallback? _retryAction;
   double _progress = 0;
 
+  bool get _saving => _savingKind != null;
+
   Future<void> _pickFile() async {
-    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
-    final file = picked?.files.single;
-    if (file == null) return;
-    Uint8List? bytes = file.bytes;
-    if (bytes == null && !kIsWeb && file.path != null) {
-      bytes = await File(file.path!).readAsBytes();
+    if (_busy || _picking || _saving) return;
+    setState(() => _picking = true);
+    try {
+      final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
+      final file = (picked == null || picked.files.isEmpty) ? null : picked.files.first;
+      if (file == null) return;
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && !kIsWeb && file.path != null) {
+        bytes = await XFile(file.path!).readAsBytes();
+      }
+      if (!mounted || bytes == null) return;
+      await _applyPicked(bytes, file.name);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = ApiClient.describe(e);
+          _retryAction = _pickFile;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _picking = false);
+      }
     }
-    if (bytes == null) return;
-    await _applyPicked(bytes, file.name);
   }
 
   Future<void> _applyPicked(Uint8List bytes, String label) async {
@@ -67,33 +89,54 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       _sourceLabel = label;
       _result = null;
       _error = null;
+      _retryAction = null;
     });
   }
 
   Future<void> _useRecording() async {
     final strings = context.read<LocaleProvider>().strings;
     final media = context.read<SessionMedia>();
-    if (media.recordingBytes == null) {
-      setState(() => _error = strings.transcribeNoTake);
+    Uint8List? bytes = media.recordingBytes;
+    if (bytes == null && media.recordingPath != null && media.recordingPath!.isNotEmpty) {
+      try {
+        bytes = await XFile(media.recordingPath!).readAsBytes();
+      } catch (_) {
+        bytes = null;
+      }
+    }
+    if (!mounted) return;
+    if (bytes == null || bytes.isEmpty) {
+      setState(() {
+        _error = strings.transcribeNoTake;
+        _retryAction = null;
+      });
       return;
     }
-    await _applyPicked(media.recordingBytes!, strings.transcribeRecordedSource);
+    await _applyPicked(bytes, strings.transcribeRecordedSource);
   }
 
   Future<void> _run() async {
+    if (_busy || _picking || _saving) return;
     final strings = context.read<LocaleProvider>().strings;
     final bpm = double.tryParse(_bpm.text.trim()) ?? 0;
     if (bpm <= 0 || bpm > 300) {
-      setState(() => _error = strings.transcribeBpmRange);
+      setState(() {
+        _error = strings.transcribeBpmRange;
+        _retryAction = null;
+      });
       return;
     }
     if (_pickedBytes == null) {
-      setState(() => _error = strings.transcribePickFile);
+      setState(() {
+        _error = strings.transcribePickFile;
+        _retryAction = null;
+      });
       return;
     }
     setState(() {
       _busy = true;
       _error = null;
+      _retryAction = null;
       _progress = 0;
       _result = null;
     });
@@ -126,7 +169,10 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = ApiClient.describe(e));
+        setState(() {
+          _error = ApiClient.describe(e);
+          _retryAction = _run;
+        });
       }
     } finally {
       if (mounted) {
@@ -136,15 +182,24 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   }
 
   Future<void> _save(bool midi) async {
+    if (_busy || _saving) return;
     final strings = context.read<LocaleProvider>().strings;
     final r = _result;
     if (r == null) {
       return;
     }
     if (r.sha.isEmpty || r.sha.length < 8) {
-      setState(() => _error = strings.transcribeNoSha);
+      setState(() {
+        _error = strings.transcribeNoSha;
+        _retryAction = null;
+      });
       return;
     }
+    setState(() {
+      _savingKind = midi ? 'midi' : 'xml';
+      _error = null;
+      _retryAction = null;
+    });
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final api = TranscriptionApi(dio);
@@ -205,7 +260,14 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = ApiClient.describe(e));
+        setState(() {
+          _error = ApiClient.describe(e);
+          _retryAction = () => _save(midi);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _savingKind = null);
       }
     }
   }
@@ -252,12 +314,12 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                         runSpacing: 8,
                         children: [
                           FilledButton.icon(
-                            onPressed: _busy ? null : _pickFile,
+                            onPressed: (_busy || _picking || _saving) ? null : _pickFile,
                             icon: const HueIcon(HueIcons.folderOpen),
                             label: Text(strings.transcribePickBtn),
                           ),
                           OutlinedButton.icon(
-                            onPressed: _busy ? null : _useRecording,
+                            onPressed: (_busy || _picking || _saving) ? null : _useRecording,
                             icon: const HueIcon(HueIcons.mic),
                             label: Text(strings.transcribeUseLast),
                           ),
@@ -304,7 +366,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                       CommonButton(
                         label: strings.transcribeRunBtn,
                         loading: _busy,
-                        onPressed: _run,
+                        onPressed: (_picking || _saving) ? null : _run,
                       ),
                     ],
                   ),
@@ -313,10 +375,15 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
               if (_busy) ...[
                 const SizedBox(height: AppSpacing.md),
                 LinearProgressIndicator(value: _progress > 0 ? _progress : null),
+                const SizedBox(height: AppSpacing.md),
+                const SkeletonLoader(height: 180),
               ],
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                ErrorPanel(message: _error!),
+                ErrorPanel(
+                  message: _error!,
+                  onRetry: (_busy || _picking || _saving) ? null : _retryAction,
+                ),
               ],
               if (_result != null) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -337,13 +404,15 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                       label: strings.transcribeMidiBtn,
                       icon: HueIcons.audioFile,
                       variant: HueButtonVariant.gold,
-                      onPressed: () => _save(true),
+                      loading: _savingKind == 'midi',
+                      onPressed: (_saving || _busy) ? null : () => _save(true),
                     ),
                     HueButton(
                       label: strings.transcribeXmlBtn,
                       variant: HueButtonVariant.gold,
                       size: HueButtonSize.small,
-                      onPressed: () => _save(false),
+                      loading: _savingKind == 'xml',
+                      onPressed: (_saving || _busy) ? null : () => _save(false),
                     ),
                   ],
                 ),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import threading
 import time
@@ -18,7 +19,7 @@ from ..database.session import get_db
 from ..database import crud
 from ..services import generator_service, heritage_service
 from ..storage import manager
-from ..audio_access import require_audio_access, sign_path, HERITAGE_AUDIO_RE
+from ..audio_access import require_audio_access, sha_access_scope, sha_viewable, sign_path, HERITAGE_AUDIO_RE
 from .auth import require_user, resolve_bearer_user
 
 router = APIRouter(tags=["music_gen"])
@@ -29,7 +30,7 @@ GENERATED_NAME = re.compile(r"^[A-Za-z0-9_-]{1,80}\.mp3$")
 def _validate_generation(duration: int, strength: float) -> None:
     if duration < 10 or duration > 300:
         raise HTTPException(status_code=400, detail="bad duration")
-    if strength < 0 or strength > 1:
+    if not math.isfinite(strength) or strength < 0 or strength > 1:
         raise HTTPException(status_code=400, detail="bad strength")
 
 
@@ -50,6 +51,7 @@ PLAYABLE_SUFFIXES = (
 )
 
 LESSON_SAMPLE_RE = re.compile(r"^/api/lessons/([A-Za-z0-9-]+)/sections/(\d+)/sample\.wav$")
+SHA_PLAYABLE_RE = re.compile(r"^/api/music/(?:restored|midi|musicxml)/([a-fA-F0-9]{64})$")
 
 
 @router.get("/music/play-url")
@@ -60,9 +62,10 @@ def issue_play_url(
     db: Session = Depends(get_db),
 ):
     cleaned = (path or "").split("?")[0].strip()
+    is_sha_path = SHA_PLAYABLE_RE.match(cleaned) is not None
     if (
         not cleaned.startswith(PLAYABLE_PREFIXES)
-        or not cleaned.endswith(PLAYABLE_SUFFIXES)
+        or (not is_sha_path and not cleaned.endswith(PLAYABLE_SUFFIXES))
         or ".." in cleaned
         or "%" in cleaned
         or " " in cleaned
@@ -79,18 +82,31 @@ def issue_play_url(
         scope = f"vis:{getattr(item, 'visibility', None) or 'public'}"
     for prefix in ("/api/music/midi/", "/api/music/musicxml/", "/api/music/restored/"):
         if cleaned.startswith(prefix):
-            from ..audio_access import sha_viewable
-
             sha = cleaned[len(prefix):].split("/")[0]
-            if not sha_viewable(db, request, sha):
+            if not manager.is_sha256(sha):
+                raise HTTPException(status_code=400, detail="bad path")
+            viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+            if not sha_viewable(db, request, sha, viewer=viewer):
                 raise HTTPException(status_code=404, detail="not found")
+            scope = sha_access_scope(db, sha)
             break
+    if cleaned.startswith("/api/lessons/practice-midi/"):
+        midi_name = cleaned[len("/api/lessons/practice-midi/"):]
+        ps = crud.get_practice_session_by_midi(db, midi_name)
+        if ps is not None and ps.user_id:
+            viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+            if viewer is None or (viewer.id != ps.user_id and not crud.is_admin_user(viewer)):
+                raise HTTPException(status_code=404, detail="not found")
+            scope = f"pm:{ps.user_id}"
+        elif ps is None and settings.auth_required:
+            raise HTTPException(status_code=404, detail="not found")
     if cleaned.startswith("/api/music/generated/"):
         gen_task = crud.get_task(db, cleaned.split("/")[-1].split(".")[0])
         if gen_task is not None and gen_task.user_id:
             viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
             if viewer is None or (viewer.id != gen_task.user_id and not crud.is_admin_user(viewer)):
                 raise HTTPException(status_code=404, detail="not found")
+            scope = f"gen:{gen_task.user_id}"
     token = sign_path(cleaned, scope=scope)
     return {"url": token["url"], "expires": token["expires"]}
 
@@ -300,7 +316,7 @@ def cancel_gen_task(
         raise HTTPException(status_code=404, detail="not found")
     if settings.auth_required and task.get("user_id") and task["user_id"] != user_id:
         caller = crud.get_user_by_id(db, user_id) if user_id else None
-        if not caller or (caller.role or "user") != "admin":
+        if not caller or not crud.is_admin_user(caller):
             raise HTTPException(status_code=404, detail="not found")
     task = generator_service.cancel_task(task_id)
     if not task:
@@ -317,16 +333,11 @@ _SSE_LIMIT_PER_CLIENT = 8
 
 @router.get("/music/task/{task_id}/events")
 async def gen_task_events(request: Request, task_id: str):
-    user_id = None
-    if settings.auth_required:
-        from ..database.session import SessionLocal
+    def _authorize_events():
+        uid = require_user(request) if settings.auth_required else None
+        return uid, generator_service.get_task(task_id)
 
-        db = SessionLocal()
-        try:
-            user_id = require_user(request)
-        finally:
-            db.close()
-    task = generator_service.get_task(task_id)
+    user_id, task = await asyncio.to_thread(_authorize_events)
     if not task:
         raise HTTPException(status_code=404, detail="not found")
     if settings.auth_required and task.get("user_id") and task["user_id"] != user_id:

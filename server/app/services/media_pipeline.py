@@ -1,9 +1,14 @@
 import json
+import os
+import tempfile
+from pathlib import Path
 
 from ..ai import basic_pitch_amt as bp_amt
 from ..audio_dsp import post_quantizer
 from ..storage import manager
 from . import amt_service, midi_service, musicxml_service, pitch_service, restoration_service
+
+VALID_ENGINES = ("basic_pitch", "dsp")
 
 
 def extract_notes(data, bpm, engine="basic_pitch"):
@@ -28,28 +33,46 @@ def extract_notes(data, bpm, engine="basic_pitch"):
     return post_quantizer.quantize(notes, bpm), used, engine_error
 
 
-def write_artifacts(data, notes, bpm, source_stem, digest=None):
-    import os
+def _atomic_write_bytes(dest: Path, data: bytes) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(dest.parent), suffix=".part")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dest)
+    except Exception:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
+
+def write_artifacts(data, notes, bpm, source_stem, digest=None):
     if digest is None:
         digest = manager.sha256_bytes(data)
     stem = f"{digest}_{int(bpm)}"
     mid = manager.midi_dir() / (stem + ".mid")
-    mid_part = manager.midi_dir() / (stem + ".mid.part")
-    mid_part.write_bytes(midi_service.write_midi(notes, bpm))
-    os.replace(mid_part, mid)
+    _atomic_write_bytes(mid, midi_service.write_midi(notes, bpm))
     xm = manager.xml_dir() / (stem + ".musicxml")
-    xm_part = manager.xml_dir() / (stem + ".musicxml.part")
-    xm_part.write_text(musicxml_service.build_musicxml(notes, bpm, source_stem), encoding="utf-8")
-    os.replace(xm_part, xm)
+    _atomic_write_bytes(xm, musicxml_service.build_musicxml(notes, bpm, source_stem).encode("utf-8"))
     return digest, stem, mid, xm
 
 
 def notes_cache_path(digest, bpm, engine=""):
+    if not manager.is_sha256(str(digest)):
+        raise ValueError("bad digest")
+    if engine and engine not in VALID_ENGINES:
+        raise ValueError("bad engine")
     tag = f"{bpm:g}"
     if engine:
         tag += f"_{engine}"
-    return manager.midi_dir() / f"{digest}_{tag}.notes.json"
+    root = manager.midi_dir().resolve()
+    path = (root / f"{digest}_{tag}.notes.json").resolve()
+    if not path.is_relative_to(root):
+        raise ValueError("bad cache path")
+    return path
 
 
 def load_cached_notes(digest, bpm, engine):
@@ -99,6 +122,6 @@ def restore_audio(data):
     digest = manager.sha256_bytes(data)
     dest = manager.restored_dir() / (digest + "_restored.wav")
     if not dest.exists():
-        dest.write_bytes(out)
+        _atomic_write_bytes(dest, out)
     report["sha"] = digest
     return report, dest

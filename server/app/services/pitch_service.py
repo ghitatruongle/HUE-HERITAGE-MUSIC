@@ -35,7 +35,7 @@ def resample_16k(samples, sr):
             b = samples[k + 1] if k + 1 < len(samples) else a
             out.append(a + (b - a) * frac)
         return out, UNIFORM_SR
-    arr = np.asarray(samples, dtype=np.float64)
+    arr = np.nan_to_num(np.asarray(samples, dtype=np.float64), nan=0.0, posinf=1.0, neginf=-1.0)
     n_out = int(round(len(arr) * UNIFORM_SR / sr))
     if n_out <= 0:
         return [], UNIFORM_SR
@@ -46,7 +46,10 @@ def resample_16k(samples, sr):
         from scipy.signal import resample_poly as _resample_poly
 
         g = _math.gcd(UNIFORM_SR, int(sr))
-        out = _resample_poly(arr, UNIFORM_SR // g, int(sr) // g)
+        up = UNIFORM_SR // g
+        down = int(sr) // g
+        if max(up, down) <= 1000:
+            out = _resample_poly(arr, up, down)
     except Exception:
         out = None
     if out is None:
@@ -140,21 +143,21 @@ def _decode_via_librosa(data: bytes, max_seconds: Optional[float] = MAX_SECONDS)
         raise ValueError("wav decode failed")
     if sr is None or sr <= 0 or samples is None or len(samples) == 0:
         raise ValueError("bad wav header")
-    arr = np.asarray(samples, dtype=np.float64)
+    arr = np.nan_to_num(np.asarray(samples, dtype=np.float64), nan=0.0, posinf=1.0, neginf=-1.0)
     if max_seconds is not None and max_seconds > 0:
         limit = int(sr * max_seconds)
         arr = arr[:limit]
     return arr, int(sr)
 
 
-def estimate_f0_reference(samples, sr, frame=FRAME, hop=HOP):
-    if sr <= 0 or frame <= 0 or hop <= 0:
+def estimate_f0_reference(samples, sr, frame=FRAME, hop=HOP, fmin=FMIN):
+    if sr <= 0 or frame <= 0 or hop <= 0 or fmin <= 0:
         return [], []
     times = []
     f0s = []
     n = len(samples)
     lmin = max(1, int(sr / FMAX))
-    lmax = int(sr / FMIN)
+    lmax = int(sr / fmin)
     need = 2 * lmax + 1
     if frame < need:
         frame = 1
@@ -227,26 +230,32 @@ def estimate_f0_reference(samples, sr, frame=FRAME, hop=HOP):
 
 
 def _octave_smooth(f0s, window=5, passes=2, max_cents=700.0):
-    if np is None or not f0s:
-        return f0s
+    if np is None or len(f0s) == 0:
+        return list(f0s) if f0s is not None else []
     arr = np.asarray(f0s, dtype=np.float64)
     voiced = arr > 0
     if int(voiced.sum()) < 5:
-        return f0s
+        return [round(float(v), 1) for v in arr]
     half = window // 2
-    lo_edge = float(arr[0])
-    hi_edge = float(arr[-1])
     for _ in range(passes):
         stacks = [arr]
         for off in range(1, half + 1):
-            stacks.append(np.concatenate((arr[off:], np.full(off, lo_edge))))
-            stacks.append(np.concatenate((np.full(off, hi_edge), arr[:-off])))
-        M = np.median(np.stack(stacks), axis=0)
+            if off >= len(arr):
+                stacks.append(np.full_like(arr, np.nan))
+                stacks.append(np.full_like(arr, np.nan))
+            else:
+                stacks.append(np.concatenate((arr[off:], np.full(off, np.nan))))
+                stacks.append(np.concatenate((np.full(off, np.nan), arr[:-off])))
+        M = np.nanmedian(np.stack(stacks), axis=0)
         safe = np.where(M > 0, M, 1.0)
         ratio = np.where(voiced & (M > 0), arr / safe, 1.0)
         cents = 1200 * np.log2(np.where(ratio > 0, ratio, 1.0))
         fix = voiced & (M > 0) & (np.abs(cents) > max_cents)
-        arr = np.where(fix, M, arr)
+        folded = np.where(cents > 0, arr * 0.5, arr * 2.0)
+        fold_ratio = np.where(voiced & (M > 0), folded / safe, 1.0)
+        fold_cents = np.abs(1200 * np.log2(np.where(fold_ratio > 0, fold_ratio, 1.0)))
+        replacement = np.where(fold_cents <= 400.0, folded, M)
+        arr = np.where(fix, replacement, arr)
     return [round(float(v), 1) for v in arr]
 
 
@@ -274,13 +283,13 @@ def smooth_series(f0s, window=7):
     return out
 
 
-def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
-    if np is None or sr <= 0 or frame <= 0 or hop <= 0:
-        return estimate_f0_reference(samples, sr, frame=frame, hop=hop)
-    arr = np.asarray(samples, dtype=np.float64)
+def estimate_f0(samples, sr, frame=FRAME, hop=HOP, fmin=FMIN):
+    if np is None or sr <= 0 or frame <= 0 or hop <= 0 or fmin <= 0:
+        return estimate_f0_reference(samples, sr, frame=frame, hop=hop, fmin=fmin)
+    arr = np.nan_to_num(np.asarray(samples, dtype=np.float64), nan=0.0, posinf=1.0, neginf=-1.0)
     n = len(arr)
     lmin = max(1, int(sr / FMAX))
-    lmax = int(sr / FMIN)
+    lmax = int(sr / fmin)
     need = 2 * lmax + 1
     if frame < need:
         frame = 1
@@ -289,24 +298,30 @@ def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
     if n < frame:
         return [], []
 
-    starts = range(0, n - frame + 1, hop)
-    times = [round(p / sr, 3) for p in starts]
-    if len(times) >= MAX_FRAMES:
-        starts = list(starts)[:MAX_FRAMES]
-        times = times[:MAX_FRAMES]
-
-    lags = np.arange(lmin, min(lmax + 1, frame))
-    if lags.size == 0 or len(times) == 0:
+    starts = np.arange(0, n - frame + 1, hop, dtype=np.int64)
+    if starts.size >= MAX_FRAMES:
+        starts = starts[:MAX_FRAMES]
+    times = [round(int(p) / sr, 3) for p in starts]
+    if len(times) == 0:
         return [], []
 
+    lags = np.arange(lmin, min(lmax + 1, frame))
+    if lags.size == 0:
+        return [], []
+
+    cs = np.empty(n + 1, dtype=np.float64)
+    cs[0] = 0.0
+    np.cumsum(arr * arr, out=cs[1:])
+    energy = (cs[starts + frame] - cs[starts]) / float(frame)
+    del cs, starts
+
     windows = np.lib.stride_tricks.sliding_window_view(arr, frame)[::hop][: len(times)]
-    energy = np.mean(windows * windows, axis=1)
 
     fft_size = 1
     while fft_size < 2 * frame:
         fft_size <<= 1
     norms = np.empty((len(times), lags.size), dtype=np.float64)
-    batch = 512
+    batch = 64
     for lo in range(0, len(times), batch):
         hi = min(lo + batch, len(times))
         chunk = np.ascontiguousarray(windows[lo:hi])
@@ -314,6 +329,7 @@ def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
         ac = np.fft.irfft(spec * np.conj(spec), fft_size, axis=1)[:, :frame].real
         denom = (frame - lags)[None, :] * (energy[lo:hi, None] + 1e-9)
         norms[lo:hi] = ac[:, lags] / denom
+        del chunk, spec, ac, denom
     del windows
 
     best = np.zeros(len(times))
@@ -355,5 +371,6 @@ def estimate_f0(samples, sr, frame=FRAME, hop=HOP):
     lag = lmin + idx + delta
     lag = np.maximum(lag, 1.0)
     f0 = np.where(voiced & (lag >= 1.0), sr / lag, 0.0)
-    f0s = _octave_smooth([round(float(v), 1) for v in f0])
+    del norms
+    f0s = _octave_smooth(np.round(f0, 1))
     return times, f0s

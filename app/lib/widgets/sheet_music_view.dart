@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
@@ -101,6 +104,7 @@ class _PianoRollPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0 || maxTime <= 0) return;
     final grid = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
@@ -115,11 +119,12 @@ class _PianoRollPainter extends CustomPainter {
     }
     final paint = Paint()..color = color.withValues(alpha: 0.85);
     final span = (maxMidi - minMidi).clamp(1, 1 << 30).toDouble();
+    final minW = size.width * 0.01;
     for (final n in notes) {
       final y0 = (maxMidi - n.midi) / span * size.height;
       final y1 = (maxMidi - n.midi + 1) / span * size.height;
-      final x0 = n.start / maxTime * size.width;
-      final x1 = (n.end / maxTime).clamp(x0 / size.width + 0.01, 1.0) * size.width;
+      final x0 = (n.start / maxTime * size.width).clamp(0.0, size.width).toDouble();
+      final x1 = math.min(size.width, math.max(x0 + minW, n.end / maxTime * size.width));
       canvas.drawRRect(
         RRect.fromRectAndRadius(Rect.fromLTRB(x0, y0, x1, y1), const Radius.circular(AppRadius.xs)),
         paint,
@@ -128,5 +133,12 @@ class _PianoRollPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _PianoRollPainter old) => old.notes != notes;
+  bool shouldRepaint(covariant _PianoRollPainter old) =>
+      old.notes.length != notes.length ||
+      !listEquals(old.notes, notes) ||
+      old.minMidi != minMidi ||
+      old.maxMidi != maxMidi ||
+      old.maxTime != maxTime ||
+      old.color != color ||
+      old.gridColor != gridColor;
 }

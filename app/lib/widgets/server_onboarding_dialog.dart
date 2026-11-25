@@ -1,4 +1,3 @@
-// Onboarding desktop: lần chạy đầu chưa có máy chủ → hiện hộp Kết nối máy chủ.
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
@@ -26,6 +25,7 @@ class _ServerOnboardingDialogState extends State<ServerOnboardingDialog> {
   }
 
   Future<void> _connect() async {
+    if (_saving) return;
     final strings = context.read<LocaleProvider>().strings;
     final url = _ctrl.text.trim();
     if (url.isEmpty) {
@@ -60,10 +60,11 @@ class _ServerOnboardingDialogState extends State<ServerOnboardingDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(strings.onboardingHint, style: const TextStyle(fontSize: 12)),
+          Text(strings.onboardingHint, style: const TextStyle(fontSize: AppFontSize.sm)),
           const SizedBox(height: 12),
           TextField(
             controller: _ctrl,
+            enabled: !_saving,
             decoration: InputDecoration(
               labelText: strings.onboardingUrlLabel,
               hintText: 'http://192.0.2.10:8000',
@@ -73,7 +74,7 @@ class _ServerOnboardingDialogState extends State<ServerOnboardingDialog> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: AppTheme.statusDanger, fontSize: 12)),
+            Text(_error!, style: TextStyle(color: AppTheme.statusReadable(context, AppStatusKind.danger), fontSize: AppFontSize.sm)),
           ],
         ],
       ),
@@ -84,7 +85,9 @@ class _ServerOnboardingDialogState extends State<ServerOnboardingDialog> {
         ),
         FilledButton(
           onPressed: _saving ? null : _connect,
-          child: Text(strings.onboardingConnect),
+          child: _saving
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(strings.onboardingConnect),
         ),
       ],
     );

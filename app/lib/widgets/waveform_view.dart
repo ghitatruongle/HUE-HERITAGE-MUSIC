@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -60,12 +59,13 @@ class WaveformData {
 
 class WaveformView extends StatelessWidget {
   final WaveformData data;
-  final Color color;
+  final Color? color;
 
-  const WaveformView({super.key, required this.data, this.color = AppTheme.primaryPurple});
+  const WaveformView({super.key, required this.data, this.color});
 
   @override
   Widget build(BuildContext context) {
+    final waveColor = color ?? Theme.of(context).colorScheme.primary;
     return Container(
       height: 96,
       decoration: BoxDecoration(
@@ -75,7 +75,7 @@ class WaveformView extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
       child: data.peaks.isEmpty
           ? Center(child: Text(context.watch<LocaleProvider>().strings.waveformEmpty))
-          : CustomPaint(size: Size.infinite, painter: _WavePainter(peaks: data.peaks, color: color)),
+          : CustomPaint(size: Size.infinite, painter: _WavePainter(peaks: data.peaks, color: waveColor)),
     );
   }
 }
@@ -106,5 +106,6 @@ class _WavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WavePainter old) => old.peaks != peaks;
+  bool shouldRepaint(covariant _WavePainter old) =>
+      !listEquals(old.peaks, peaks) || old.color != color;
 }

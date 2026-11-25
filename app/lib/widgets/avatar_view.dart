@@ -60,6 +60,12 @@ class AvatarView extends StatefulWidget {
     }
   }
 
+  static void clearCache() {
+    _cache.clear();
+    _negativeAt.clear();
+    _inflight.clear();
+  }
+
   @override
   State<AvatarView> createState() => _AvatarViewState();
 }
@@ -107,6 +113,7 @@ class _AvatarViewState extends State<AvatarView> {
           bytes,
           fit: BoxFit.cover,
           gaplessPlayback: true,
+          errorBuilder: (context, _, __) => _fallback(context),
         ),
       ),
     );

@@ -25,6 +25,7 @@ class AccountManagerSection extends StatefulWidget {
 
 class _AccountManagerSectionState extends State<AccountManagerSection> {
   final List<AccountEntry> _accounts = [];
+  final Set<String> _busyIds = {};
   int _total = 0;
   bool _loading = false;
   bool _loadingMore = false;
@@ -55,9 +56,9 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         _total = page.total;
       });
     } catch (_) {
-      if (mounted) setState(() => _hasError = true);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _hasError = true);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loading = false);
     }
   }
 
@@ -76,9 +77,14 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         }
         _total = page.total;
       });
-    } catch (_) {
+    } catch (e) {
+      if (mounted && _queryEpoch.isCurrent(epoch)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.describe(e))),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loadingMore = false);
     }
   }
 
@@ -98,12 +104,12 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
       children: [
         Row(
           children: [
-            const HueIcon(HueIcons.manageAccounts, size: 18, color: AppTheme.statusWarning),
+            HueIcon(HueIcons.manageAccounts, size: 18, color: AppTheme.statusReadable(context, AppStatusKind.warning)),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 '${strings.accountManagerTitle} ($_total)',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.lg),
               ),
             ),
             IconButton(
@@ -116,7 +122,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         const SizedBox(height: 4),
         Text(
           viewerWorker ? strings.accountManagerHintWorker : strings.accountManagerHint,
-          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style: TextStyle(fontSize: AppFontSize.sm, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 10),
         if (_loading && _accounts.isEmpty)
@@ -130,9 +136,14 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         else if (_hasError && _accounts.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-            child: ErrorPanel(message: strings.authInviteLoadFail, onRetry: _loading ? null : _reload),
+            child: ErrorPanel(message: strings.accountManagerLoadFail, onRetry: _loading ? null : _reload),
           )
         else ...[
+          if (_hasError)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: ErrorPanel(message: strings.accountManagerLoadFail, onRetry: _loading ? null : _reload),
+            ),
           if (_accounts.isEmpty)
             EmptyState(icon: HueIcons.accountCircle, title: strings.accountEmpty),
           for (final acc in _accounts)
@@ -140,58 +151,114 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Card(
                 margin: EdgeInsets.zero,
-                child: Row(
-                  children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.sm),
-                    child: AvatarView(
-                      url: acc.avatar,
-                      size: 36,
-                      icon: acc.role == 'admin' ? HueIcons.adminPanel : (acc.role == 'worker' ? HueIcons.engineering : HueIcons.person),
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final info = Row(
                       children: [
-                        Row(
-                          children: [
-                            Text(acc.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(width: 6),
-                            if (acc.role == 'admin')
-                              const HueIcon(HueIcons.adminPanel, size: 13, color: AppTheme.statusWarning)
-                            else if (acc.role == 'worker')
-                              const HueIcon(HueIcons.engineering, size: 13, color: AppTheme.statusInfo)
-                            else
-                              const HueIcon(HueIcons.person, size: 13, color: AppTheme.statusInfo),
-                            if (!acc.active) ...[
-                              const SizedBox(width: 6),
-                              const HueIcon(HueIcons.block, size: 13, color: AppTheme.statusDanger),
-                            ],
-                          ],
+                        Padding(
+                          padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.sm),
+                          child: AvatarView(
+                            url: acc.avatar,
+                            size: 36,
+                            icon: acc.role == 'admin'
+                                ? HueIcons.adminPanel
+                                : (acc.role == 'worker' ? HueIcons.engineering : HueIcons.person),
+                          ),
                         ),
-                        if (acc.email.isNotEmpty)
-                          Text(acc.email, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 2,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(acc.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.md)),
+                                    if (acc.role == 'admin')
+                                      HueIcon(HueIcons.adminPanel, size: 13, color: AppTheme.statusReadable(context, AppStatusKind.warning))
+                                    else if (acc.role == 'worker')
+                                      HueIcon(HueIcons.engineering, size: 13, color: AppTheme.statusReadable(context, AppStatusKind.info))
+                                    else
+                                      HueIcon(HueIcons.person, size: 13, color: AppTheme.statusReadable(context, AppStatusKind.info)),
+                                    if (!acc.active)
+                                      HueIcon(HueIcons.block, size: 13, color: AppTheme.statusReadable(context, AppStatusKind.danger)),
+                                  ],
+                                ),
+                                if (acc.email.isNotEmpty)
+                                  Text(
+                                    acc.email,
+                                    softWrap: true,
+                                    style: TextStyle(fontSize: AppFontSize.sm, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
-                    ),
-                  ),
-                  if (!viewerWorker) ...[
-                    IconButton(
-                      icon: const HueIcon(HueIcons.vpnKey, size: 16),
-                      tooltip: strings.accountResetPassword,
-                      onPressed: () => _resetAccountPassword(acc),
-                    ),
-                    IconButton(
-                      icon: const HueIcon(HueIcons.personRemove, size: 16, color: AppTheme.statusDanger),
-                      tooltip: strings.accountDeleteTitle,
-                      onPressed: acc.role == 'admin' ? null : () => _deleteAccount(acc),
-                    ),
-                    Switch(
-                      value: acc.active,
-                      onChanged: acc.role == 'admin' ? null : (v) => _toggleAccountActive(acc, v),
-                    ),
-                  ],
-                  ],
+                    );
+                    if (viewerWorker) {
+                      return info;
+                    }
+                    final rowBusy = _busyIds.contains(acc.id);
+                    final controls = <Widget>[
+                      IconButton(
+                        icon: HueIcon(
+                          acc.role == 'worker' ? HueIcons.person : HueIcons.engineering,
+                          size: 16,
+                          color: acc.role == 'admin'
+                              ? null
+                              : AppTheme.statusReadable(
+                                  context,
+                                  acc.role == 'worker' ? AppStatusKind.info : AppStatusKind.warning,
+                                ),
+                        ),
+                        tooltip: acc.role == 'worker' ? strings.accountRevokeWorker : strings.accountMakeWorker,
+                        onPressed: acc.role == 'admin' || rowBusy ? null : () => _toggleAccountRole(acc),
+                      ),
+                      IconButton(
+                        icon: const HueIcon(HueIcons.vpnKey, size: 16),
+                        tooltip: strings.accountResetPassword,
+                        onPressed: rowBusy ? null : () => _resetAccountPassword(acc),
+                      ),
+                      IconButton(
+                        icon: HueIcon(HueIcons.personRemove, size: 16, color: AppTheme.statusReadable(context, AppStatusKind.danger)),
+                        tooltip: strings.accountDeleteTitle,
+                        onPressed: acc.role == 'admin' || rowBusy ? null : () => _deleteAccount(acc),
+                      ),
+                      Switch(
+                        value: acc.active,
+                        onChanged: acc.role == 'admin' || rowBusy ? null : (v) => _toggleAccountActive(acc, v),
+                      ),
+                    ];
+                    if (constraints.maxWidth < 460) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          info,
+                          Padding(
+                            padding: const EdgeInsets.only(right: AppSpacing.sm, bottom: AppSpacing.xs),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Wrap(
+                                spacing: AppSpacing.xs,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: controls,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: info),
+                        ...controls,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -218,24 +285,29 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
   }
 
   Future<void> _deleteAccount(AccountEntry acc) async {
+    if (_busyIds.contains(acc.id)) return;
+    setState(() => _busyIds.add(acc.id));
     final strings = context.read<LocaleProvider>().strings;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(strings.accountDeleteTitle),
-        content: Text('${strings.accountDeleteConfirm}: ${acc.username}? ${strings.accountDeleteIrreversible}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.statusDanger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(strings.commonOk),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || confirmed != true) return;
     try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(strings.accountDeleteTitle),
+          content: Text('${strings.accountDeleteConfirm}: ${acc.username}? ${strings.accountDeleteIrreversible}'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(strings.commonOk),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
       final dio = context.read<ServerConfig>().api.dio;
       await runWithAdminReauth(context, () => AuthEndpoints(dio).deleteAccount(acc.id));
       if (!mounted) return;
@@ -254,10 +326,14 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
       }
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(acc.id));
     }
   }
 
   Future<void> _toggleAccountActive(AccountEntry acc, bool active) async {
+    if (_busyIds.contains(acc.id)) return;
+    setState(() => _busyIds.add(acc.id));
     final strings = context.read<LocaleProvider>().strings;
     try {
       final dio = context.read<ServerConfig>().api.dio;
@@ -270,6 +346,7 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
         role: acc.role,
         active: active,
         mustChangePassword: acc.mustChangePassword,
+        avatar: acc.avatar,
       ));
     } on AdminReauthCancelled {
       if (mounted) {
@@ -279,24 +356,80 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
       }
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(acc.id));
+    }
+  }
+
+  Future<void> _toggleAccountRole(AccountEntry acc) async {
+    if (_busyIds.contains(acc.id) || acc.role == 'admin') return;
+    setState(() => _busyIds.add(acc.id));
+    final strings = context.read<LocaleProvider>().strings;
+    final targetRole = acc.role == 'worker' ? 'user' : 'worker';
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(strings.accountRoleChangeTitle),
+          content: Text(
+            '${targetRole == 'worker' ? strings.accountRolePromoteConfirm : strings.accountRoleDemoteConfirm}: ${acc.username}?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+      final dio = context.read<ServerConfig>().api.dio;
+      final updatedRole = await runWithAdminReauth(
+        context,
+        () => AuthEndpoints(dio).setAccountRole(acc.id, targetRole),
+      );
+      if (!mounted) return;
+      _replaceLocal(AccountEntry(
+        id: acc.id,
+        username: acc.username,
+        email: acc.email,
+        role: updatedRole,
+        active: acc.active,
+        mustChangePassword: acc.mustChangePassword,
+        avatar: acc.avatar,
+      ));
+      final roleLabel = updatedRole == 'worker' ? strings.adminRoleWorker : strings.adminRoleUser;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${strings.accountRoleUpdated}: ${acc.username} ($roleLabel)')),
+      );
+    } on AdminReauthCancelled {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(acc.id));
     }
   }
 
   Future<void> _resetAccountPassword(AccountEntry acc) async {
+    if (_busyIds.contains(acc.id)) return;
+    setState(() => _busyIds.add(acc.id));
     final strings = context.read<LocaleProvider>().strings;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(strings.accountResetPassword),
-        content: Text('${strings.accountResetConfirm}: ${acc.username}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
-        ],
-      ),
-    );
-    if (!mounted || confirmed != true) return;
     try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(strings.accountResetPassword),
+          content: Text('${strings.accountResetConfirm}: ${acc.username}?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(strings.closeBtn)),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(strings.commonOk)),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
       final dio = context.read<ServerConfig>().api.dio;
       final temp = await runWithAdminReauth(context, () => AuthEndpoints(dio).resetAccountPassword(acc.id));
       final copied = await copyText(temp);
@@ -317,6 +450,8 @@ class _AccountManagerSectionState extends State<AccountManagerSection> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
       }
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(acc.id));
     }
   }
 }

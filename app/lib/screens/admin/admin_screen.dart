@@ -42,23 +42,48 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
-class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  late final List<String> _tabKeys;
+class _AdminScreenState extends State<AdminScreen> with TickerProviderStateMixin {
+  TabController? _tabController;
+  final Set<TabController> _pendingDispose = {};
+  List<String> _tabKeys = const [];
+  bool? _isWorker;
+
+  List<String> _keysForRole(bool isWorker) => isWorker
+      ? ['dashboard', 'users', 'invites', 'storage']
+      : ['dashboard', 'users', 'invites', 'storage', 'learning', 'security', 'crash'];
 
   @override
-  void initState() {
-    super.initState();
-    final isWorker = context.read<AuthService>().role == 'worker';
-    _tabKeys = isWorker
-        ? ['dashboard', 'users', 'invites', 'storage']
-        : ['dashboard', 'users', 'invites', 'storage', 'learning', 'security', 'crash'];
-    _tabController = TabController(length: _tabKeys.length, vsync: this);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final isWorker = context.watch<AuthService>().role == 'worker';
+    if (_isWorker == isWorker && _tabController != null) return;
+    _isWorker = isWorker;
+    final nextKeys = _keysForRole(isWorker);
+    final oldCtrl = _tabController;
+    final prevIdx = oldCtrl?.index ?? 0;
+    _tabKeys = nextKeys;
+    _tabController = TabController(
+      length: nextKeys.length,
+      vsync: this,
+      initialIndex: prevIdx.clamp(0, nextKeys.length - 1),
+    );
+    if (oldCtrl != null) {
+      _pendingDispose.add(oldCtrl);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pendingDispose.remove(oldCtrl)) {
+          oldCtrl.dispose();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    for (final ctrl in _pendingDispose) {
+      ctrl.dispose();
+    }
+    _pendingDispose.clear();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -162,17 +187,10 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
               return _buildStats(_last!, strings);
             }
             return ListView(
+              padding: const EdgeInsets.all(AppSpacing.lg),
               children: [
-                const SizedBox(height: 48),
-                Center(child: Text(strings.adminLoadFail)),
-                const SizedBox(height: 12),
-                Center(
-                  child: TextButton.icon(
-                    onPressed: _reload,
-                    icon: const HueIcon(HueIcons.refresh),
-                    label: Text(strings.adminRefresh),
-                  ),
-                ),
+                const SizedBox(height: 32),
+                ErrorPanel(message: strings.adminLoadFail, onRetry: _reload),
               ],
             );
           }
@@ -188,20 +206,25 @@ class _DashboardTabState extends State<_DashboardTab> with AutomaticKeepAliveCli
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Card(
-          color: s.engineOnline
-              ? AppTheme.emeraldGreen.withValues(alpha: 0.12)
-              : AppTheme.statusDanger.withValues(alpha: 0.10),
+          color: (s.engineOnline
+                  ? AppTheme.emeraldReadable(context)
+                  : AppTheme.statusReadable(context, AppStatusKind.danger))
+              .withValues(alpha: 0.12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
           child: ListTile(
-            leading: Icon(
-              s.engineOnline ? HueIcons.dns : HueIcons.dns,
-              color: s.engineOnline ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+            leading: HueIcon(
+              HueIcons.dns,
+              color: s.engineOnline
+                  ? AppTheme.emeraldReadable(context)
+                  : AppTheme.statusReadable(context, AppStatusKind.danger),
             ),
             title: Text(
               s.engineOnline ? strings.adminEngineOnline : strings.adminEngineOffline,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: s.engineOnline ? AppTheme.emeraldGreen : AppTheme.statusDanger,
+                color: s.engineOnline
+                    ? AppTheme.emeraldReadable(context)
+                    : AppTheme.statusReadable(context, AppStatusKind.danger),
               ),
             ),
             subtitle: s.engineOnline ? null : Text(strings.adminEngineOfflineHint),
@@ -290,25 +313,25 @@ class _StatCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(icon, size: 18, color: AppTheme.primaryPurple),
+                  HueIcon(icon, size: 18, color: scheme.primary),
                   const SizedBox(width: 6),
                   Text(
                     label,
                     maxLines: 1,
-                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                    style: TextStyle(fontSize: AppFontSize.xs, color: scheme.onSurfaceVariant),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
                 value,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                style: const TextStyle(fontSize: AppFontSize.title, fontWeight: FontWeight.w700),
               ),
               if (sub != null)
                 Text(
                   sub!,
                   maxLines: 1,
-                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                  style: TextStyle(fontSize: AppFontSize.xs, color: scheme.onSurfaceVariant),
                 ),
             ],
           ),
@@ -337,7 +360,7 @@ class _TaskGroupCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppFontSize.md)),
             const SizedBox(height: 8),
             if (entries.isEmpty)
               Text('—', style: TextStyle(color: scheme.onSurfaceVariant))
@@ -355,7 +378,7 @@ class _TaskGroupCard extends StatelessWidget {
                       ),
                       child: Text(
                         '${e.key}: ${e.value}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        style: const TextStyle(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600),
                       ),
                     ),
                 ],
@@ -414,10 +437,15 @@ class _CreateUserCardState extends State<_CreateUserCard> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
     final strings = context.read<LocaleProvider>().strings;
     final username = _usernameCtrl.text.trim();
     final email = _emailCtrl.text.trim().toLowerCase();
-    if (username.length < 3 || (_emailCtrl.text.trim().isNotEmpty && !_validEmail(email))) {
+    if (username.length < 3) {
+      setState(() => _message = strings.authErrUsernameShort);
+      return;
+    }
+    if (_emailCtrl.text.trim().isNotEmpty && !_validEmail(email)) {
       setState(() => _message = strings.authErrEmail);
       return;
     }
@@ -467,11 +495,12 @@ class _CreateUserCardState extends State<_CreateUserCard> {
           children: [
             Text(
               strings.adminCreateUserTitle,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppFontSize.lg),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _usernameCtrl,
+              enabled: !_busy,
               decoration: InputDecoration(
                 labelText: strings.adminCreateUserUsername,
                 isDense: true,
@@ -481,6 +510,7 @@ class _CreateUserCardState extends State<_CreateUserCard> {
             const SizedBox(height: 8),
             TextField(
               controller: _emailCtrl,
+              enabled: !_busy,
               decoration: InputDecoration(
                 labelText: strings.adminCreateUserEmail,
                 isDense: true,
@@ -490,6 +520,7 @@ class _CreateUserCardState extends State<_CreateUserCard> {
             const SizedBox(height: 8),
             TextField(
               controller: _passwordCtrl,
+              enabled: !_busy,
               obscureText: true,
               decoration: InputDecoration(
                 labelText: strings.adminCreateUserPassword,
@@ -500,34 +531,39 @@ class _CreateUserCardState extends State<_CreateUserCard> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _role,
+              isExpanded: true,
               isDense: true,
               decoration: InputDecoration(
                 labelText: strings.adminCreateUserRole,
                 border: const OutlineInputBorder(),
               ),
               items: [
-                DropdownMenuItem(value: 'user', child: Text(strings.adminRoleUser, style: const TextStyle(fontSize: 13))),
-                DropdownMenuItem(value: 'worker', child: Text(strings.adminRoleWorker, style: const TextStyle(fontSize: 13))),
+                DropdownMenuItem(value: 'user', child: Text(strings.adminRoleUser, style: const TextStyle(fontSize: AppFontSize.md))),
+                DropdownMenuItem(value: 'worker', child: Text(strings.adminRoleWorker, style: const TextStyle(fontSize: AppFontSize.md))),
               ],
-              onChanged: (v) => setState(() => _role = v ?? 'user'),
+              onChanged: _busy ? null : (v) => setState(() => _role = v ?? 'user'),
             ),
             const SizedBox(height: 10),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 12),
+                  ),
                   onPressed: _busy ? null : _submit,
-                  icon: const HueIcon(HueIcons.personAdd, size: 18),
+                  icon: _busy
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const HueIcon(HueIcons.personAdd, size: 18),
                   label: Text(strings.adminCreateUserButton),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _message == null
-                      ? const SizedBox.shrink()
-                      : Text(
-                          _message!,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                ),
+                if (_message != null)
+                  Text(
+                    _message!,
+                    style: const TextStyle(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600),
+                  ),
               ],
             ),
           ],
@@ -560,8 +596,10 @@ class _StorageTab extends StatefulWidget {
 }
 
 class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientMixin {
+  final QueryEpoch _queryEpoch = QueryEpoch();
   final _searchCtrl = TextEditingController();
   final List<StorageEntry> _items = [];
+  final Set<String> _busyIds = {};
   int _total = 0;
   bool _loading = false;
   bool _loadingMore = false;
@@ -585,6 +623,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
   }
 
   Future<void> _reload() async {
+    final epoch = _queryEpoch.next();
     setState(() {
       _loading = true;
       _hasError = false;
@@ -592,7 +631,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await AdminEndpoints(dio).storage(q: _query, limit: 50);
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       setState(() {
         _items
           ..clear()
@@ -600,19 +639,20 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
         _total = page.total;
       });
     } catch (_) {
-      if (mounted) setState(() => _hasError = true);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _hasError = true);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loading = false);
     }
   }
 
   Future<void> _loadMore() async {
     if (_loadingMore || _items.length >= _total) return;
+    final epoch = _queryEpoch.value;
     setState(() => _loadingMore = true);
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final page = await AdminEndpoints(dio).storage(q: _query, limit: 50, offset: _items.length);
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       final known = _items.map((e) => e.id).toSet();
       setState(() {
         for (final entry in page.items) {
@@ -620,34 +660,44 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
         }
         _total = page.total;
       });
-    } catch (_) {
+    } catch (e) {
+      if (mounted && _queryEpoch.isCurrent(epoch)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.describe(e))),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loadingMore = false);
     }
   }
 
   Future<void> _confirmDelete(StorageEntry entry) async {
+    if (_busyIds.contains(entry.id)) return;
+    setState(() => _busyIds.add(entry.id));
     final strings = context.read<LocaleProvider>().strings;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(entry.title),
-        content: Text(strings.adminStorageDeleteConfirm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(strings.adminCancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.statusDanger),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(strings.adminDelete),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
     try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(entry.title),
+          content: Text(strings.adminStorageDeleteConfirm),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(strings.adminCancel),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(strings.adminDelete),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
       final dio = context.read<ServerConfig>().api.dio;
       await runWithAdminReauth(context, () => AdminEndpoints(dio).deleteStorageItem(entry.id));
       if (!mounted) return;
@@ -657,19 +707,30 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
         _total = _total > 0 ? _total - 1 : 0;
       });
     } on AdminReauthCancelled {
-      return;
-    } catch (_) {
-      if (mounted) _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+        _reload();
+      }
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(entry.id));
     }
   }
 
   Future<void> _toggleVisibility(StorageEntry entry, bool adminOnly) async {
+    if (_busyIds.contains(entry.id)) return;
     final strings = context.read<LocaleProvider>().strings;
     final newVisibility = adminOnly ? 'admin_only' : 'public';
     final idx = _items.indexWhere((e) => e.id == entry.id);
-    if (idx >= 0) {
-      setState(() => _items[idx] = entry.copyWith(visibility: newVisibility));
-    }
+    setState(() {
+      _busyIds.add(entry.id);
+      if (idx >= 0) {
+        _items[idx] = entry.copyWith(visibility: newVisibility);
+      }
+    });
     try {
       final dio = context.read<ServerConfig>().api.dio;
       await runWithAdminReauth(context, () => AdminEndpoints(dio).setVisibility(entry.id, newVisibility));
@@ -682,13 +743,20 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
         ),
       );
     } on AdminReauthCancelled {
-      if (mounted && idx >= 0) {
-        setState(() => _items[idx] = entry);
+      if (!mounted) return;
+      final curIdx = _items.indexWhere((e) => e.id == entry.id);
+      if (curIdx >= 0) {
+        setState(() => _items[curIdx] = entry);
       }
-    } catch (_) {
-      if (mounted && idx >= 0) {
-        setState(() => _items[idx] = entry);
+    } catch (e) {
+      if (!mounted) return;
+      final curIdx = _items.indexWhere((e) => e.id == entry.id);
+      if (curIdx >= 0) {
+        setState(() => _items[curIdx] = entry);
       }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(entry.id));
     }
   }
 
@@ -805,7 +873,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
       return Center(child: EmptyState(icon: HueIcons.libraryMusic, title: strings.adminStorageEmpty));
     }
     final hasMore = _items.length < _total;
-    return ListView.separated(
+    final list = ListView.separated(
       padding: const EdgeInsets.all(AppSpacing.lg),
       itemCount: _items.length + 1 + (hasMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -835,6 +903,18 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
         );
       },
     );
+    if (_hasError) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+            child: ErrorPanel(message: strings.adminLoadFail, onRetry: _loading ? null : _reload),
+          ),
+          Expanded(child: list),
+        ],
+      );
+    }
+    return list;
   }
 
   Widget _buildCleanupCard(dynamic strings) {
@@ -846,11 +926,11 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
         leading: HueIcon(HueIcons.cleaningServices, color: AppTheme.goldReadable(context)),
         title: Text(
           strings.adminCleanupTitle,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppFontSize.md),
         ),
         subtitle: Text(
           strings.adminCleanupHint,
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: AppFontSize.sm),
         ),
         trailing: FilledButton.tonal(
           onPressed: _cleaning ? null : _confirmCleanup,
@@ -869,6 +949,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
   Widget _buildStorageRow(StorageEntry entry, dynamic strings) {
     final scheme = Theme.of(context).colorScheme;
     final adminOnly = entry.adminOnly;
+    final rowBusy = _busyIds.contains(entry.id);
     return Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
@@ -887,14 +968,14 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppFontSize.md),
                       ),
                       Text(
                         '${entry.filename} · ${formatBytes(entry.size)}'
                         '${entry.derivedBytes > 0 ? ' + ${formatBytes(entry.derivedBytes)}' : ''}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12),
+                        style: const TextStyle(fontSize: AppFontSize.sm),
                       ),
                     ],
                   ),
@@ -902,36 +983,36 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                 if (!entry.originalExists)
                   Tooltip(
                     message: strings.adminStorageOriginalMissing,
-                    child: const HueIcon(HueIcons.warning, color: AppTheme.statusWarning, size: 20),
+                    child: HueIcon(HueIcons.warning, color: AppTheme.statusReadable(context, AppStatusKind.warning), size: 20),
                   ),
                 IconButton(
                   tooltip: strings.adminDelete,
-                  icon: const HueIcon(HueIcons.delete, color: AppTheme.statusDanger),
-                  onPressed: () => _confirmDelete(entry),
+                  icon: HueIcon(HueIcons.delete, color: AppTheme.statusReadable(context, AppStatusKind.danger)),
+                  onPressed: rowBusy ? null : () => _confirmDelete(entry),
                 ),
               ],
             ),
             Row(
               children: [
-                Icon(
+                HueIcon(
                   adminOnly ? HueIcons.lock : HueIcons.language,
                   size: 15,
-                  color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldGreen,
+                  color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldReadable(context),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   adminOnly ? strings.adminVisibilityAdminOnly : strings.adminVisibilityPublic,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppFontSize.sm,
                     fontWeight: FontWeight.w700,
-                    color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldGreen,
+                    color: adminOnly ? AppTheme.goldReadable(context) : AppTheme.emeraldReadable(context),
                   ),
                 ),
                 if (entry.ownerUsername.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Text(
                     entry.ownerUsername,
-                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                    style: TextStyle(fontSize: AppFontSize.xs, color: scheme.onSurfaceVariant),
                   ),
                 ],
                 const Spacer(),
@@ -939,7 +1020,7 @@ class _StorageTabState extends State<_StorageTab> with AutomaticKeepAliveClientM
                   message: strings.adminVisibilityToggleHint,
                   child: Switch(
                     value: adminOnly,
-                    onChanged: (v) => _toggleVisibility(entry, v),
+                    onChanged: rowBusy ? null : (v) => _toggleVisibility(entry, v),
                   ),
                 ),
               ],
@@ -959,6 +1040,7 @@ class LearningSamplesTab extends StatefulWidget {
 }
 
 class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticKeepAliveClientMixin {
+  final QueryEpoch _queryEpoch = QueryEpoch();
   List<Lesson> _lessons = [];
   Lesson? _selected;
   LessonDetail? _detail;
@@ -978,6 +1060,7 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
   }
 
   Future<void> _reload() async {
+    final epoch = _queryEpoch.next();
     setState(() {
       _loading = true;
       _error = null;
@@ -989,21 +1072,24 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
       try {
         stats = await AdminEndpoints(dio).learningStats();
       } catch (_) {}
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
+      final prevId = _selected?.id;
+      final still = prevId != null ? lessons.where((l) => l.id == prevId).firstOrNull : null;
       setState(() {
         _lessons = lessons;
         _stats = stats;
-      });
-      if (_selected != null) {
-        final still = lessons.where((l) => l.id == _selected!.id).firstOrNull;
-        if (still != null) {
-          await _openLesson(still);
-          return;
+        if (prevId != null && still == null) {
+          _selected = null;
+          _detail = null;
         }
+      });
+      if (still != null) {
+        await _openLesson(still);
+        return;
       }
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loading = false);
     } catch (e) {
-      if (mounted) {
+      if (mounted && _queryEpoch.isCurrent(epoch)) {
         setState(() {
           _error = ApiClient.describe(e);
           _loading = false;
@@ -1013,21 +1099,23 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
   }
 
   Future<void> _openLesson(Lesson lesson) async {
+    final epoch = _queryEpoch.next();
     setState(() {
       _loading = true;
+      _error = null;
       _selected = lesson;
       _detail = null;
     });
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final detail = await LessonApi(dio).detail(lesson.id);
-      if (!mounted) return;
+      if (!mounted || !_queryEpoch.isCurrent(epoch)) return;
       setState(() {
         _detail = detail;
         _loading = false;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && _queryEpoch.isCurrent(epoch)) {
         setState(() {
           _error = ApiClient.describe(e);
           _loading = false;
@@ -1135,32 +1223,45 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        Text(strings.adminLearningHint, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+        Text(strings.adminLearningHint, style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant)),
         if (_stats != null) ...[
           const SizedBox(height: 8),
           Text(
             strings.adminLearningStatLine(_stats!.totalSessions, _stats!.activeUsers, _stats!.sessionsLast7d),
-            style: const TextStyle(fontSize: 12, color: AppTheme.emeraldGreen),
+            style: TextStyle(fontSize: AppFontSize.sm, color: AppTheme.emeraldReadable(context)),
           ),
         ],
         const SizedBox(height: 12),
         if (_error != null)
-          Card(
-            color: scheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
-            ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: ErrorPanel(message: _error!, onRetry: _loading ? null : _reload),
           ),
-        DropdownButtonFormField<Lesson>(
-          initialValue: _selected,
+        if (_lessons.isEmpty && _error == null)
+          EmptyState(
+            icon: HueIcons.school,
+            title: strings.practiceNoLessons,
+            ctaLabel: strings.adminRefresh,
+            onCta: _loading ? null : _reload,
+          )
+        else if (_lessons.isNotEmpty)
+          DropdownButtonFormField<String>(
+          key: ValueKey(_selected?.id),
+          initialValue: _selected?.id,
+          isExpanded: true,
           decoration: InputDecoration(labelText: strings.adminLearningPickLesson, border: const OutlineInputBorder()),
           items: [
             for (final l in _lessons)
-              DropdownMenuItem(value: l, child: Text(l.title, overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: l.id, child: Text(l.title, overflow: TextOverflow.ellipsis)),
           ],
-          onChanged: (l) {
-            if (l != null) _openLesson(l);
+          onChanged: (id) {
+            if (id == null) return;
+            for (final l in _lessons) {
+              if (l.id == id) {
+                _openLesson(l);
+                break;
+              }
+            }
           },
         ),
         if (_loading && _selected != null)
@@ -1170,14 +1271,14 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
             Card(
               margin: const EdgeInsets.only(top: AppSpacing.sm),
               child: ListTile(
-                leading: Icon(
+                leading: HueIcon(
                   s.hasSample ? HueIcons.recordVoiceOver : HueIcons.micOff,
-                  color: s.hasSample ? AppTheme.emeraldGreen : scheme.onSurfaceVariant,
+                  color: s.hasSample ? AppTheme.emeraldReadable(context) : scheme.onSurfaceVariant,
                 ),
                 title: Text(strings.adminLearningPhrase(s.index + 1)),
                 subtitle: Text(
                   s.hasSample ? strings.adminLearningHasSample : strings.adminLearningNoSample,
-                  style: const TextStyle(fontSize: 12),
+                  style: const TextStyle(fontSize: AppFontSize.sm),
                 ),
                 isThreeLine: false,
                 trailing: _busySection == s.index
@@ -1191,19 +1292,19 @@ class _LearningSamplesTabState extends State<LearningSamplesTab> with AutomaticK
                             IconButton(
                               tooltip: strings.adminLearningReplace,
                               icon: const HueIcon(HueIcons.uploadFile, size: 20),
-                              onPressed: () => _uploadSample(s.index),
+                              onPressed: _busySection >= 0 ? null : () => _uploadSample(s.index),
                             )
                           else
                             IconButton(
                               tooltip: strings.adminLearningUpload,
                               icon: const HueIcon(HueIcons.uploadFile, size: 20),
-                              onPressed: () => _uploadSample(s.index),
+                              onPressed: _busySection >= 0 ? null : () => _uploadSample(s.index),
                             ),
                           if (s.hasSample)
                             IconButton(
                               tooltip: strings.adminLearningDelete,
                               icon: const HueIcon(HueIcons.delete, size: 20),
-                              onPressed: () => _deleteSample(s.index),
+                              onPressed: _busySection >= 0 ? null : () => _deleteSample(s.index),
                             ),
                         ],
                       ),
@@ -1235,7 +1336,9 @@ class _CrashTab extends StatefulWidget {
 class _CrashTabState extends State<_CrashTab> {
   final QueryEpoch _queryEpoch = QueryEpoch();
   final List<CrashReportEntry> _items = [];
+  final Set<String> _openingIds = {};
   bool _loading = false;
+  bool _clearing = false;
   bool _hasError = false;
 
   @override
@@ -1260,51 +1363,71 @@ class _CrashTabState extends State<_CrashTab> {
           ..addAll(items);
       });
     } catch (_) {
-      if (mounted) setState(() => _hasError = true);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _hasError = true);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && _queryEpoch.isCurrent(epoch)) setState(() => _loading = false);
     }
   }
 
   Future<void> _deleteAll() async {
+    if (_clearing) return;
+    setState(() => _clearing = true);
     final strings = context.read<LocaleProvider>().strings;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.crashDeleteAll),
-        content: Text(strings.crashDeleteConfirm),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(strings.adminCancel)),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.statusDanger),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(strings.crashDeleteAll),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
     try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(strings.crashDeleteAll),
+          content: Text(strings.crashDeleteConfirm),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(strings.adminCancel)),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(strings.crashDeleteAll),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
       final dio = context.read<ServerConfig>().api.dio;
       await runWithAdminReauth(context, () => AdminEndpoints(dio).clearCrashReports());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.crashDeleted)));
       _reload();
     } on AdminReauthCancelled {
-      return;
-    } catch (_) {
-      if (mounted) _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.adminReauthCancelled)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+        _reload();
+      }
+    } finally {
+      if (mounted) setState(() => _clearing = false);
     }
   }
 
   Future<void> _openDetail(CrashReportEntry entry) async {
+    if (_openingIds.contains(entry.id)) return;
+    setState(() => _openingIds.add(entry.id));
     final strings = context.read<LocaleProvider>().strings;
     String detail = entry.summary;
     try {
       final dio = context.read<ServerConfig>().api.dio;
       final full = await AdminEndpoints(dio).crashReportDetail(entry.id);
       detail = full.detail.isEmpty ? full.summary : full.detail;
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _openingIds.remove(entry.id));
+    }
     if (!mounted) return;
     showDialog<void>(
       context: context,
@@ -1334,8 +1457,16 @@ class _CrashTabState extends State<_CrashTab> {
         title: Text(strings.adminTabCrash),
         automaticallyImplyLeading: false,
         actions: [
-          IconButton(icon: const HueIcon(HueIcons.refresh), tooltip: strings.adminRefresh, onPressed: _reload),
-          IconButton(icon: const HueIcon(HueIcons.deleteSweep), tooltip: strings.crashDeleteAll, onPressed: _items.isEmpty ? null : _deleteAll),
+          IconButton(
+            icon: const HueIcon(HueIcons.refresh),
+            tooltip: strings.adminRefresh,
+            onPressed: (_loading || _clearing) ? null : _reload,
+          ),
+          IconButton(
+            icon: const HueIcon(HueIcons.deleteSweep),
+            tooltip: strings.crashDeleteAll,
+            onPressed: (_items.isEmpty || _clearing) ? null : _deleteAll,
+          ),
         ],
       ),
       body: _buildBody(strings),
@@ -1347,17 +1478,17 @@ class _CrashTabState extends State<_CrashTab> {
       return const SkeletonList(itemCount: 6, itemHeight: 72);
     }
     if (_hasError && _items.isEmpty) {
-      return ErrorPanel(message: strings.crashLoadFail, onRetry: _reload);
+      return ErrorPanel(message: strings.crashLoadFail, onRetry: _loading ? null : _reload);
     }
     if (_items.isEmpty) {
-      return Center(
-        child: Text(
-          strings.crashEmpty,
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
+      return EmptyState(
+        icon: HueIcons.bugReport,
+        title: strings.crashEmpty,
+        ctaLabel: strings.adminRefresh,
+        onCta: _loading ? null : _reload,
       );
     }
-    return RefreshIndicator(
+    final list = RefreshIndicator(
       onRefresh: _reload,
       child: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -1367,7 +1498,7 @@ class _CrashTabState extends State<_CrashTab> {
           final e = _items[index];
           return Card(
             child: ListTile(
-              leading: const HueIcon(HueIcons.bugReport, color: AppTheme.statusWarning),
+              leading: HueIcon(HueIcons.bugReport, color: AppTheme.statusReadable(context, AppStatusKind.warning)),
               title: Text(
                 e.summary.isEmpty ? '-' : e.summary,
                 maxLines: 2,
@@ -1378,11 +1509,23 @@ class _CrashTabState extends State<_CrashTab> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              onTap: () => _openDetail(e),
+              onTap: _openingIds.contains(e.id) ? null : () => _openDetail(e),
             ),
           );
         },
       ),
     );
+    if (_hasError) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
+            child: ErrorPanel(message: strings.crashLoadFail, onRetry: _loading ? null : _reload),
+          ),
+          Expanded(child: list),
+        ],
+      );
+    }
+    return list;
   }
 }

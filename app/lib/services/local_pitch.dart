@@ -31,18 +31,30 @@ class LocalPitch {
   static const int maxSeconds = 20;
   static const int chunkFrames = 24;
 
+  static int _frameFor(int sr, int lmax) {
+    final need = 2 * lmax + 1;
+    var frame = frameSize;
+    while (frame < need) {
+      frame <<= 1;
+    }
+    return frame;
+  }
+
   static LocalPitchResult? analyze(Uint8List bytes, {int? secondsLimit}) {
     final parsed = _parsePcm16(bytes);
     if (parsed == null) return null;
     final samples = parsed.$1;
     final sr = parsed.$2;
+    if (sr <= 0 || samples.isEmpty) return null;
     final limit = math.min(samples.length, sr * (secondsLimit ?? maxSeconds));
     final points = <LocalPitchPoint>[];
     final lmin = math.max(1, (sr / fMax).floor());
-    final lmax = math.min((sr / fMin).floor(), frameSize - 1);
+    final lmax = (sr / fMin).floor();
+    if (lmax <= lmin) return LocalPitchResult(limit / sr, sr, const []);
+    final frame = _frameFor(sr, lmax);
     final norms = Float64List(lmax - lmin + 1);
-    for (int pos = 0; pos + frameSize <= limit; pos += hop) {
-      points.add(_analyzeFrame(samples, sr, pos, lmin, lmax, norms));
+    for (int pos = 0; pos + frame <= limit; pos += hop) {
+      points.add(_analyzeFrame(samples, sr, pos, lmin, lmax, norms, frame));
     }
     final fixed = _spikeFix(points);
     return LocalPitchResult(limit / sr, sr, fixed);
@@ -57,14 +69,17 @@ class LocalPitch {
     if (parsed == null) return null;
     final samples = parsed.$1;
     final sr = parsed.$2;
+    if (sr <= 0 || samples.isEmpty) return null;
     final limit = math.min(samples.length, sr * (secondsLimit ?? maxSeconds));
     final points = <LocalPitchPoint>[];
     final lmin = math.max(1, (sr / fMax).floor());
-    final lmax = math.min((sr / fMin).floor(), frameSize - 1);
+    final lmax = (sr / fMin).floor();
+    if (lmax <= lmin) return LocalPitchResult(limit / sr, sr, const []);
+    final frame = _frameFor(sr, lmax);
     final norms = Float64List(lmax - lmin + 1);
     var framesInChunk = 0;
-    for (int pos = 0; pos + frameSize <= limit; pos += hop) {
-      points.add(_analyzeFrame(samples, sr, pos, lmin, lmax, norms));
+    for (int pos = 0; pos + frame <= limit; pos += hop) {
+      points.add(_analyzeFrame(samples, sr, pos, lmin, lmax, norms, frame));
       framesInChunk++;
       if (framesInChunk >= framesPerChunk) {
         framesInChunk = 0;
@@ -75,6 +90,45 @@ class LocalPitch {
     return LocalPitchResult(limit / sr, sr, fixed);
   }
 
+  static double? estimateLiveF0(Uint8List rawPcm16Bytes, {int sampleRate = 16000}) {
+    if (sampleRate <= 0) return null;
+    final lmin = math.max(1, (sampleRate / fMax).floor());
+    final lmax = (sampleRate / fMin).floor();
+    if (lmax <= lmin) return null;
+    final frame = _frameFor(sampleRate, lmax);
+    final usable = frame * 2;
+    if (rawPcm16Bytes.length < usable) return null;
+    final start = rawPcm16Bytes.length - usable;
+    final bd = ByteData.sublistView(rawPcm16Bytes, start, start + usable);
+    final samples = Float64List(frame);
+    for (int i = 0; i < frame; i++) {
+      samples[i] = bd.getInt16(i * 2, Endian.little) / 32768.0;
+    }
+    final norms = Float64List(lmax - lmin + 1);
+    return _analyzeFrame(samples, sampleRate, 0, lmin, lmax, norms, frame).f0;
+  }
+
+  static String? noteLabel(double hz) {
+    if (!hz.isFinite || hz <= 0) return null;
+    const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    final midi = (69.0 + 12.0 * math.log(hz / 440.0) / math.ln2).round();
+    final oct = (midi ~/ 12) - 1;
+    final idx = ((midi % 12) + 12) % 12;
+    return '${names[idx]}$oct';
+  }
+
+  static double? foldOctaveDiffCents(double userHz, double refHz) {
+    if (!userHz.isFinite || !refHz.isFinite || userHz <= 0 || refHz <= 0) return null;
+    var cents = 1200.0 * math.log(userHz / refHz) / math.ln2;
+    while (cents > 600.0) {
+      cents -= 1200.0;
+    }
+    while (cents < -600.0) {
+      cents += 1200.0;
+    }
+    return cents;
+  }
+
   static LocalPitchPoint _analyzeFrame(
     Float64List samples,
     int sr,
@@ -82,13 +136,14 @@ class LocalPitch {
     int lmin,
     int lmax,
     Float64List norms,
+    int frame,
   ) {
     var energy = 0.0;
-    for (int i = 0; i < frameSize; i++) {
+    for (int i = 0; i < frame; i++) {
       final v = samples[pos + i];
       energy += v * v;
     }
-    energy /= frameSize;
+    energy /= frame;
     final t = pos / sr;
     if (energy < 0.000001) {
       return LocalPitchPoint(t, 0);
@@ -96,10 +151,10 @@ class LocalPitch {
     double best = 0;
     for (int lag = lmin; lag <= lmax; lag++) {
       var corr = 0.0;
-      for (int i = 0; i + lag < frameSize; i++) {
+      for (int i = 0; i + lag < frame; i++) {
         corr += samples[pos + i] * samples[pos + i + lag];
       }
-      final norm = corr / ((frameSize - lag) * (energy + 1e-9));
+      final norm = corr / ((frame - lag) * (energy + 1e-9));
       norms[lag - lmin] = norm;
       if (norm > best) best = norm;
     }

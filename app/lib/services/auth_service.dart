@@ -99,6 +99,7 @@ class AuthService extends ChangeNotifier {
       _avatar = await _storage.read(key: _avatarKey) ?? '';
       mcp = await _storage.read(key: _mcpKey) ?? '0';
       if (token == null || token.isEmpty) {
+        await _probeSecureStorage();
         await _migrateLegacyFile(token: token, username: username, email: email, role: role, seq: seq);
         return;
       }
@@ -107,6 +108,7 @@ class AuthService extends ChangeNotifier {
       username = null;
       email = null;
       role = 'user';
+      _avatar = '';
       mcp = '0';
       _secureStorageBroken = true;
     }
@@ -147,10 +149,12 @@ class AuthService extends ChangeNotifier {
     final seq = _stateSeq;
     try {
       final client = dio ?? _ensureValidateDio();
-      client.options.validateStatus = (code) => code != null && code < 500;
       final res = await client.get(
         '$serverUrl/api/auth/me',
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+          validateStatus: (code) => code != null && code < 500,
+        ),
       );
       if (seq != _stateSeq) {
         return;
@@ -186,8 +190,7 @@ class AuthService extends ChangeNotifier {
           _secureStorageBroken = true;
         } catch (_) {}
       } else if (res.statusCode == 401 || res.statusCode == 403) {
-        _sessionExpiredNotice = true;
-        await clearToken();
+        await clearToken(expired: true);
       }
     } catch (_) {}
   }
@@ -246,11 +249,15 @@ class AuthService extends ChangeNotifier {
   }
 
   void continueAsGuest({String? displayName}) {
+    _stateSeq++;
     _token = null;
     _username = displayName ?? const AppStrings('vi').authGuestUsername;
     _email = null;
+    _role = 'user';
+    _avatar = '';
     _isGuest = true;
     _mustChangePassword = false;
+    _sessionExpiredNotice = false;
     _storageUsedBytes = null;
     _storageQuotaBytes = null;
     _currentToken = null;
@@ -296,7 +303,7 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> clearToken() async {
+  Future<void> clearToken({bool expired = false}) async {
     _stateSeq++;
     _token = null;
     _username = null;
@@ -305,6 +312,7 @@ class AuthService extends ChangeNotifier {
     _avatar = '';
     _isGuest = false;
     _mustChangePassword = false;
+    _sessionExpiredNotice = expired;
     _storageUsedBytes = null;
     _storageQuotaBytes = null;
     _currentToken = null;

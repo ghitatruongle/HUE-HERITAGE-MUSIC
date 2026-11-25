@@ -14,7 +14,7 @@ from ..database import crud
 from ..database.models import HeritageItem
 from ..services import media_pipeline, user_inflight
 from ..storage import manager
-from ..audio_access import sign_path, verify_path
+from ..audio_access import require_sha_audio_access, sha_access_scope, sha_viewable, sign_path
 from .auth import require_user, resolve_bearer_user
 
 router = APIRouter(tags=["restoration"])
@@ -58,55 +58,73 @@ def run_restore(data, heritage_id):
     return report
 
 
+def _record_restore_owner(sha: str, user_id: Optional[str]) -> None:
+    if not sha:
+        return
+    db = SessionLocal()
+    try:
+        crud.record_artifact_owner(db, sha, user_id, kind="restore")
+    finally:
+        db.close()
+
+
+def _resolve_restore_item(item_id: str, user_id: Optional[str], request: Request):
+    db = SessionLocal()
+    try:
+        item = crud.get_item(db, item_id)
+        if not item:
+            return None
+        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+        if not crud.can_view_item(item, viewer):
+            return None
+        if not manager.safe_original_name(item.filename):
+            return ("bad_filename", "")
+        return (item.id, item.filename)
+    finally:
+        db.close()
+
+
 @router.post("/music/restore")
 async def restore_upload(request: Request, file: UploadFile = File(...), user_id: Optional[str] = Depends(require_user)):
     if manager.content_length_exceeds(request, MAX_BYTES):
         raise HTTPException(status_code=413, detail="file too large")
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="file too large")
+    data = await manager.read_upload_limited(file, MAX_BYTES)
     if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
-        report = await asyncio.to_thread(run_restore, data, "")
-        db = SessionLocal()
-        try:
-            crud.record_artifact_owner(db, report.get("sha", ""), user_id, kind="restore")
-        finally:
-            db.close()
+        report = await user_inflight.run_dsp(run_restore, data, "")
+        await asyncio.to_thread(_record_restore_owner, report.get("sha", ""), user_id)
         return report
     finally:
         user_inflight.release(user_inflight.user_key("restore", user_id))
 
 
 @router.post("/music/restore-item/{item_id}")
-def restore_item(item_id: str, request: Request, db: Session = Depends(get_db), user_id: Optional[str] = Depends(require_user)):
-    item = crud.get_item(db, item_id)
-    if not item:
+async def restore_item(item_id: str, request: Request, user_id: Optional[str] = Depends(require_user)):
+    resolved = await asyncio.to_thread(_resolve_restore_item, item_id, user_id, request)
+    if resolved is None:
         raise HTTPException(status_code=404, detail="not found")
-    viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
-    if not crud.can_view_item(item, viewer):
-        raise HTTPException(status_code=404, detail="not found")
-    if not manager.safe_original_name(item.filename):
+    target_id, target_name = resolved
+    if target_id == "bad_filename":
         raise HTTPException(status_code=400, detail="bad filename")
-    path = manager.original_dir() / item.filename
+
+    path = manager.original_dir() / target_name
     if not path.exists():
-        raise HTTPException(status_code=404, detail="file missing")
-    try:
-        data = path.read_bytes()
-    except OSError:
         raise HTTPException(status_code=404, detail="file missing")
     if not user_inflight.try_acquire(user_inflight.user_key("restore", user_id)):
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
-        report = run_restore(data, item.id)
-        db2 = SessionLocal()
-        try:
-            crud.record_artifact_owner(db2, report.get("sha", ""), user_id, kind="restore")
-        finally:
-            db2.close()
+        def _run():
+            try:
+                data = path.read_bytes()
+            except OSError:
+                return None
+            return run_restore(data, target_id)
+
+        report = await user_inflight.run_dsp(_run)
+        if report is None:
+            raise HTTPException(status_code=404, detail="file missing")
+        await asyncio.to_thread(_record_restore_owner, report.get("sha", ""), user_id)
         return report
     finally:
         user_inflight.release(user_inflight.user_key("restore", user_id))
@@ -114,23 +132,7 @@ def restore_item(item_id: str, request: Request, db: Session = Depends(get_db), 
 
 @router.get("/music/restored/{sha}")
 def download_restored(sha: str, request: Request, db: Session = Depends(get_db)):
-    if not manager.is_sha256(sha):
-        raise HTTPException(status_code=404, detail="not found")
-    item = _sha_item(db, sha)
-    viewer = resolve_bearer_user(request, db)
-    if viewer is not None:
-        from ..audio_access import sha_viewable
-
-        if not sha_viewable(db, request, sha):
-            raise HTTPException(status_code=404, detail="not found")
-    elif settings.auth_required:
-        scope = f"vis:{getattr(item, 'visibility', None) or 'public'}" if item is not None else ""
-        if not verify_path(
-            request.url.path, request.query_params.get("e"), request.query_params.get("s"), scope=scope
-        ):
-            raise HTTPException(status_code=401, detail="authentication or signed url required")
-    elif item is not None and not crud.can_view_item(item, None):
-        raise HTTPException(status_code=404, detail="not found")
+    require_sha_audio_access(request, db, sha)
     path = restored_dir() / (sha + "_restored.wav")
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")
@@ -143,13 +145,9 @@ def issue_restored_url(
 ):
     if not manager.is_sha256(sha):
         raise HTTPException(status_code=404, detail="not found")
-    item = _sha_item(db, sha)
-    if item is not None:
-        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
-        if not crud.can_view_item(item, viewer):
-            raise HTTPException(status_code=404, detail="not found")
-        scope = f"vis:{getattr(item, 'visibility', None) or 'public'}"
-    else:
-        scope = ""
+    viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+    if not sha_viewable(db, request, sha, viewer=viewer):
+        raise HTTPException(status_code=404, detail="not found")
+    scope = sha_access_scope(db, sha)
     token = sign_path(f"/api/music/restored/{sha}", scope=scope)
     return {"url": token["url"], "expires": token["expires"]}

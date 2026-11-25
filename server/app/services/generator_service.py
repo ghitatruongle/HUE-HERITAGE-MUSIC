@@ -55,17 +55,22 @@ def create_task(kind, prompt, duration, lora, strength, seed, extra=None, user_i
     task["task_db_id"] = tid
     with TASKS_LOCK:
         if len(TASKS) >= MAX_TASKS:
-            oldest = [k for k in sorted(TASKS, key=lambda k: TASKS[k]["created_at"]) if TASKS[k].get("status") != "running"]
+            oldest = [
+                k
+                for k in sorted(TASKS, key=lambda k: TASKS[k]["created_at"])
+                if TASKS[k].get("status") not in ("running", "queued", "pending")
+            ]
             for k in oldest[: max(0, len(TASKS) - MAX_TASKS + 1)]:
                 TASKS.pop(k, None)
         TASKS[tid] = task
+        snapshot = dict(task)
     if status == "running":
         from ..workers.pool import get_pool
 
         get_pool("generation", max(2, settings.generation_concurrency + 1)).submit(
             lambda: _run_generation(tid, tid, prompt, duration, seed, lora, strength, extra)
         )
-    return task
+    return snapshot
 
 
 def _fold_extra(prompt: str, extra: dict) -> str:
@@ -107,7 +112,14 @@ def _run_generation(tid, db_task_id, prompt, duration, seed, lora="", strength=0
     def _cancelled():
         with TASKS_LOCK:
             task = TASKS.get(tid)
-            return bool(task and task.get("cancel_requested"))
+            if task is not None:
+                return bool(task.get("cancel_requested"))
+        db_check = SessionLocal()
+        try:
+            row = crud.get_task(db_check, db_task_id)
+            return bool(row and row.status == "cancelled")
+        finally:
+            db_check.close()
 
     db = SessionLocal()
     entered = False
@@ -136,18 +148,22 @@ def _run_generation(tid, db_task_id, prompt, duration, seed, lora="", strength=0
             task = TASKS.get(tid)
             if task is not None:
                 task["status"] = "cancelled"
+                task["reason"] = "cancelled by user"
                 task.pop("cancel_requested", None)
         crud.update_task(db, db_task_id, status="cancelled", error="cancelled by user", finished=True)
     except Exception as e:
+        from ..services.task_error import safe_task_error
+
         ace_step_engine.invalidate_availability()
+        safe_err = safe_task_error(e)
         with TASKS_LOCK:
             task = TASKS.get(tid)
             if task is not None:
                 task["status"] = "error"
-                task["reason"] = str(e)
-        from ..services.task_error import safe_task_error
+                task["reason"] = safe_err
 
-        crud.update_task(db, db_task_id, status="error", error=safe_task_error(e), finished=True)
+        db.rollback()
+        crud.update_task(db, db_task_id, status="error", error=safe_err, finished=True)
     finally:
         if entered:
             _GENERATION_SEMAPHORE.release()
@@ -169,7 +185,10 @@ def cancel_task(task_id):
         if row.status in ("running", "pending", "queued"):
             crud.update_task(db, task_id, status="cancelled", error="cancelled by user", finished=True)
             row = crud.get_task(db, task_id)
-        return crud.task_to_dict(row)
+        payload = crud.task_to_dict(row)
+        if payload.get("error") and not payload.get("reason"):
+            payload["reason"] = payload["error"]
+        return payload
     finally:
         db.close()
 
@@ -197,6 +216,8 @@ def get_task(task_id):
         if not task:
             return None
         payload = crud.task_to_dict(task)
+        if payload.get("error") and not payload.get("reason"):
+            payload["reason"] = payload["error"]
         if task.kind:
             result = payload.get("result") or {}
             audio_url = result.get("audio_url")

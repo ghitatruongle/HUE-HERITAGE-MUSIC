@@ -85,7 +85,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           child: Text(
                             strings.historyPrivacyNote,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: AppFontSize.sm,
                               fontWeight: FontWeight.w500,
                               color: AppTheme.emeraldReadable(context),
                             ),
@@ -145,21 +145,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _filterChip(String key, String label, int count) {
     final isSelected = _selectedFilter == key;
+    final primary = Theme.of(context).colorScheme.primary;
     return FilterChip(
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      visualDensity: VisualDensity.standard,
       selected: isSelected,
       label: Text('$label ($count)'),
       onSelected: (_) => setState(() => _selectedFilter = key),
-      selectedColor: AppTheme.primaryPurple.withValues(alpha: 0.2),
-      checkmarkColor: AppTheme.primaryPurple,
+      selectedColor: primary.withValues(alpha: 0.2),
+      checkmarkColor: primary,
       labelStyle: TextStyle(
-        fontSize: 12,
+        fontSize: AppFontSize.sm,
         fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-        color: isSelected ? AppTheme.primaryPurple : null,
+        color: isSelected ? primary : null,
       ),
     );
   }
 
   Widget _localTile(BuildContext context, HistoryEntry e, LocaleProvider locale) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final successColor = AppTheme.statusReadable(context, AppStatusKind.success);
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
       elevation: 0,
@@ -175,27 +180,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: AppTheme.primaryPurple.withValues(alpha: 0.12),
+            color: primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(AppRadius.md),
           ),
-          child: Icon(_kindIcon(e.kind), color: AppTheme.primaryPurple, size: 22),
+          child: HueIcon(_kindIcon(e.kind), color: primary, size: 22, decorative: true),
         ),
         title: Text(
           e.title.isEmpty ? _kindLabel(e.kind, locale) : e.title,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: AppFontSize.lg),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: AppSpacing.xs),
-          child: Row(
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(_kindLabel(e.kind, locale), style: TextStyle(fontSize: 11, color: AppTheme.goldReadable(context), fontWeight: FontWeight.w600)),
-              const Text(' • ', style: TextStyle(fontSize: 11)),
-              Text(_formatDate(e.at), style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              Text(_kindLabel(e.kind, locale), style: TextStyle(fontSize: AppFontSize.xs, color: AppTheme.goldReadable(context), fontWeight: FontWeight.w600)),
+              const Text(' • ', style: TextStyle(fontSize: AppFontSize.xs)),
+              Text(_formatDate(e.at), style: TextStyle(fontSize: AppFontSize.xs, color: Theme.of(context).colorScheme.onSurfaceVariant)),
               if (e.score != null) ...[
-                const Text(' • ', style: TextStyle(fontSize: 11)),
+                const Text(' • ', style: TextStyle(fontSize: AppFontSize.xs)),
                 Text(
                   locale.strings.historyScore(e.score!.toStringAsFixed(1)),
-                  style: const TextStyle(fontSize: 11, color: AppTheme.statusSuccess, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: AppFontSize.xs, color: successColor, fontWeight: FontWeight.w600),
                 ),
               ],
             ],
@@ -221,7 +229,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
       ),
-      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11)),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: AppFontSize.xs)),
     );
   }
 
@@ -237,7 +245,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: Text(strings.cancelBtn),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
             onPressed: () {
               context.read<HistoryService>().clear();
               Navigator.pop(ctx);

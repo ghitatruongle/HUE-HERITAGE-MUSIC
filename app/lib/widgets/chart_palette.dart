@@ -38,7 +38,7 @@ class ChartPalette {
     bool bottomNumbers = true,
   }) {
     final style = TextStyle(
-        fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant);
+        fontSize: AppFontSize.xs, color: Theme.of(context).colorScheme.onSurfaceVariant);
     return FlTitlesData(
       topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
       rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -83,7 +83,7 @@ class ChartPalette {
               TextStyle(
                 color: scheme.onInverseSurface,
                 fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontSize: AppFontSize.sm,
               ),
             ),
         ],

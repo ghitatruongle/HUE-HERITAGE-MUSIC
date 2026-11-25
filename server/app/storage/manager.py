@@ -1,10 +1,29 @@
 import hashlib
 from pathlib import Path
+from fastapi import HTTPException
 from ..config import settings
 
 ALLOWED_EXT = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
 MAX_SIZE = max(1, int(settings.heritage_upload_max_bytes))
-MAX_ANALYSIS_BYTES = 15 * 1024 * 1024
+MAX_ANALYSIS_BYTES = max(1, int(settings.large_body_limit))
+
+
+async def read_upload_limited(file, max_bytes: int, chunk_size: int = 1024 * 1024) -> bytes:
+    chunks = []
+    total = 0
+    while True:
+        step = min(chunk_size, max_bytes + 1 - total)
+        chunk = await file.read(step)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail="file too large")
+        chunks.append(chunk)
+    data = b"".join(chunks)
+    if not data:
+        raise HTTPException(status_code=400, detail="empty file")
+    return data
 
 
 def original_dir() -> Path:
@@ -138,7 +157,7 @@ def save_original(data: bytes, filename: str):
     return dest, digest, True
 
 
-COMPARE_BODY_LIMIT = 2 * (15 * 1024 * 1024) + 2 * 1024 * 1024
+COMPARE_BODY_LIMIT = 2 * MAX_ANALYSIS_BYTES + 2 * 1024 * 1024
 
 
 def content_length_exceeds(request, max_bytes: int) -> bool:

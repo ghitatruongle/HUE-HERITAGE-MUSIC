@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:dio/dio.dart';
 
 import '../../api/api_client.dart';
@@ -54,7 +54,7 @@ class LessonApi {
   }
 
   Future<PracticeResult> practiceFile(String lessonId, int section, String path, {void Function(int, int)? onProgress}) async {
-    return practiceBytes(lessonId, section, await File(path).readAsBytes(), onProgress: onProgress);
+    return practiceBytes(lessonId, section, await XFile(path).readAsBytes(), onProgress: onProgress);
   }
 
   Future<List<ScaleInfo>> scales() async {
@@ -126,6 +126,7 @@ class LessonApi {
       }
     }
     final serverToday = data is Map ? (data['server_today']?.toString() ?? '') : '';
-    return ProgressPage(items: items, serverToday: serverToday);
+    final serverUtcNow = data is Map ? (data['server_utc_now']?.toString() ?? '') : '';
+    return ProgressPage(items: items, serverToday: serverToday, serverUtcNow: serverUtcNow);
   }
 }

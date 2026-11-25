@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import io
 import math
+import threading
 import wave
 
+try:
+    import numpy as np
+except Exception:
+    np = None
+
 from ..services import pitch_service, compare_service
+
+_SCALE_WAV_CACHE: dict = {}
+_SCALE_WAV_LOCK = threading.Lock()
 
 ROOT_CENTS_REF = 261.63
 SCALE_CENTS = {
@@ -98,26 +107,53 @@ def reference_wav(scale_id: str, transpose: int = 0) -> bytes:
     if cfg is None:
         raise ValueError("unknown scale")
     transpose = max(-12, min(12, int(transpose)))
+    cache_key = (scale_id, transpose)
+    with _SCALE_WAV_LOCK:
+        hit = _SCALE_WAV_CACHE.get(cache_key)
+    if hit is not None:
+        return hit
     freqs = transposed_frequencies(cfg, transpose)
     sr = 22050
+    seq = freqs + list(reversed(freqs[:-1]))
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sr)
-        for _ in range(int(sr * LEAD_IN_SECONDS)):
-            w.writeframes((0).to_bytes(2, "little", signed=True))
-        seq = freqs + list(reversed(freqs[:-1]))
-        for freq in seq:
+        if np is not None:
+            parts = [np.zeros(int(sr * LEAD_IN_SECONDS), dtype="<i2")]
             n = int(sr * NOTE_SECONDS)
-            for i in range(n):
-                k = i / n
-                env = min(1.0, k / 0.08, (1.0 - k) / 0.15)
-                v = int(9000 * env * math.sin(2 * math.pi * freq * i / sr))
-                w.writeframes(v.to_bytes(2, "little", signed=True))
-            for _ in range(int(sr * GAP_SECONDS)):
+            t = np.arange(n, dtype=np.float64) / sr
+            k = np.arange(n, dtype=np.float64) / n
+            env = np.minimum(1.0, np.minimum(k / 0.08, (1.0 - k) / 0.15))
+            gap = np.zeros(int(sr * GAP_SECONDS), dtype="<i2")
+            for freq in seq:
+                sig = (
+                    0.72 * np.sin(2 * math.pi * freq * t)
+                    + 0.20 * np.sin(4 * math.pi * freq * t)
+                    + 0.08 * np.sin(6 * math.pi * freq * t)
+                )
+                parts.append(np.clip(9000.0 * env * sig, -32767.0, 32767.0).astype("<i2"))
+                parts.append(gap)
+            w.writeframes(np.concatenate(parts).tobytes())
+        else:
+            for _ in range(int(sr * LEAD_IN_SECONDS)):
                 w.writeframes((0).to_bytes(2, "little", signed=True))
-    return buf.getvalue()
+            for freq in seq:
+                n = int(sr * NOTE_SECONDS)
+                for i in range(n):
+                    k = i / n
+                    env = min(1.0, k / 0.08, (1.0 - k) / 0.15)
+                    v = int(9000 * env * math.sin(2 * math.pi * freq * i / sr))
+                    w.writeframes(v.to_bytes(2, "little", signed=True))
+                for _ in range(int(sr * GAP_SECONDS)):
+                    w.writeframes((0).to_bytes(2, "little", signed=True))
+    data = buf.getvalue()
+    with _SCALE_WAV_LOCK:
+        if len(_SCALE_WAV_CACHE) >= 64:
+            _SCALE_WAV_CACHE.pop(next(iter(_SCALE_WAV_CACHE)))
+        _SCALE_WAV_CACHE[cache_key] = data
+    return data
 
 
 def _name_for_time(t: float, seq_names) -> str:
@@ -161,7 +197,7 @@ def practice_scale(scale_id: str, data: bytes, transpose: int = 0) -> dict:
     freqs = transposed_frequencies(cfg, transpose)
     samples, sr = pitch_service.read_mono_wav(data, max_seconds=MAX_SCALE_SECONDS)
     samples, sr = pitch_service.resample_16k(samples, sr)
-    u_times, u_f0 = pitch_service.estimate_f0(samples, sr, hop=512)
+    u_times, u_f0 = pitch_service.estimate_f0(samples, sr, hop=256, fmin=70.0)
     voiced = [f for f in u_f0 if f > 0]
     if not voiced:
         raise ValueError("empty contour")
@@ -190,7 +226,10 @@ def practice_scale(scale_id: str, data: bytes, transpose: int = 0) -> dict:
     on_scale = on_count / total_voiced
 
     s_times, s_f0 = _reference_contour(freqs)
-    result = compare_service.compare_contours(s_times, s_f0, u_times, u_f0, octave_normalize=False)
+    first_voiced = next((t for t, f in zip(u_times, u_f0) if f > 0), u_times[0])
+    shift = LEAD_IN_SECONDS - first_voiced
+    aligned_u_times = [round(t + shift, 3) for t in u_times]
+    result = compare_service.compare_contours(s_times, s_f0, aligned_u_times, u_f0, octave_normalize=False)
     metrics = result["metrics"]
 
     names = cfg["note_names"]

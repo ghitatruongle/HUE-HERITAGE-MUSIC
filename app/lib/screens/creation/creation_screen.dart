@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import 'task_result_card.dart';
 import '../../models/heritage_item.dart';
 import '../../models/music_task.dart';
+import '../../services/auth_service.dart';
 import '../../services/connectivity_guard.dart';
 import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
@@ -69,14 +70,36 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   int _durationTab1 = 60;
   double _strengthTab1 = 0.8;
 
+  int _loadEpoch = 0;
+  int _watchEpochTab1 = 0;
+  int _watchEpochTab2 = 0;
+  StreamSubscription<MusicTask>? _subTab1;
+  StreamSubscription<MusicTask>? _subTab2;
+
   bool _busyTab1 = false;
   bool _busyTab2 = false;
-  bool _polling = false;
+  bool _pollingTab1 = false;
+  bool _pollingTab2 = false;
+  final Set<String> _cancellingIds = {};
+  String? _trackedToken;
+  String? _trackedServerUrl;
+  bool _didInitScope = false;
 
   MusicTask? _taskTab1;
   MusicTask? _taskTab2;
   String? _errorTab1;
   String? _errorTab2;
+
+  int _cancelTabWatcher(bool isTab1) {
+    if (isTab1) {
+      unawaited(_subTab1?.cancel());
+      _subTab1 = null;
+      return ++_watchEpochTab1;
+    }
+    unawaited(_subTab2?.cancel());
+    _subTab2 = null;
+    return ++_watchEpochTab2;
+  }
 
   @override
   void initState() {
@@ -86,13 +109,11 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       vsync: this,
       initialIndex: widget.initialTabIndex.clamp(0, 1),
     );
-    _tabController.addListener(() {
-      if (mounted) setState(() {});
-    });
     _loadInitialData();
   }
 
   Future<void> _loadInitialData() async {
+    final epoch = ++_loadEpoch;
     final dio = context.read<ServerConfig>().api.dio;
     final musicApi = MusicApi(dio);
 
@@ -100,8 +121,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       final models = await musicApi.models();
       final seenLora = <String>{};
       final uniqueLoras = models.where((l) => seenLora.add(l.name)).toList();
-      if (mounted) {
-        setState(() => _loras = uniqueLoras);
+      if (mounted && epoch == _loadEpoch) {
+        setState(() {
+          _loras = uniqueLoras;
+          if (_selectedLora.isNotEmpty && !uniqueLoras.any((l) => l.name == _selectedLora)) {
+            _selectedLora = '';
+          }
+        });
       }
     } catch (_) {}
 
@@ -116,17 +142,22 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       final seenTune = <String>{};
       final uniqueTunes = items.where((it) => seenTune.add(it.id)).toList();
 
-      if (mounted) {
+      if (mounted && epoch == _loadEpoch) {
         setState(() {
           _tunes = uniqueTunes;
           if (uniqueTunes.isNotEmpty) {
-            _selectedTune = uniqueTunes.first;
+            final keep = _selectedTune != null
+                ? uniqueTunes.where((t) => t.id == _selectedTune!.id).firstOrNull
+                : null;
+            _selectedTune = keep ?? uniqueTunes.first;
+          } else {
+            _selectedTune = null;
           }
           _loadingTunes = false;
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && epoch == _loadEpoch) {
         setState(() {
           _loadingTunes = false;
           _loadTunesError = ApiClient.describe(e);
@@ -145,28 +176,32 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    _cancelTabWatcher(true);
+    _cancelTabWatcher(false);
     _tabController.dispose();
     _customLyricsCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _runSingOriginal() async {
-    if (_selectedTune == null) return;
+    if (_busyTab1 || _selectedTune == null) return;
     final strings = context.read<LocaleProvider>().strings;
     final dio = context.read<ServerConfig>().api.dio;
     final history = context.read<HistoryService>();
     if (!mounted) return;
-    if (!await ConnectivityGuard.instance.isOnline) {
-      if (mounted) setState(() => _errorTab1 = strings.offlineMessage);
-      return;
-    }
+    _cancelTabWatcher(true);
     setState(() {
       _busyTab1 = true;
       _errorTab1 = null;
       _taskTab1 = null;
+      _pollingTab1 = false;
     });
 
     try {
+      if (!await ConnectivityGuard.instance.isOnline) {
+        if (mounted) setState(() => _errorTab1 = strings.offlineMessage);
+        return;
+      }
       final task = await MusicApi(dio).singOriginal(
         heritageId: _selectedTune!.id,
         vocal: _vocalTab1,
@@ -204,28 +239,30 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Future<void> _runSingNewLyrics() async {
-    if (_selectedTune == null) return;
+    if (_busyTab2 || _selectedTune == null) return;
     final strings = context.read<LocaleProvider>().strings;
     final dio = context.read<ServerConfig>().api.dio;
     final history = context.read<HistoryService>();
     if (!mounted) return;
-    if (!await ConnectivityGuard.instance.isOnline) {
-      if (mounted) setState(() => _errorTab2 = strings.offlineMessage);
-      return;
-    }
     final lyrics = _customLyricsCtrl.text.trim();
     if (lyrics.isEmpty) {
       setState(() => _errorTab2 = strings.creationLyricsRequired);
       return;
     }
 
+    _cancelTabWatcher(false);
     setState(() {
       _busyTab2 = true;
       _errorTab2 = null;
       _taskTab2 = null;
+      _pollingTab2 = false;
     });
 
     try {
+      if (!await ConnectivityGuard.instance.isOnline) {
+        if (mounted) setState(() => _errorTab2 = strings.offlineMessage);
+        return;
+      }
       final task = await MusicApi(dio).singNewLyrics(
         heritageId: _selectedTune!.id,
         newLyrics: lyrics,
@@ -265,8 +302,11 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Future<void> _watchTask(String id, {required bool isTab1, required int durationSeconds}) async {
+    final epoch = isTab1 ? _watchEpochTab1 : _watchEpochTab2;
+    bool isCurrent() => mounted && epoch == (isTab1 ? _watchEpochTab1 : _watchEpochTab2);
+
     void apply(MusicTask t) {
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() {
         if (isTab1) {
           _taskTab1 = t;
@@ -281,12 +321,21 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       try {
         final dio = context.read<ServerConfig>().api.dio;
         final history = context.read<HistoryService>();
-        if (mounted) {
-          setState(() => _polling = true);
-        }
+        if (!isCurrent()) return;
+        setState(() {
+          if (isTab1) {
+            _pollingTab1 = true;
+          } else {
+            _pollingTab2 = true;
+          }
+        });
         final done = Completer<void>();
         final sub = MusicApi(dio).taskEvents(id).listen(
           (t) {
+            if (!isCurrent()) {
+              if (!done.isCompleted) done.complete();
+              return;
+            }
             apply(t);
             if (t.status != 'running' && t.status != 'pending' && t.status != 'queued') {
               history.updateStatus(id, t.status);
@@ -301,103 +350,125 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             if (!done.isCompleted) done.complete();
           },
         );
+        if (isTab1) {
+          _subTab1 = sub;
+        } else {
+          _subTab2 = sub;
+        }
         await done.future.timeout(
           Duration(seconds: 150 + durationSeconds * 3),
           onTimeout: () {},
         );
         await sub.cancel();
+        if (isTab1 && identical(_subTab1, sub)) _subTab1 = null;
+        if (!isTab1 && identical(_subTab2, sub)) _subTab2 = null;
+        if (!isCurrent()) return;
         if (reachedTerminal) {
-          if (mounted) {
-            setState(() => _polling = false);
-          }
+          setState(() {
+            if (isTab1) {
+              _pollingTab1 = false;
+            } else {
+              _pollingTab2 = false;
+            }
+          });
           return;
         }
       } catch (_) {}
     }
-    if (!mounted) return;
-    await _pollTask(id, isTab1: isTab1, durationSeconds: durationSeconds);
+    if (!isCurrent()) return;
+    await _pollTask(id, isTab1: isTab1, durationSeconds: durationSeconds, epoch: epoch);
   }
 
-  Future<void> _pollTask(String id, {required bool isTab1, required int durationSeconds}) async {
-    if (!mounted) return;
+  Future<void> _pollTask(String id, {required bool isTab1, required int durationSeconds, required int epoch}) async {
+    bool isCurrent() => mounted && epoch == (isTab1 ? _watchEpochTab1 : _watchEpochTab2);
+    if (!isCurrent()) return;
     final history = context.read<HistoryService>();
     final pollLost = context.read<LocaleProvider>().strings.creationPollLost;
     final taskLost = context.read<LocaleProvider>().strings.creationTaskLost;
-    setState(() => _polling = true);
+    setState(() {
+      if (isTab1) {
+        _pollingTab1 = true;
+      } else {
+        _pollingTab2 = true;
+      }
+    });
     final deadline = DateTime.now().add(Duration(seconds: 150 + durationSeconds * 3));
     var consecutiveFailures = 0;
 
-    while (mounted && DateTime.now().isBefore(deadline)) {
+    while (isCurrent() && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
+      if (!mounted || !isCurrent()) return;
       final dio = context.read<ServerConfig>().api.dio;
       try {
         final t = await MusicApi(dio).task(id);
+        if (!isCurrent()) return;
         consecutiveFailures = 0;
-        if (mounted) {
-          setState(() {
-            if (isTab1) {
-              _taskTab1 = t;
-            } else {
-              _taskTab2 = t;
-            }
-          });
-        }
+        setState(() {
+          if (isTab1) {
+            _taskTab1 = t;
+          } else {
+            _taskTab2 = t;
+          }
+        });
         if (t.status != 'running' && t.status != 'pending' && t.status != 'queued') {
           await history.updateStatus(id, t.status);
           break;
         }
       } on DioException catch (e) {
+        if (!isCurrent()) return;
         if (e.response?.statusCode == 404) {
-          if (mounted) {
-            setState(() {
-              if (isTab1) {
-                _errorTab1 = taskLost;
-              } else {
-                _errorTab2 = taskLost;
-              }
-            });
-          }
+          setState(() {
+            if (isTab1) {
+              _errorTab1 = taskLost;
+            } else {
+              _errorTab2 = taskLost;
+            }
+          });
           break;
         }
         consecutiveFailures++;
         if (consecutiveFailures >= 5) {
-          if (mounted) {
-            final msg = pollLost(consecutiveFailures);
-            setState(() {
-              if (isTab1) {
-                _errorTab1 = msg;
-              } else {
-                _errorTab2 = msg;
-              }
-            });
-          }
+          final msg = pollLost(consecutiveFailures);
+          setState(() {
+            if (isTab1) {
+              _errorTab1 = msg;
+            } else {
+              _errorTab2 = msg;
+            }
+          });
           break;
         }
       } catch (_) {
+        if (!isCurrent()) return;
         consecutiveFailures++;
         if (consecutiveFailures >= 5) {
-          if (mounted) {
-            final msg = pollLost(consecutiveFailures);
-            setState(() {
-              if (isTab1) {
-                _errorTab1 = msg;
-              } else {
-                _errorTab2 = msg;
-              }
-            });
-          }
+          final msg = pollLost(consecutiveFailures);
+          setState(() {
+            if (isTab1) {
+              _errorTab1 = msg;
+            } else {
+              _errorTab2 = msg;
+            }
+          });
           break;
         }
       }
     }
 
-    if (mounted) {
-      setState(() => _polling = false);
+    if (isCurrent()) {
+      setState(() {
+        if (isTab1) {
+          _pollingTab1 = false;
+        } else {
+          _pollingTab2 = false;
+        }
+      });
     }
   }
 
   Future<void> _cancelTask(String id) async {
+    if (_cancellingIds.contains(id)) return;
+    setState(() => _cancellingIds.add(id));
     final dio = context.read<ServerConfig>().api.dio;
     final history = context.read<HistoryService>();
     try {
@@ -409,7 +480,17 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           if (_taskTab2?.id == id) _taskTab2 = t;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ApiClient.describe(e))),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _cancellingIds.remove(id));
+      }
+    }
   }
 
   void _applySampleVerse(String text) {
@@ -417,8 +498,42 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     setState(() {});
   }
 
+  void _syncAuthOrServer(BuildContext context) {
+    String? token;
+    try {
+      token = context.watch<AuthService>().token;
+    } catch (_) {}
+    final serverUrl = context.watch<ServerConfig>().baseUrl;
+    if (!_didInitScope) {
+      _didInitScope = true;
+      _trackedToken = token;
+      _trackedServerUrl = serverUrl;
+      return;
+    }
+    if (token != _trackedToken || serverUrl != _trackedServerUrl) {
+      _trackedToken = token;
+      _trackedServerUrl = serverUrl;
+      _cancelTabWatcher(true);
+      _cancelTabWatcher(false);
+      Future.microtask(() {
+        if (mounted) {
+          setState(() {
+            _taskTab1 = null;
+            _taskTab2 = null;
+            _errorTab1 = null;
+            _errorTab2 = null;
+            _pollingTab1 = false;
+            _pollingTab2 = false;
+          });
+          _reloadInitialData();
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    _syncAuthOrServer(context);
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -449,7 +564,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       decoration: BoxDecoration(
-        gradient: AppTheme.brandGradient,
+        gradient: AppTheme.brandGradientOf(context),
         border: Border(
           bottom: BorderSide(color: AppTheme.imperialGold.withValues(alpha: 0.2), width: 1),
         ),
@@ -463,13 +578,13 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Container(
             padding: const EdgeInsets.all(AppSpacing.sm),
             decoration: BoxDecoration(
-              color: AppTheme.imperialGold.withAlpha(40),
+              color: AppTheme.gradientAccentGold.withAlpha(40),
               shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.imperialGold, width: 1.2),
+              border: Border.all(color: AppTheme.gradientAccentGold, width: 1.2),
             ),
-            child: const Icon(
+            child: const HueIcon(
               HueIcons.autoAwesome,
-              color: AppTheme.imperialGold,
+              color: AppTheme.gradientAccentGold,
               size: 22,
             ),
           ),
@@ -481,7 +596,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 Text(
                   strings.navCreation,
                   style: const TextStyle(
-                    fontSize: 19,
+                    fontSize: AppFontSize.heading,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.3,
                     color: Colors.white,
@@ -492,8 +607,8 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 Text(
                   strings.creationBannerSubtitle,
                   style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withAlpha(200),
+                    fontSize: AppFontSize.sm,
+                    color: Colors.white.withValues(alpha: 0.88),
                   ),
                 ),
               ],
@@ -548,7 +663,12 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           _buildAiRecreationControls(),
           if (_taskTab1 != null) ...[
             const SizedBox(height: 14),
-            TaskResultCard(task: _taskTab1!, polling: _polling, onCancel: _cancelTask),
+            TaskResultCard(
+              task: _taskTab1!,
+              polling: _pollingTab1,
+              cancelling: _cancellingIds.contains(_taskTab1!.id),
+              onCancel: _cancelTask,
+            ),
           ],
         ],
       ],
@@ -604,7 +724,12 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         ],
         if (_taskTab2 != null) ...[
           const SizedBox(height: AppSpacing.md),
-          TaskResultCard(task: _taskTab2!, polling: _polling, onCancel: _cancelTask),
+          TaskResultCard(
+            task: _taskTab2!,
+            polling: _pollingTab2,
+            cancelling: _cancellingIds.contains(_taskTab2!.id),
+            onCancel: _cancelTask,
+          ),
         ],
       ],
     );
@@ -678,11 +803,11 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         children: [
           Row(
             children: [
-              const HueIcon(HueIcons.libraryMusic, size: 16, color: AppTheme.imperialGold),
+              HueIcon(HueIcons.libraryMusic, size: 16, color: AppTheme.goldReadable(context)),
               const SizedBox(width: 6),
               Text(
                 strings.creationPickTuneLabel,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _onSurface),
+                style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold, color: _onSurface),
               ),
             ],
           ),
@@ -705,7 +830,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                   value: tune.id,
                   child: Text(
                     '${tune.title} (${tune.modeSystem.isNotEmpty ? tune.modeSystem.split("(")[0].trim() : tune.genre})',
-                    style: const TextStyle(fontSize: 13),
+                    style: const TextStyle(fontSize: AppFontSize.md),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -727,35 +852,38 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
 
   Widget _buildMusicologyCard(HeritageItem item) {
     final strings = context.watch<LocaleProvider>().strings;
+    final gold = AppTheme.goldReadable(context);
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppTheme.imperialGold.withValues(alpha: 0.2)),
+        border: Border.all(color: gold.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                 decoration: BoxDecoration(
-                  color: AppTheme.imperialGold.withAlpha(30),
+                  color: gold.withAlpha(30),
                   borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(color: AppTheme.imperialGold.withAlpha(120)),
+                  border: Border.all(color: gold.withAlpha(120)),
                 ),
                 child: Text(
                   item.type,
-                  style: const TextStyle(
-                    color: AppTheme.imperialGold,
-                    fontSize: 11,
+                  style: TextStyle(
+                    color: gold,
+                    fontSize: AppFontSize.xs,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
               if (item.bpm != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
@@ -765,13 +893,12 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                   ),
                   child: Text(
                     '${item.bpm!.toStringAsFixed(0)} BPM',
-                    style: TextStyle(color: _onSurfaceVariant, fontSize: 11),
+                    style: TextStyle(color: _onSurfaceVariant, fontSize: AppFontSize.xs),
                   ),
                 ),
-              const Spacer(),
               Text(
                 item.artist.isNotEmpty ? item.artist : strings.creationFolkArtist,
-                style: TextStyle(color: _onSurfaceVariant, fontSize: 12),
+                style: TextStyle(color: _onSurfaceVariant, fontSize: AppFontSize.sm),
               ),
             ],
           ),
@@ -779,7 +906,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           Text(
             item.title,
             style: TextStyle(
-              fontSize: 17,
+              fontSize: AppFontSize.title,
               fontWeight: FontWeight.bold,
               color: _onSurface,
             ),
@@ -835,35 +962,50 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               Text(
                 strings.creationLyricsTitle,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppFontSize.md,
                   fontWeight: FontWeight.bold,
                   color: _onSurface,
                 ),
               ),
               if (hasOrnaments)
-                Tooltip(
-                  message: _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
-                  child: GestureDetector(
-                    onTap: () => setState(() => _showOrnaments = !_showOrnaments),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-                      decoration: BoxDecoration(
-                        color: _showOrnaments
-                            ? AppTheme.primaryPurple.withAlpha(120)
-                            : _surfaceVariant,
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                        border: Border.all(
-                          color: _showOrnaments
-                              ? AppTheme.primaryPurpleLight
-                              : _outline,
+                Semantics(
+                  button: true,
+                  toggled: _showOrnaments,
+                  label: _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
+                  child: Tooltip(
+                    message: _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      onTap: () => setState(() => _showOrnaments = !_showOrnaments),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+                        child: Center(
+                          widthFactor: 1,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                            decoration: BoxDecoration(
+                              color: _showOrnaments
+                                  ? AppTheme.primaryPurple.withAlpha(120)
+                                  : _surfaceVariant,
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                              border: Border.all(
+                                color: _showOrnaments
+                                    ? Theme.of(context).colorScheme.primary
+                                    : _outline,
+                              ),
+                            ),
+                            child: Text(
+                              _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
+                              style: TextStyle(fontSize: AppFontSize.xs, color: _onSurface),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        _showOrnaments ? strings.creationModeOrnamented : strings.creationModePlain,
-                        style: TextStyle(fontSize: 11, color: _onSurface),
                       ),
                     ),
                   ),
+                ),
                 ),
             ],
           ),
@@ -878,7 +1020,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             child: SelectableText(
               displayLyrics.isNotEmpty ? displayLyrics : strings.creationNoLyrics,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppFontSize.md,
                 height: 1.6,
                 color: _onSurface,
                 fontFamily: AppTheme.monoFontFamily,
@@ -893,6 +1035,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   Widget _buildMasterPlaybackControls(HeritageItem item, ServerConfig server) {
     final strings = context.watch<LocaleProvider>().strings;
     final audioUrl = '${server.baseUrl}/api/heritage/${item.id}/audio';
+    final gold = AppTheme.goldReadable(context);
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -908,16 +1051,17 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  icon: Icon(
+                  icon: HueIcon(
                     _showMasterPlayer ? HueIcons.stop : HueIcons.playArrow,
-                    color: AppTheme.imperialGold,
+                    color: gold,
+                    decorative: true,
                   ),
                   label: Text(
                     _showMasterPlayer ? strings.creationCollapseMaster : strings.creationListenMaster,
-                    style: const TextStyle(color: AppTheme.imperialGold, fontSize: 13),
+                    style: TextStyle(color: gold, fontSize: AppFontSize.md),
                   ),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppTheme.imperialGold),
+                    side: BorderSide(color: gold),
                     padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   ),
                   onPressed: () => setState(() => _showMasterPlayer = !_showMasterPlayer),
@@ -953,7 +1097,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         children: [
           Text(
             strings.creationAiRecreateTitle,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _onSurface),
+            style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold, color: _onSurface),
           ),
           const SizedBox(height: 10),
           Row(
@@ -995,7 +1139,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               isDense: true,
               decoration: InputDecoration(
                 labelText: strings.creationLoraModelLabel,
-                labelStyle: const TextStyle(fontSize: 12),
+                labelStyle: const TextStyle(fontSize: AppFontSize.sm),
                 contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
               ),
@@ -1045,7 +1189,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                 child: Text(
                   strings.creationLockedMelody(title),
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: AppFontSize.md,
                     fontWeight: FontWeight.bold,
                     color: AppTheme.imperialGold,
                     letterSpacing: 0.2,
@@ -1057,7 +1201,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
           const SizedBox(height: 4),
           Text(
             strings.creationLockedMelodyDesc,
-            style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.78), height: 1.4),
+            style: TextStyle(fontSize: AppFontSize.sm, color: Colors.white.withValues(alpha: 0.78), height: 1.4),
           ),
         ],
       ),
@@ -1082,7 +1226,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
               const SizedBox(width: 6),
               Text(
                 strings.creationRhymeGuideTitle,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _onSurface),
+                style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold, color: _onSurface),
               ),
             ],
           ),
@@ -1091,12 +1235,12 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             item.rhymeGuide.isNotEmpty
                 ? item.rhymeGuide
                 : strings.creationRhymeGuideDefault(item.bpm?.toStringAsFixed(0)),
-            style: TextStyle(fontSize: 12, color: _onSurface, height: 1.4),
+            style: TextStyle(fontSize: AppFontSize.sm, color: _onSurface, height: 1.4),
           ),
           const SizedBox(height: 10),
           Text(
             strings.creationSampleVerseTitle,
-            style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
+            style: TextStyle(fontSize: AppFontSize.sm, color: _onSurfaceVariant),
           ),
           const SizedBox(height: 6),
           Wrap(
@@ -1123,26 +1267,30 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
   }
 
   Widget _sampleButton(String label, String text) {
-    return InkWell(
-      onTap: () => _applySampleVerse(text),
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: AppTheme.primaryPurple.withAlpha(60),
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(color: AppTheme.primaryPurpleLight.withAlpha(120)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const HueIcon(HueIcons.addCircle, size: 13, color: AppTheme.primaryPurpleLight),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, color: _onSurface),
-            ),
-          ],
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () => _applySampleVerse(text),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryPurple.withAlpha(60),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: Theme.of(context).colorScheme.primary.withAlpha(120)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              HueIcon(HueIcons.addCircle, size: 13, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(fontSize: AppFontSize.sm, color: _onSurface),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1161,15 +1309,18 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                strings.creationComposeTitle,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _onSurface),
+              Expanded(
+                child: Text(
+                  strings.creationComposeTitle,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: AppFontSize.md, fontWeight: FontWeight.bold, color: _onSurface),
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 strings.creationWordCount(_customLyricsCtrl.text.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length),
-                style: TextStyle(fontSize: 11, color: _onSurfaceVariant),
+                style: TextStyle(fontSize: AppFontSize.xs, color: _onSurfaceVariant),
               ),
             ],
           ),
@@ -1178,10 +1329,10 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
             controller: _customLyricsCtrl,
             maxLines: 5,
             onChanged: (_) => setState(() {}),
-            style: const TextStyle(fontSize: 13, height: 1.5),
+            style: const TextStyle(fontSize: AppFontSize.md, height: 1.5),
             decoration: InputDecoration(
               hintText: strings.creationLyricsHint,
-              hintStyle: TextStyle(color: _onSurfaceVariant, fontSize: 12),
+              hintStyle: TextStyle(color: _onSurfaceVariant, fontSize: AppFontSize.sm),
               filled: true,
               fillColor: _surfaceVariant,
               border: OutlineInputBorder(
@@ -1254,7 +1405,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
                     isDense: true,
                     decoration: InputDecoration(
                       labelText: strings.creationLoraModelLabel,
-                      labelStyle: const TextStyle(fontSize: 12),
+                      labelStyle: const TextStyle(fontSize: AppFontSize.sm),
                       contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
                     ),
@@ -1278,18 +1429,18 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: accentColor ?? _onSurfaceVariant),
+        HueIcon(icon, size: 15, color: accentColor ?? _onSurfaceVariant),
         const SizedBox(width: 6),
         Text(
           label,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _onSurfaceVariant),
+          style: TextStyle(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: _onSurfaceVariant),
         ),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             value,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: AppFontSize.sm,
               color: accentColor ?? _onSurface,
               fontWeight: accentColor != null ? FontWeight.bold : FontWeight.normal,
             ),
@@ -1312,7 +1463,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
       isDense: true,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(fontSize: 12),
+        labelStyle: const TextStyle(fontSize: AppFontSize.sm),
         contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
       ),
@@ -1320,7 +1471,7 @@ class _CreationScreenState extends State<CreationScreen> with SingleTickerProvid
         for (final item in items)
           DropdownMenuItem(
             value: item,
-            child: Text(display != null ? display(item) : item, style: const TextStyle(fontSize: 12)),
+            child: Text(display != null ? display(item) : item, style: const TextStyle(fontSize: AppFontSize.sm)),
           ),
       ],
       onChanged: (v) {

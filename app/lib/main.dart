@@ -22,7 +22,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    unawaited(CrashLog.write(details.exceptionAsString()));
+    unawaited(CrashLog.write('${details.exceptionAsString()}\n${details.stack ?? ''}'));
   };
   PlatformDispatcher.instance.onError = (error, stack) {
     unawaited(CrashLog.write('$error\n$stack'));

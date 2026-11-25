@@ -24,9 +24,7 @@ def read_varlen(data, pos):
 
 
 def write_midi(notes, bpm):
-    mpq = int(round(60000000.0 / bpm)) if bpm > 0 else 500000
-    if mpq <= 0:
-        mpq = 500000
+    mpq = max(1, min(0xFFFFFF, int(round(60000000.0 / bpm)))) if bpm > 0 else 500000
     events = [(0, b"\xFF\x51\x03" + mpq.to_bytes(3, "big"))]
     for nt in notes:
         s = max(0.0, float(nt.get("start", 0.0)))

@@ -1,9 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:share_plus/share_plus.dart';
 
 Future<void> shareDownloadedFile(String path, String fileName) async {
-  if (!(Platform.isAndroid || Platform.isIOS)) {
+  if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) {
     return;
   }
   if (!await File(path).exists()) {

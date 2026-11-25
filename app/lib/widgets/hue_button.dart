@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import 'hue_icons.dart';
 
 enum HueButtonVariant { primary, gold, danger, ghost }
 
@@ -36,7 +37,7 @@ class HueButton extends StatelessWidget {
     final textStyle = size == HueButtonSize.small
         ? Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)
         : Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600);
-    final tapTarget = size == HueButtonSize.small ? const Size(44, 44) : const Size(64, 48);
+    final tapTarget = size == HueButtonSize.small ? const Size(48, 48) : const Size(64, 48);
     final padding = size == HueButtonSize.small
         ? const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm)
         : const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.lg);
@@ -47,6 +48,8 @@ class HueButton extends StatelessWidget {
       case HueButtonVariant.primary:
         style = FilledButton.styleFrom(
           minimumSize: tapTarget,
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
           disabledBackgroundColor: scheme.primary.withValues(alpha: AppAlpha.hover),
@@ -58,6 +61,8 @@ class HueButton extends StatelessWidget {
       case HueButtonVariant.gold:
         style = OutlinedButton.styleFrom(
           minimumSize: tapTarget,
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
           foregroundColor: gold,
           side: BorderSide(color: gold.withValues(alpha: 0.6)),
           disabledForegroundColor: gold.withValues(alpha: AppAlpha.hover),
@@ -69,6 +74,8 @@ class HueButton extends StatelessWidget {
       case HueButtonVariant.danger:
         style = FilledButton.styleFrom(
           minimumSize: tapTarget,
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
           backgroundColor: danger,
           foregroundColor: onDanger,
           disabledBackgroundColor: danger.withValues(alpha: AppAlpha.hover),
@@ -80,6 +87,8 @@ class HueButton extends StatelessWidget {
       case HueButtonVariant.ghost:
         style = TextButton.styleFrom(
           minimumSize: tapTarget,
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
           foregroundColor: scheme.primary,
           disabledForegroundColor: scheme.primary.withValues(alpha: AppAlpha.hover),
           padding: padding,
@@ -99,9 +108,15 @@ class HueButton extends StatelessWidget {
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: size == HueButtonSize.small ? 16 : 18),
+                  HueIcon(icon!, size: size == HueButtonSize.small ? 16 : 18, decorative: true),
                   const SizedBox(width: 6),
-                  Text(label),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               )
             : Text(label));

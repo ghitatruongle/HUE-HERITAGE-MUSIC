@@ -29,7 +29,7 @@ class ErrorPanel extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(fontSize: 13, color: scheme.onSurface, height: 1.4),
+              style: TextStyle(fontSize: AppFontSize.md, color: scheme.onSurface, height: 1.4),
             ),
           ),
           if (onRetry != null)

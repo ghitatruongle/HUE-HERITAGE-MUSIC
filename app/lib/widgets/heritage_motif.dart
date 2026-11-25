@@ -282,7 +282,7 @@ class ImperialTabBar extends StatelessWidget implements PreferredSizeWidget {
         dividerColor: Colors.transparent,
         labelColor: gold,
         unselectedLabelColor: scheme.onSurfaceVariant,
-        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.md),
         tabs: tabs,
       ),
     );

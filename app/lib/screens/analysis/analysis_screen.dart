@@ -22,6 +22,7 @@ import '../../widgets/stat_card.dart';
 import '../../widgets/waveform_view.dart';
 import '../../widgets/error_panel.dart';
 import '../../widgets/hue_icons.dart';
+import '../../widgets/skeleton_loader.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -32,6 +33,7 @@ class AnalysisScreen extends StatefulWidget {
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
   bool _loading = false;
+  bool _picking = false;
   String? _error;
   PitchData? _pitch;
   InstrumentResult? _instruments;
@@ -40,6 +42,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String _source = '';
 
   Future<void> _pickAndAnalyze() async {
+    if (_loading || _picking) return;
+    setState(() => _picking = true);
     Uint8List? bytes;
     String name = '';
     try {
@@ -47,7 +51,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         type: FileType.audio,
         withData: kIsWeb,
       );
-      final file = result?.files.single;
+      final file = (result == null || result.files.isEmpty) ? null : result.files.first;
       if (file == null) return;
       name = file.name;
       bytes = file.bytes;
@@ -61,22 +65,29 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _loading = false;
       });
       return;
+    } finally {
+      if (mounted) {
+        setState(() => _picking = false);
+      }
     }
     if (bytes == null) return;
     await _run(bytes, name);
   }
 
   Future<void> _run(Uint8List bytes, String name) async {
+    if (!mounted || _loading) return;
     final config = context.read<ServerConfig>();
     if (!config.hasServer) {
       setState(() => _error = context.read<LocaleProvider>().strings.analysisNoServer);
       return;
     }
-    if (!mounted) return;
     if (!await ConnectivityGuard.instance.isOnline) {
-      setState(() => _error = context.read<LocaleProvider>().strings.offlineMessage);
+      if (mounted) {
+        setState(() => _error = context.read<LocaleProvider>().strings.offlineMessage);
+      }
       return;
     }
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -154,7 +165,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       Text(strings.analysisPickHint),
                       const SizedBox(height: AppSpacing.md),
                       FilledButton.icon(
-                        onPressed: _loading ? null : _pickAndAnalyze,
+                        onPressed: (_loading || _picking) ? null : _pickAndAnalyze,
                         icon: const HueIcon(HueIcons.folderOpen),
                         label: Text(strings.analysisPickBtn),
                       ),
@@ -165,10 +176,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               if (_loading) ...[
                 const SizedBox(height: AppSpacing.lg),
                 const LinearProgressIndicator(),
+                const SizedBox(height: AppSpacing.md),
+                const SkeletonLoader(height: 160),
+                const SizedBox(height: AppSpacing.md),
+                const Row(
+                  children: [
+                    Expanded(child: SkeletonLoader(height: 68)),
+                    SizedBox(width: AppSpacing.md),
+                    Expanded(child: SkeletonLoader(height: 68)),
+                  ],
+                ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.lg),
-                ErrorPanel(message: _error!, onRetry: _loading ? null : _pickAndAnalyze),
+                ErrorPanel(message: _error!, onRetry: (_loading || _picking) ? null : _pickAndAnalyze),
               ],
               if (_source.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
@@ -185,7 +206,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
-                      const HueIcon(HueIcons.warning, size: 14, color: AppTheme.statusWarning),
+                      HueIcon(HueIcons.warning, size: 14, color: AppTheme.statusReadable(context, AppStatusKind.warning)),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -193,7 +214,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             '${_pitch!.maxSeconds?.toStringAsFixed(0) ?? '35'}s',
                             _pitch!.durationFull?.toStringAsFixed(1),
                           ),
-                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          style: TextStyle(fontSize: AppFontSize.sm, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         ),
                       ),
                     ],

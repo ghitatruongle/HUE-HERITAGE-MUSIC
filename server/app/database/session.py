@@ -32,7 +32,7 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-write_slot = threading.BoundedSemaphore(8)
+write_slot = threading.BoundedSemaphore(max(1, int(settings.db_write_slots)))
 
 
 def acquire_write_slot():
@@ -82,6 +82,11 @@ MIGRATION_COLUMNS = {
     "tasks": {
         "user_id": "VARCHAR(64)",
     },
+    "invite_codes": {
+        "max_uses": "INTEGER DEFAULT 1 NOT NULL",
+        "used_count": "INTEGER DEFAULT 0 NOT NULL",
+        "expires_at": "DATETIME",
+    },
 }
 
 
@@ -115,6 +120,10 @@ def init_db():
                 with engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
     _ensure_schema_version()
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE invite_codes SET used_count = 1 WHERE used_by IS NOT NULL AND used_count = 0")
+        )
     _enforce_admin_truong()
 
 

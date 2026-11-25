@@ -32,7 +32,12 @@ def detect(data):
     if win_n <= 0:
         win_n = 1
     if len(samples) < win_n:
-        samples = samples + [0.0] * (win_n - len(samples))
+        try:
+            import numpy as _np
+
+            samples = _np.pad(_np.asarray(samples, dtype=_np.float64), (0, win_n - len(samples)))
+        except Exception:
+            samples = list(samples) + [0.0] * (win_n - len(samples))
     segs = []
     pos = 0
     while pos + win_n <= len(samples):

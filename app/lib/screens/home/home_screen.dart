@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,7 +10,9 @@ import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
 import '../../services/practice_resume.dart';
 import '../../services/server_config.dart';
+import '../../services/session_media.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/avatar_view.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/heritage_motif.dart';
 import '../../widgets/hue_icons.dart';
@@ -36,8 +40,43 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _navIndex = 0;
+  int _sessionEpoch = 0;
   bool _onboardingShown = false;
   bool _mcpDialogShown = false;
+  String? _trackedUser;
+  String? _trackedServer;
+  bool _didInitDeps = false;
+
+  void _syncSessionBoundary(BuildContext context, AuthService auth, ServerConfig server) {
+    final curUser = auth.isLoggedIn ? (auth.username ?? '') : null;
+    final curServer = server.baseUrl;
+    if (!_didInitDeps) {
+      _didInitDeps = true;
+      _trackedUser = curUser;
+      _trackedServer = curServer;
+      return;
+    }
+    final loggedOut = _trackedUser != null && curUser == null;
+    final userSwitched = _trackedUser != null && curUser != null && curUser != _trackedUser;
+    final serverSwitched =
+        _trackedServer != null && _trackedServer!.isNotEmpty && curServer.isNotEmpty && curServer != _trackedServer;
+    _trackedUser = curUser;
+    _trackedServer = curServer;
+    if (loggedOut || userSwitched || serverSwitched) {
+      _mcpDialogShown = false;
+      _sessionEpoch++;
+      AvatarView.clearCache();
+      final sessionMedia = context.read<SessionMedia>();
+      final history = context.read<HistoryService>();
+      Future.microtask(() {
+        PracticeResume.clear();
+        sessionMedia.clearRecording();
+        if (mounted) {
+          unawaited(history.clear());
+        }
+      });
+    }
+  }
 
   void _maybeShowOnboarding(BuildContext context) {
     final server = context.read<ServerConfig>();
@@ -98,6 +137,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthService>();
+    final server = context.watch<ServerConfig>();
+    _syncSessionBoundary(context, auth, server);
     _maybeShowOnboarding(context);
     _maybeShowSessionNotices(context);
     final destinations = [
@@ -177,22 +219,26 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
-    final auth = context.watch<AuthService>();
-    if (auth.isAdmin || auth.role == 'worker') {
+    if (auth.isStaff) {
       destinations.add(
-        const NavigationDestinationItem(
+        NavigationDestinationItem(
           icon: HueIcons.adminPanel,
           selectedIcon: HueIcons.adminPanel,
           labelKey: 'admin',
-          screen: AdminScreen(),
+          screen: AdminScreen(key: ValueKey('admin-${auth.role}-${auth.username ?? ""}')),
           group: NavGroup.admin,
         ),
       );
     }
 
+    if (_navIndex < 0 || _navIndex >= destinations.length) {
+      _navIndex = 0;
+    }
+
     return ResponsiveScaffold(
       destinations: destinations,
-      selectedIndex: _navIndex.clamp(0, destinations.length - 1),
+      selectedIndex: _navIndex,
+      sessionEpoch: _sessionEpoch,
       onDestinationSelected: (idx) => setState(() => _navIndex = idx.clamp(0, destinations.length - 1)),
     );
   }
@@ -289,7 +335,7 @@ class _HomeContent extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 11,
+                      fontSize: AppFontSize.xs,
                     ),
               ),
             ),
@@ -359,6 +405,92 @@ class _HomeContent extends StatelessWidget {
   }
 
   Widget _buildHeroHeader(BuildContext context, dynamic strings, ServerConfig server) {
+    final logoBox = Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        color: Colors.white.withValues(alpha: 0.15),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+      ),
+      child: const AppLogo(size: 44, iconSize: 24, iconColor: Colors.white),
+    );
+    final titleText = Text(
+      strings.appTitle,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: AppFontSize.title,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.2,
+        fontFamily: AppTheme.displayFontFamily,
+      ),
+    );
+    final subtitleText = Text(
+      strings.appSubtitle,
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.88),
+        fontSize: AppFontSize.sm,
+        height: 1.35,
+      ),
+    );
+    final statusPill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: AppTheme.darkBg.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(
+          color: (server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark).withValues(alpha: 0.75),
+          width: 0.9,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              server.hasServer ? strings.serverOnline : strings.serverOffline,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
+                fontSize: AppFontSize.xs,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    final accountButton = Consumer<AuthService?>(
+      builder: (context, auth, _) {
+        final loggedIn = auth?.isLoggedIn ?? false;
+        return IconButton(
+          tooltip: loggedIn ? (auth?.username ?? strings.authTooltipLoggedIn) : strings.authTooltipGuest,
+          icon: const HueIcon(
+            HueIcons.accountCircle,
+            color: Colors.white,
+            size: 26,
+          ),
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+            );
+          },
+        );
+      },
+    );
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -369,107 +501,50 @@ class _HomeContent extends StatelessWidget {
       child: HeritageMotif(
         color: Colors.white,
         opacity: 0.09,
-        child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              color: Colors.white.withValues(alpha: 0.15),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-            ),
-            child: const AppLogo(size: 44, iconSize: 24, iconColor: Colors.white),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  strings.appTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                    fontFamily: AppTheme.displayFontFamily,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  strings.appSubtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.88),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-              decoration: BoxDecoration(
-                color: (server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(AppRadius.xl),
-                border: Border.all(
-                  color: (server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark).withValues(alpha: 0.6),
-                  width: 0.8,
-                ),
-              ),
-              child: Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < AppBreakpoints.compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
-                    ),
+                  Row(
+                    children: [
+                      logoBox,
+                      const SizedBox(width: 12),
+                      Expanded(child: titleText),
+                      accountButton,
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      server.hasServer ? strings.serverOnline : strings.serverOffline,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 8),
+                  subtitleText,
+                  const SizedBox(height: 10),
+                  statusPill,
                 ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Consumer<AuthService?>(
-            builder: (context, auth, _) {
-              final loggedIn = auth?.isLoggedIn ?? false;
-              return IconButton(
-                tooltip: loggedIn ? (auth?.username ?? strings.authTooltipLoggedIn) : strings.authTooltipGuest,
-                icon: Icon(
-                  loggedIn ? HueIcons.accountCircle : HueIcons.accountCircle,
-                  color: Colors.white,
-                  size: 26,
-                ),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  );
-                },
               );
-            },
-          ),
-        ],
+            }
+            return Row(
+              children: [
+                logoBox,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      titleText,
+                      const SizedBox(height: 2),
+                      subtitleText,
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(child: statusPill),
+                const SizedBox(width: 8),
+                accountButton,
+              ],
+            );
+          },
         ),
       ),
     );
@@ -498,32 +573,40 @@ class _QuickActionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: action.color.withValues(alpha: AppAlpha.selected),
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      label: action.label,
+      child: Material(
+        color: action.color.withValues(alpha: AppAlpha.selected),
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        onTap: onSelect,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(action.icon, size: 18, color: action.color),
-              const SizedBox(width: 8),
-              Text(
-                action.label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                HueIcons.arrowForwardIos,
-                size: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-              ),
-            ],
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: onSelect,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                HueIcon(action.icon, size: 18, color: action.color, decorative: true),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    action.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                HueIcon(
+                  HueIcons.arrowForwardIos,
+                  size: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  decorative: true,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -541,60 +624,65 @@ class _RecentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final locale = context.read<LocaleProvider>();
     final strings = locale.strings;
+    final tileTitle = entry.title.isEmpty ? _kindLabel(entry.kind, strings) : entry.title;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Material(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: InkWell(
+      child: Semantics(
+        button: true,
+        label: tileTitle,
+        child: Material(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-            child: Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryPurple.withValues(alpha: AppAlpha.hover + 0.04),
-                    borderRadius: BorderRadius.circular(AppRadius.md),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: AppAlpha.hover + 0.04),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: HueIcon(_kindIcon(entry.kind), color: Theme.of(context).colorScheme.primary, size: 19, decorative: true),
                   ),
-                  child: Icon(_kindIcon(entry.kind), color: AppTheme.primaryPurple, size: 19),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        entry.title.isEmpty ? _kindLabel(entry.kind, strings) : entry.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          tileTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                '${_kindLabel(entry.kind, strings)} · ${_formatDate(entry.at)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
                             ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              '${_kindLabel(entry.kind, strings)} · ${_formatDate(entry.at)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                _statusChip(context, entry.status, strings),
-              ],
+                  const SizedBox(width: 8),
+                  _statusChip(context, entry.status, strings),
+                ],
+              ),
             ),
           ),
         ),
@@ -617,7 +705,7 @@ class _RecentTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
       ),
-      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11)),
+      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: AppFontSize.xs)),
     );
   }
 
@@ -662,59 +750,64 @@ class _ResumeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = context.read<LocaleProvider>().strings;
-    return Material(
-      color: AppTheme.primaryPurple.withValues(alpha: AppAlpha.selected),
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      label: '${strings.homeResumeCta}: $title',
+      child: Material(
+        color: AppTheme.primaryPurple.withValues(alpha: AppAlpha.selected),
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.goldReadable(context), width: 1.2),
-                  color: AppTheme.goldReadable(context).withValues(alpha: AppAlpha.hover + 0.06),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.goldReadable(context), width: 1.2),
+                    color: AppTheme.goldReadable(context).withValues(alpha: AppAlpha.hover + 0.06),
+                  ),
+                  child: HueIcon(HueIcons.playArrow, size: 18, color: AppTheme.goldReadable(context), decorative: true),
                 ),
-                child: HueIcon(HueIcons.playArrow, size: 18, color: AppTheme.goldReadable(context)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      strings.homeResumeCta,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppTheme.goldReadable(context),
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        strings.homeResumeCta,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppTheme.goldReadable(context),
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                HueIcons.arrowForward,
-                size: 16,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ],
+                const SizedBox(width: 8),
+                HueIcon(
+                  HueIcons.arrowForward,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  decorative: true,
+                ),
+              ],
+            ),
           ),
         ),
       ),

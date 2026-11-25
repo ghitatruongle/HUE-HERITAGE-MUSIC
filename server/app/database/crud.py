@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from .models import HeritageItem, AudioFile, User, Task, PracticeSession, CrashReport, ArtifactOwner
+from .models import HeritageItem, AudioFile, User, Task, PracticeSession, CrashReport, ArtifactOwner, ArtifactAccess
 
 
 METADATA_FIELDS = [
@@ -206,8 +206,9 @@ def delete_user_everything(db: Session, user_id: str):
     user = db.get(User, user_id)
     if not user:
         return False
-    db.query(Task).filter(Task.user_id == user_id).update({Task.user_id: None})
+    db.query(Task).filter(Task.user_id == user_id).update({Task.user_id: f"deleted:{user_id}"[:64]})
     db.query(PracticeSession).filter(PracticeSession.user_id == user_id).delete()
+    db.query(ArtifactAccess).filter(ArtifactAccess.user_id == user_id).delete()
     db.delete(user)
     db.commit()
     return True
@@ -234,7 +235,7 @@ def list_crash_reports(db: Session, limit: int = 100, offset: int = 0):
     return (
         db.query(CrashReport)
         .order_by(CrashReport.created_at.desc())
-        .offset(max(0, offset))
+        .offset(_clamp_offset(offset))
         .limit(max(1, min(500, limit)))
         .all()
     )
@@ -246,10 +247,15 @@ def clear_crash_reports(db: Session) -> int:
     return deleted
 
 
+def _utc_now() -> datetime:
+    from datetime import timezone
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def prune_old_crash_reports(db: Session, retention_days: int) -> int:
     if retention_days <= 0:
         return 0
-    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    cutoff = _utc_now() - timedelta(days=retention_days)
     deleted = db.query(CrashReport).filter(CrashReport.created_at < cutoff).delete()
     db.commit()
     return deleted
@@ -273,6 +279,16 @@ def set_user_active(db: Session, user_id: str, active: bool):
     if not user:
         return None
     user.active = 1 if active else 0
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def set_user_role(db: Session, user_id: str, role: str):
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    user.role = role if role in ("user", "worker") else "user"
     db.commit()
     db.refresh(user)
     return user
@@ -358,11 +374,27 @@ def change_password_cas(db: Session, user_id: str, old_hash: str, new_hash: str)
     return int(row[0]) if row else None
 
 
-def create_invite_code(db: Session, code: str, note: str = ""):
+def create_invite_code(
+    db: Session,
+    code: str,
+    note: str = "",
+    max_uses: int = 1,
+    expires_at: Optional[datetime] = None,
+):
     from ..database.models import InviteCode
-    row = InviteCode(code=code, note=note)
+    row = InviteCode(
+        code=code,
+        note=note,
+        max_uses=max(0, int(max_uses)),
+        used_count=0,
+        expires_at=expires_at,
+    )
     db.add(row)
-    db.commit()
+    try:
+        db.commit()
+    except exc.IntegrityError:
+        db.rollback()
+        raise
     db.refresh(row)
     return row
 
@@ -372,14 +404,37 @@ def get_invite_code(db: Session, code: str):
     return db.query(InviteCode).filter(InviteCode.code == code).first()
 
 
+def invite_is_active(row, now: Optional[datetime] = None) -> bool:
+    if row is None:
+        return False
+    ref = now or _utc_now()
+    if row.expires_at is not None and row.expires_at <= ref:
+        return False
+    max_uses = 1 if getattr(row, "max_uses", None) is None else int(row.max_uses)
+    used_count = int(getattr(row, "used_count", 0) or 0)
+    if max_uses == 1 and row.used_by is not None and used_count == 0:
+        used_count = 1
+    if max_uses > 0 and used_count >= max_uses:
+        return False
+    return True
+
+
+def _active_invite_filters(InviteCode, now: datetime):
+    return (
+        or_(InviteCode.expires_at.is_(None), InviteCode.expires_at > now),
+        or_(InviteCode.max_uses == 0, InviteCode.used_count < InviteCode.max_uses),
+        or_(InviteCode.max_uses != 1, InviteCode.used_by.is_(None)),
+    )
+
+
 def mark_invite_used(db: Session, code: str, user_id: str) -> bool:
     from ..database.models import InviteCode
     from sqlalchemy import update
-    from datetime import datetime
+    now = _utc_now()
     result = db.execute(
         update(InviteCode)
-        .where(InviteCode.code == code, InviteCode.used_by.is_(None))
-        .values(used_by=user_id, used_at=datetime.now())
+        .where(InviteCode.code == code, *_active_invite_filters(InviteCode, now))
+        .values(used_count=InviteCode.used_count + 1, used_by=user_id, used_at=now)
     )
     db.commit()
     return result.rowcount > 0
@@ -387,7 +442,15 @@ def mark_invite_used(db: Session, code: str, user_id: str) -> bool:
 
 def unused_invite_codes(db: Session):
     from ..database.models import InviteCode
-    return [row.code for row in db.query(InviteCode).filter(InviteCode.used_by.is_(None)).all()]
+    now = _utc_now()
+    rows = db.query(InviteCode.code).filter(*_active_invite_filters(InviteCode, now)).all()
+    return [row.code for row in rows]
+
+
+def count_active_invites(db: Session) -> int:
+    from ..database.models import InviteCode
+    now = _utc_now()
+    return db.query(InviteCode).filter(*_active_invite_filters(InviteCode, now)).count()
 
 
 def create_task(db: Session, kind: str, params: Optional[dict] = None, user_id: Optional[str] = None):
@@ -495,6 +558,24 @@ def get_practice_session_by_midi(db: Session, midi_name: str):
 _artifact_owner_lock = threading.Lock()
 
 
+def _ensure_artifact_access(db: Session, sha256: str, user_id: Optional[str], kind: str = "") -> None:
+    if not user_id:
+        return
+    if db.get(ArtifactAccess, (sha256, user_id)) is not None:
+        return
+    try:
+        db.add(ArtifactAccess(sha256=sha256, user_id=user_id, kind=kind))
+        db.commit()
+    except exc.IntegrityError:
+        db.rollback()
+
+
+def has_artifact_access(db: Session, sha256: str, user_id: Optional[str]) -> bool:
+    if not user_id:
+        return False
+    return db.get(ArtifactAccess, (sha256, user_id)) is not None
+
+
 def record_artifact_owner(db: Session, sha256: str, user_id: Optional[str], kind: str = ""):
     with _artifact_owner_lock:
         row = db.get(ArtifactOwner, sha256)
@@ -503,11 +584,13 @@ def record_artifact_owner(db: Session, sha256: str, user_id: Optional[str], kind
                 row.user_id = user_id
                 row.kind = kind or row.kind
                 db.commit()
+            _ensure_artifact_access(db, sha256, user_id, kind)
             return row
         row = ArtifactOwner(sha256=sha256, user_id=user_id, kind=kind)
         try:
             db.add(row)
             db.commit()
+            _ensure_artifact_access(db, sha256, user_id, kind)
             return row
         except exc.IntegrityError:
             db.rollback()
@@ -517,6 +600,7 @@ def record_artifact_owner(db: Session, sha256: str, user_id: Optional[str], kind
                     row.user_id = user_id
                     row.kind = kind or row.kind
                     db.commit()
+                _ensure_artifact_access(db, sha256, user_id, kind)
                 return row
             raise
 
@@ -604,11 +688,13 @@ def _safe_json_loads(val: str) -> dict:
 
 
 def task_to_dict(task: Task):
+    params = _safe_json_loads(task.params_json)
+    params.pop("audio_path", None)
     return {
         "id": task.id,
         "kind": task.kind,
         "status": task.status,
-        "params": _safe_json_loads(task.params_json),
+        "params": params,
         "result": _safe_json_loads(task.result_json),
         "error": task.error or "",
         "user_id": task.user_id,

@@ -25,7 +25,10 @@ def _run_inline(task_id: str, kind: str, params: dict):
             result = runner.run(kind, params)
             crud.update_task(db, task_id, status="done", result=result, finished=True)
         except Exception as e:
-            crud.update_task(db, task_id, status="error", error=str(e), finished=True)
+            from ..services.task_error import safe_task_error
+
+            db.rollback()
+            crud.update_task(db, task_id, status="error", error=safe_task_error(e), finished=True)
         finally:
             db.close()
     get_pool("task", max(1, settings.worker_threads)).submit(work)

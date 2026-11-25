@@ -20,7 +20,7 @@ class MusicTask {
       id: json['id']?.toString() ?? '',
       kind: json['kind']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
-      reason: json['reason']?.toString() ?? '',
+      reason: (json['reason'] ?? json['error'])?.toString() ?? '',
       audioUrl: json['audio_url']?.toString() ?? '',
       info: json['info']?.toString() ?? '',
     );

@@ -42,25 +42,49 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   final _searchCtrl = TextEditingController();
   Future<List<HeritageItem>>? _itemsFuture;
   int _itemsEpoch = 0;
-  List<HeritageItem> _allTracks = [];
+  List<HeritageItem> _compareTracks = [];
 
   HeritageItem? _selectedItem;
   RestoreResult? _restoreResult;
-  bool _isRestoring = false;
+  String? _restoringItemId;
   bool _uploading = false;
+  bool _pickingUpload = false;
+  bool _pickingCompare = false;
   String? _restoreError;
 
-  HeritageItem? _compareSampleItem;
-  HeritageItem? _compareTargetItem;
+  String? _compareSampleId;
+  String? _compareTargetId;
   Uint8List? _uploadedTargetBytes;
   String _uploadedTargetName = '';
   CompareResult? _compareResult;
   bool _isComparing = false;
+  int _compareEpoch = 0;
+  String _comparedSampleTitle = '';
+  String _comparedTargetTitle = '';
   String? _compareError;
-  int _abGen = 0;
-  bool _abPlaying = false;
   final ValueNotifier<bool> _abPause = ValueNotifier(false);
+  final ValueNotifier<int> _abPlaySignal = ValueNotifier(0);
   StateSetter? _sheetRefresh;
+
+  bool get _isRestoring => _restoringItemId != null;
+
+  HeritageItem? get _compareSampleItem {
+    final id = _compareSampleId;
+    if (id == null) return null;
+    for (final t in _compareTracks) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
+
+  HeritageItem? get _compareTargetItem {
+    final id = _compareTargetId;
+    if (id == null) return null;
+    for (final t in _compareTracks) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -75,15 +99,17 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     final list = (await HeritageApi(dio).list(q: q, limit: 200)).items;
     if (mounted && epoch == _itemsEpoch) {
       setState(() {
-        _allTracks = list;
+        if (q.trim().isEmpty || _compareTracks.isEmpty) {
+          _compareTracks = list;
+        }
         if (_selectedItem == null && list.isNotEmpty) {
           _selectedItem = list.first;
         }
-        if (_compareSampleItem == null && list.isNotEmpty) {
-          _compareSampleItem = list.first;
+        if (_compareSampleItem == null && _compareTracks.isNotEmpty) {
+          _compareSampleId = _compareTracks.first.id;
         }
-        if (_compareTargetItem == null && list.length > 1) {
-          _compareTargetItem = list[1];
+        if (_compareTargetItem == null && _uploadedTargetBytes == null && _compareTracks.length > 1) {
+          _compareTargetId = _compareTracks[1].id;
         }
       });
     }
@@ -91,19 +117,24 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   }
 
   void _reloadItems() {
-    setState(() => _itemsFuture = _loadItems(_searchCtrl.text));
+    final next = _loadItems(_searchCtrl.text);
+    setState(() {
+      _itemsFuture = next;
+    });
   }
 
-  void _log(HistoryService history, String kind, String title, String status) {
+  String _log(HistoryService history, String kind, String title, String status) {
+    final id = HistoryService.newId();
     history.add(
-          HistoryEntry(
-            id: HistoryService.newId(),
-            kind: kind,
-            title: title,
-            status: status,
-            at: DateTime.now(),
-          ),
-        );
+      HistoryEntry(
+        id: id,
+        kind: kind,
+        title: title,
+        status: status,
+        at: DateTime.now(),
+      ),
+    );
+    return id;
   }
 
   Future<void> _runDspRestoration(HeritageItem item) async {
@@ -112,43 +143,50 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
     final history = context.read<HistoryService>();
     final dio = context.read<ServerConfig>().api.dio;
     if (!mounted) return;
-    if (!await ConnectivityGuard.instance.isOnline) {
-      if (mounted) setState(() => _restoreError = strings.offlineMessage);
-      return;
-    }
     setState(() {
-      _isRestoring = true;
+      _restoringItemId = item.id;
       _restoreError = null;
     });
-    _log(history, 'restore', item.title, 'running');
+    _sheetRefresh?.call(() {});
+    if (!await ConnectivityGuard.instance.isOnline) {
+      if (mounted) {
+        setState(() {
+          _restoringItemId = null;
+          _restoreError = strings.offlineMessage;
+        });
+        _sheetRefresh?.call(() {});
+      }
+      return;
+    }
+    final logId = _log(history, 'restore', item.title, 'running');
     try {
       final res = await RestorationApi(dio).restoreItem(item.id);
-      _log(history, 'restore', item.title, 'done');
-      if (mounted && _selectedItem?.id == item.id) {
+      await history.updateStatus(logId, 'done');
+      if (mounted) {
         setState(() {
-          _restoreResult = res;
-          _isRestoring = false;
+          _restoringItemId = null;
+          if (_selectedItem?.id == item.id) {
+            _restoreResult = res;
+          }
         });
-      } else if (mounted) {
-        setState(() => _isRestoring = false);
+        _sheetRefresh?.call(() {});
       }
-      if (mounted) _sheetRefresh?.call(() {});
     } catch (e) {
-      _log(history, 'restore', item.title, 'error');
-      if (mounted && _selectedItem?.id == item.id) {
+      await history.updateStatus(logId, 'error');
+      if (mounted) {
         setState(() {
-          _restoreError = ApiClient.describe(e);
-          _isRestoring = false;
+          _restoringItemId = null;
+          if (_selectedItem?.id == item.id) {
+            _restoreError = ApiClient.describe(e);
+          }
         });
-      } else if (mounted) {
-        setState(() => _isRestoring = false);
+        _sheetRefresh?.call(() {});
       }
-      if (mounted) _sheetRefresh?.call(() {});
     }
   }
 
   Future<void> _uploadAndRestoreFile() async {
-    if (_uploading) return;
+    if (_uploading || _pickingUpload) return;
     final config = context.read<ServerConfig>();
     final strings = context.read<LocaleProvider>().strings;
 
@@ -158,37 +196,52 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       );
       return;
     }
-    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: kIsWeb);
-    final file = picked?.files.single;
-    if (file == null) return;
-    final bytes = file.bytes ?? (file.path != null && !kIsWeb ? await File(file.path!).readAsBytes() : null);
+    setState(() => _pickingUpload = true);
+    Uint8List? bytes;
+    String fileName = '';
+    try {
+      final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: kIsWeb);
+      final file = (picked == null || picked.files.isEmpty) ? null : picked.files.first;
+      if (file == null) return;
+      fileName = file.name;
+      bytes = file.bytes ?? (file.path != null && !kIsWeb ? await File(file.path!).readAsBytes() : null);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
+      }
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => _pickingUpload = false);
+      }
+    }
     if (bytes == null || !mounted) return;
 
     final dio = config.api.dio;
     final history = context.read<HistoryService>();
-    _log(history, 'restore-upload', file.name, 'running');
+    final logId = _log(history, 'restore-upload', fileName, 'running');
     setState(() => _uploading = true);
 
     try {
-      final res = await RestorationApi(dio).restoreUpload(bytes: bytes, filename: file.name);
-      _log(history, 'restore-upload', file.name, 'done');
+      final res = await RestorationApi(dio).restoreUpload(bytes: bytes, filename: fileName);
+      await history.updateStatus(logId, 'done');
       if (!mounted) return;
       showDialog(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogCtx) => AlertDialog(
           title: Row(
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                 decoration: BoxDecoration(
-                  color: AppTheme.goldReadable(context).withValues(alpha: 0.2),
+                  color: AppTheme.goldReadable(dialogCtx).withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(AppRadius.xs),
-                  border: Border.all(color: AppTheme.goldReadable(context)),
+                  border: Border.all(color: AppTheme.goldReadable(dialogCtx)),
                 ),
-                child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontSize: 11, fontWeight: FontWeight.bold)),
+                child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(dialogCtx), fontSize: AppFontSize.xs, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Expanded(child: Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis)),
             ],
           ),
           content: SingleChildScrollView(
@@ -207,14 +260,14 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: Text(strings.closeBtn),
             ),
           ],
         ),
       );
     } catch (e) {
-      _log(history, 'restore-upload', file.name, 'error');
+      await history.updateStatus(logId, 'error');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ApiClient.describe(e))));
     } finally {
@@ -225,65 +278,84 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   }
 
   Future<void> _pickTargetAudioForComparison() async {
-    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: kIsWeb);
-    final file = picked?.files.single;
-    if (file == null) return;
-    final bytes = file.bytes ?? (file.path != null && !kIsWeb ? await File(file.path!).readAsBytes() : null);
-    if (bytes == null || !mounted) return;
+    if (_pickingCompare || _isComparing) return;
+    setState(() => _pickingCompare = true);
+    try {
+      final picked = await FilePicker.platform.pickFiles(type: FileType.audio, withData: kIsWeb);
+      final file = (picked == null || picked.files.isEmpty) ? null : picked.files.first;
+      if (file == null) return;
+      final bytes = file.bytes ?? (file.path != null && !kIsWeb ? await File(file.path!).readAsBytes() : null);
+      if (bytes == null || !mounted) return;
 
-    setState(() {
-      _uploadedTargetBytes = bytes;
-      _uploadedTargetName = file.name;
-      _compareTargetItem = null;
-      _compareResult = null;
-      _compareError = null;
-    });
+      _compareEpoch++;
+      setState(() {
+        _uploadedTargetBytes = bytes;
+        _uploadedTargetName = file.name;
+        _compareTargetId = null;
+        _compareResult = null;
+        _compareError = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _compareError = ApiClient.describe(e));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _pickingCompare = false);
+      }
+    }
   }
 
   Future<void> _runCrossComparison() async {
-    if (_compareSampleItem == null || _isComparing) return;
+    final sample = _compareSampleItem;
+    final target = _compareTargetItem;
+    final uploadedBytes = _uploadedTargetBytes;
+    final uploadedName = _uploadedTargetName;
+    if (sample == null || _isComparing) return;
     final history = context.read<HistoryService>();
     final config = context.read<ServerConfig>();
     final dio = config.api.dio;
-    final heritageApi = HeritageApi(dio);
     final strings = context.read<LocaleProvider>().strings;
 
+    if (uploadedBytes == null && target == null) {
+      setState(() => _compareError = strings.compareNoTarget);
+      return;
+    }
+
+    final epoch = ++_compareEpoch;
+    final targetTitle = uploadedName.isNotEmpty ? uploadedName : (target?.title ?? '');
     setState(() {
       _isComparing = true;
       _compareError = null;
     });
 
     try {
-      final sampleBytes = await heritageApi.audioBytes(_compareSampleItem!.id);
-      Uint8List targetBytes;
-      if (_uploadedTargetBytes != null) {
-        targetBytes = _uploadedTargetBytes!;
-      } else if (_compareTargetItem != null) {
-        targetBytes = await heritageApi.audioBytes(_compareTargetItem!.id);
-      } else {
-        setState(() {
-          _compareError = strings.compareNoTarget;
-          _isComparing = false;
-        });
-        return;
-      }
+      final res = await SingApi(dio).compareItems(
+        sampleItemId: sample.id,
+        userItemId: uploadedBytes == null ? (target?.id ?? '') : '',
+        userBytes: uploadedBytes,
+      );
+      _log(history, 'compare-tune', '${sample.title} vs $targetTitle', 'done');
 
-      final res = await SingApi(dio).compareBytes(sampleBytes, targetBytes);
-      _log(history, 'compare-tune', '${_compareSampleItem!.title} vs ${_uploadedTargetName.isNotEmpty ? _uploadedTargetName : _compareTargetItem?.title}', 'done');
-
-      if (mounted) {
+      if (mounted && epoch == _compareEpoch) {
         setState(() {
           _compareResult = res;
+          _comparedSampleTitle = sample.title;
+          _comparedTargetTitle = targetTitle;
           _isComparing = false;
         });
+      } else if (mounted) {
+        setState(() => _isComparing = false);
       }
     } catch (e) {
-      _log(history, 'compare-tune', _compareSampleItem!.title, 'error');
-      if (mounted) {
+      _log(history, 'compare-tune', sample.title, 'error');
+      if (mounted && epoch == _compareEpoch) {
         setState(() {
           _compareError = _compareErrorText(e, strings);
           _isComparing = false;
         });
+      } else if (mounted) {
+        setState(() => _isComparing = false);
       }
     }
   }
@@ -293,14 +365,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
 
   void _playBothAb() {
     _abPause.value = false;
-    setState(() {
-      _abGen++;
-      _abPlaying = true;
-    });
+    _abPlaySignal.value++;
   }
 
   void _stopBothAb() {
-    setState(() => _abPlaying = false);
     _abPause.value = true;
   }
 
@@ -322,6 +390,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
   @override
   void dispose() {
     _abPause.dispose();
+    _abPlaySignal.dispose();
     _tabController.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -385,11 +454,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
           Container(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
             decoration: BoxDecoration(
-              color: AppTheme.goldReadable(context).withValues(alpha: 0.25),
+              color: AppTheme.goldReadable(context).withValues(alpha: AppAlpha.selected),
               borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(color: AppTheme.goldReadable(context), width: 1),
             ),
-            child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontWeight: FontWeight.bold, fontSize: 11)),
+            child: Text('BETA', style: TextStyle(color: AppTheme.goldReadable(context), fontWeight: FontWeight.bold, fontSize: AppFontSize.xs)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -398,12 +467,12 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               children: [
                 Text(
                   strings.restorationLabTitle,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppFontSize.lg),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   strings.restorationLabDesc,
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
+                  style: TextStyle(fontSize: AppFontSize.sm, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
                 ),
               ],
             ),
@@ -446,7 +515,6 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       if (_selectedItem?.id != item.id) {
                         _restoreResult = null;
                         _restoreError = null;
-                        _isRestoring = false;
                       }
                       _selectedItem = item;
                     });
@@ -495,7 +563,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                 key: const Key('restoration-upload'),
                 icon: const HueIcon(HueIcons.uploadFile, size: 20),
                 tooltip: strings.restorationUploadVintageBtn,
-                onPressed: _uploading ? null : _uploadAndRestoreFile,
+                onPressed: (_uploading || _pickingUpload) ? null : _uploadAndRestoreFile,
               ),
             ],
           ),
@@ -529,7 +597,9 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         }
         if (_selectedItem == null && items.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _selectedItem = items.first);
+            if (mounted && _selectedItem == null && items.isNotEmpty) {
+              setState(() => _selectedItem = items.first);
+            }
           });
         }
         return ListView.builder(
@@ -551,20 +621,22 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                 type: MaterialType.transparency,
                 child: ListTile(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
-                title: Text(it.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                title: Text(it.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.md)),
                 subtitle: Text(
                   [it.type, it.artist].where((s) => s.isNotEmpty).join(' • '),
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: TextStyle(fontSize: AppFontSize.sm, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 trailing: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                    minimumSize: const Size(44, 44),
+                    minimumSize: const Size(48, 48),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                    visualDensity: VisualDensity.standard,
                     side: BorderSide(color: AppTheme.goldReadable(context)),
                   ),
                   icon: HueIcon(HueIcons.autoFixHigh, size: 14, color: AppTheme.goldReadable(context)),
-                  label: Text(strings.restoreActionBtn, style: TextStyle(fontSize: 11, color: AppTheme.goldReadable(context))),
-                  onPressed: () {
+                  label: Text(strings.restoreActionBtn, style: TextStyle(fontSize: AppFontSize.xs, color: AppTheme.goldReadable(context))),
+                  onPressed: _isRestoring ? null : () {
                     onSelect(it);
                     _runDspRestoration(it);
                   },
@@ -594,15 +666,15 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                  Text(item.title, style: const TextStyle(fontSize: AppFontSize.headline, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
                     children: [
-                      if (item.type.isNotEmpty) Chip(label: Text(item.type, style: const TextStyle(fontSize: 12))),
-                      if (item.artist.isNotEmpty) Chip(label: Text(item.artist, style: const TextStyle(fontSize: 12))),
-                      if (item.tonal.isNotEmpty) Chip(label: Text(item.tonal, style: const TextStyle(fontSize: 12))),
+                      if (item.type.isNotEmpty) Chip(label: Text(item.type, style: const TextStyle(fontSize: AppFontSize.sm))),
+                      if (item.artist.isNotEmpty) Chip(label: Text(item.artist, style: const TextStyle(fontSize: AppFontSize.sm))),
+                      if (item.tonal.isNotEmpty) Chip(label: Text(item.tonal, style: const TextStyle(fontSize: AppFontSize.sm))),
                     ],
                   ),
                 ],
@@ -623,7 +695,9 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   children: [
                     HueIcon(HueIcons.history, size: 18, color: AppTheme.goldReadable(context)),
                     const SizedBox(width: 8),
-                    Text(strings.restorationBeforeLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: Text(strings.restorationBeforeLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -641,7 +715,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               children: [
                 Row(
                   children: [
-                    const HueIcon(HueIcons.autoFixHigh, size: 18, color: AppTheme.emeraldGreen),
+                    HueIcon(HueIcons.autoFixHigh, size: 18, color: AppTheme.emeraldReadable(context)),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(strings.restorationAfterLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -650,15 +724,15 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                         decoration: BoxDecoration(
-                          color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                          color: AppTheme.emeraldReadable(context).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
-                        child: Text(strings.restoreDspDone, style: const TextStyle(color: AppTheme.emeraldGreen, fontSize: 11, fontWeight: FontWeight.bold)),
+                        child: Text(strings.restoreDspDone, style: TextStyle(color: AppTheme.emeraldReadable(context), fontSize: AppFontSize.xs, fontWeight: FontWeight.bold)),
                       ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (_isRestoring)
+                if (_restoringItemId == item.id)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     child: Center(
@@ -715,7 +789,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
             OutlinedButton.icon(
               icon: const HueIcon(HueIcons.uploadFile, size: 18),
               label: Text(strings.restorationUploadVintageBtn),
-              onPressed: _uploading ? null : _uploadAndRestoreFile,
+              onPressed: (_uploading || _pickingUpload) ? null : _uploadAndRestoreFile,
             ),
           ],
         ),
@@ -728,7 +802,6 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
       if (_selectedItem?.id != item.id) {
         _restoreResult = null;
         _restoreError = null;
-        _isRestoring = false;
       }
       _selectedItem = item;
     });
@@ -759,19 +832,19 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: AppTheme.primaryPurple.withValues(alpha: 0.08),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.25)),
+            border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.25)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const HueIcon(HueIcons.compareArrows, color: AppTheme.primaryPurpleLight, size: 20),
+              HueIcon(HueIcons.compareArrows, color: Theme.of(context).colorScheme.primary, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   strings.compareTabDescription,
-                  style: TextStyle(fontSize: 12, height: 1.4, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: TextStyle(fontSize: AppFontSize.sm, height: 1.4, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ),
             ],
@@ -789,10 +862,10 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   children: [
                     Row(
                       children: [
-                        const HueIcon(HueIcons.verified, size: 18, color: AppTheme.emeraldGreen),
+                        HueIcon(HueIcons.verified, size: 18, color: AppTheme.emeraldReadable(context)),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(strings.comparePickSample, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          child: Text(strings.comparePickSample, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.md)),
                         ),
                       ],
                     ),
@@ -800,21 +873,23 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     InputDecorator(
                       decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
                       child: DropdownButtonHideUnderline(
-                        child: DropdownButton<HeritageItem>(
-                          value: _compareSampleItem,
+                        child: DropdownButton<String>(
+                          value: _compareSampleItem?.id,
                           isDense: true,
                           isExpanded: true,
                           items: [
-                            for (final t in _allTracks)
-                              DropdownMenuItem(
-                                value: t,
+                            for (final t in _compareTracks)
+                              DropdownMenuItem<String>(
+                                value: t.id,
                                 child: Text('${t.title} (${t.artist.isNotEmpty ? t.artist : t.type})', maxLines: 1, overflow: TextOverflow.ellipsis),
                               ),
                           ],
                           onChanged: (val) {
+                            _compareEpoch++;
                             setState(() {
-                              _compareSampleItem = val;
+                              _compareSampleId = val;
                               _compareResult = null;
+                              _compareError = null;
                             });
                           },
                         ),
@@ -823,12 +898,12 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     if (_compareSampleItem != null) ...[
                       const SizedBox(height: 12),
                       AudioPlayerBar(
-                        key: ValueKey('ab-a-$_abGen'),
+                        key: ValueKey('ab-a-${_compareSampleItem!.id}'),
                         pauseSignal: _abPause,
+                        playSignal: _abPlaySignal,
                         url: heritageApi.audioUrl(_compareSampleItem!.id),
                         label: _compareSampleItem!.title,
                         dio: dio,
-                        autoPlay: _abPlaying,
                       ),
                     ],
                   ],
@@ -847,7 +922,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                         HueIcon(HueIcons.help, size: 18, color: AppTheme.goldReadable(context)),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(strings.comparePickTarget, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          child: Text(strings.comparePickTarget, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.md)),
                         ),
                       ],
                     ),
@@ -863,7 +938,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                           children: [
                             HueIcon(HueIcons.audioFile, size: 20, color: AppTheme.goldReadable(context)),
                             const SizedBox(width: 8),
-                            Expanded(child: Text(_uploadedTargetName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                            Expanded(child: Text(_uploadedTargetName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.sm))),
                             IconButton(
                               tooltip: strings.clearSelectedFile,
                               icon: const HueIcon(HueIcons.close, size: 16),
@@ -878,31 +953,33 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       ),
                       const SizedBox(height: 10),
                       AudioPlayerBar(
-                        key: ValueKey('ab-b-$_abGen'),
+                        key: ValueKey('ab-b-file-$_uploadedTargetName'),
                         pauseSignal: _abPause,
+                        playSignal: _abPlaySignal,
                         bytes: _uploadedTargetBytes!,
                         label: _uploadedTargetName,
-                        autoPlay: _abPlaying,
                       ),
                     ] else ...[
                       InputDecorator(
                         decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
                         child: DropdownButtonHideUnderline(
-                          child: DropdownButton<HeritageItem>(
-                            value: _compareTargetItem,
+                          child: DropdownButton<String>(
+                            value: _compareTargetItem?.id,
                             isDense: true,
                             isExpanded: true,
                             items: [
-                              for (final t in _allTracks)
-                                DropdownMenuItem(
-                                  value: t,
+                              for (final t in _compareTracks)
+                                DropdownMenuItem<String>(
+                                  value: t.id,
                                   child: Text('${t.title} (${t.artist.isNotEmpty ? t.artist : t.type})', maxLines: 1, overflow: TextOverflow.ellipsis),
                                 ),
                             ],
                             onChanged: (val) {
+                              _compareEpoch++;
                               setState(() {
-                                _compareTargetItem = val;
+                                _compareTargetId = val;
                                 _compareResult = null;
+                                _compareError = null;
                               });
                             },
                           ),
@@ -912,17 +989,17 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                       OutlinedButton.icon(
                         icon: const HueIcon(HueIcons.uploadFile, size: 16),
                         label: Text(strings.compareUploadPrompt),
-                        onPressed: _pickTargetAudioForComparison,
+                        onPressed: (_pickingCompare || _isComparing) ? null : _pickTargetAudioForComparison,
                       ),
                       if (_compareTargetItem != null) ...[
                         const SizedBox(height: 10),
                         AudioPlayerBar(
-                          key: ValueKey('ab-b-$_abGen'),
+                          key: ValueKey('ab-b-item-${_compareTargetItem!.id}'),
                           pauseSignal: _abPause,
+                          playSignal: _abPlaySignal,
                           url: heritageApi.audioUrl(_compareTargetItem!.id),
                           label: _compareTargetItem!.title,
                           dio: dio,
-                          autoPlay: _abPlaying,
                         ),
                       ],
                     ],
@@ -989,7 +1066,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     ),
                   )
                 : const HueIcon(HueIcons.compareArrows, size: 20),
-            label: Text(strings.compareRunBtn, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            label: Text(strings.compareRunBtn, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.lg)),
             onPressed: _isComparing ? null : _runCrossComparison,
           ),
         ),
@@ -1013,7 +1090,11 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
             ? strings.compareVerdictModerate
             : strings.compareVerdictDifferent;
 
-    final color = score >= 80 ? AppTheme.emeraldGreen : (score >= 50 ? AppTheme.goldReadable(context) : AppTheme.statusDanger);
+    final color = score >= 80
+        ? AppTheme.emeraldReadable(context)
+        : (score >= 50
+            ? AppTheme.goldReadable(context)
+            : AppTheme.statusReadable(context, AppStatusKind.danger));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1036,7 +1117,7 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                   child: Center(
                     child: Text(
                       '${score.toStringAsFixed(0)}%',
-                      style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 19),
+                      style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: AppFontSize.heading),
                     ),
                   ),
                 ),
@@ -1046,18 +1127,18 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${strings.compareIdentifiedMatch}: ${_compareSampleItem?.title ?? ""}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                        '${strings.compareIdentifiedMatch}: ${_comparedSampleTitle.isNotEmpty ? _comparedSampleTitle : (_compareSampleItem?.title ?? "")}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.title),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         strings.compareVerdictLine(matchVerdict),
-                        style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13),
+                        style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: AppFontSize.md),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         strings.compareMetricsLine(r.metrics.meanAbsCents.toStringAsFixed(1), r.metrics.meanOffsetMs.toStringAsFixed(0)),
-                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        style: TextStyle(fontSize: AppFontSize.sm, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -1076,8 +1157,8 @@ class _RestorationScreenState extends State<RestorationScreen> with SingleTicker
               times: r.times,
               sampleF0: r.sampleF0,
               warpedF0: r.warpedF0,
-              sampleLabel: strings.compareChartSampleDataset,
-              targetLabel: strings.compareChartTarget,
+              sampleLabel: _comparedSampleTitle.isNotEmpty ? _comparedSampleTitle : strings.compareChartSampleDataset,
+              targetLabel: _comparedTargetTitle.isNotEmpty ? _comparedTargetTitle : strings.compareChartTarget,
             ),
           ),
         ),

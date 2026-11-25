@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +11,7 @@ import '../../services/server_config.dart';
 import '../../services/teaching_utils.dart';
 import '../../widgets/audio_player_bar.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/error_panel.dart';
 import '../../widgets/hue_icons.dart';
 import '../../widgets/result_card.dart';
 import 'lesson_practice_view.dart';
@@ -26,6 +28,10 @@ class ScalePracticeCard extends StatelessWidget {
   final ScalePractice? result;
   final int transpose;
   final ValueChanged<int> onTransposeChanged;
+  final bool arming;
+  final ValueListenable<int>? countInLeft;
+  final String? errorMessage;
+  final VoidCallback? onRetryError;
 
   const ScalePracticeCard({
     super.key,
@@ -40,6 +46,10 @@ class ScalePracticeCard extends StatelessWidget {
     required this.result,
     required this.transpose,
     required this.onTransposeChanged,
+    this.arming = false,
+    this.countInLeft,
+    this.errorMessage,
+    this.onRetryError,
   });
 
   String _scoreVerdict(double v) {
@@ -78,11 +88,12 @@ class ScalePracticeCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               strings.practiceScaleHint,
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<ScaleInfo>(
               initialValue: scale,
+              isExpanded: true,
               decoration: InputDecoration(labelText: strings.practiceScale, border: const OutlineInputBorder()),
               items: [
                 for (final s in scales)
@@ -92,25 +103,33 @@ class ScalePracticeCard extends StatelessWidget {
             ),
             if (scale != null) ...[
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
-                  Text('${strings.practiceScaleNotes}: ${scale.noteNames.join(" - ")}', style: const TextStyle(fontSize: 12)),
-                  const Spacer(),
-                  Text(strings.practiceTranspose, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: strings.practiceTranspose,
-                    child: DropdownButton<int>(
-                    value: transpose,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      for (final v in const [-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6])
-                        DropdownMenuItem(value: v, child: Text(strings.practiceTransposeValue(v.toString()), style: const TextStyle(fontSize: 12))),
+                  Text('${strings.practiceScaleNotes}: ${scale.noteNames.join(" - ")}', style: const TextStyle(fontSize: AppFontSize.sm)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(strings.practiceTranspose, style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant)),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: strings.practiceTranspose,
+                        child: DropdownButton<int>(
+                        value: transpose,
+                        underline: const SizedBox.shrink(),
+                        items: [
+                          for (final v in const [-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6])
+                            DropdownMenuItem(value: v, child: Text(strings.practiceTransposeValue(v.toString()), style: const TextStyle(fontSize: AppFontSize.sm))),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) onTransposeChanged(v);
+                        },
+                      ),
+                      ),
                     ],
-                    onChanged: (v) {
-                      if (v != null) onTransposeChanged(v);
-                    },
-                  ),
                   ),
                 ],
               ),
@@ -126,21 +145,53 @@ class ScalePracticeCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  FilledButton.icon(
-                    icon: Icon(recording ? HueIcons.stop : HueIcons.mic, size: 16),
-                    label: Text(recording ? strings.practiceStopRecord : strings.practiceScaleRecord),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: recording ? AppTheme.statusDanger : null,
+                  if (countInLeft != null)
+                    ValueListenableBuilder<int>(
+                      valueListenable: countInLeft!,
+                      builder: (context, countLeft, _) {
+                        final counting = countLeft > 0;
+                        final blocked = !recording && (arming || counting);
+                        return FilledButton.icon(
+                          icon: HueIcon(recording ? HueIcons.stop : HueIcons.mic, size: 16),
+                          label: Text(
+                            recording
+                                ? strings.practiceStopRecord
+                                : counting
+                                    ? strings.practiceCountingIn(countLeft)
+                                    : strings.practiceScaleRecord,
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: recording ? scheme.error : null,
+                            foregroundColor: recording ? scheme.onError : null,
+                          ),
+                          onPressed: blocked ? null : onToggleRecord,
+                        );
+                      },
+                    )
+                  else
+                    FilledButton.icon(
+                      icon: HueIcon(recording ? HueIcons.stop : HueIcons.mic, size: 16),
+                      label: Text(recording ? strings.practiceStopRecord : strings.practiceScaleRecord),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: recording ? scheme.error : null,
+                        foregroundColor: recording ? scheme.onError : null,
+                      ),
+                      onPressed: (!recording && arming) ? null : onToggleRecord,
                     ),
-                    onPressed: onToggleRecord,
-                  ),
                   CommonButton(
                     label: strings.practiceScaleGrade,
                     loading: busy,
-                    onPressed: recordPath != null && !busy && !recording ? onSubmit : null,
+                    onPressed: recordPath != null && !busy && !recording && !arming ? onSubmit : null,
                   ),
                 ],
               ),
+              if (errorMessage != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                ErrorPanel(
+                  message: errorMessage!,
+                  onRetry: onRetryError,
+                ),
+              ],
               if (result != null) ...[
                 const Divider(height: 20),
                 ResultSummaryCard(
@@ -184,14 +235,14 @@ class ScalePracticeCard extends StatelessWidget {
                           fallback: result!.summaryHint,
                           strings: strings,
                         ),
-                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant),
                       ),
                   ],
                 ),
                 if (result!.performance.isNotEmpty) ...[
                   Padding(
                     padding: const EdgeInsets.only(top: AppSpacing.sm),
-                    child: Text(strings.practiceScalePerfTitle, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                    child: Text(strings.practiceScalePerfTitle, style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant)),
                   ),
                   const SizedBox(height: 4),
                   Wrap(
@@ -203,16 +254,16 @@ class ScalePracticeCard extends StatelessWidget {
                           message: noteHintText(p.hintCodes, p.errCents, p.onsetErrMs, false, p.hint.isNotEmpty ? p.hint : p.verdict, strings),
                           child: Chip(
                             backgroundColor: switch (practiceVerdictKind(p.verdictCode)) {
-                              AppStatusKind.success => AppTheme.statusSuccess.withAlpha(40),
+                              AppStatusKind.success => AppTheme.statusReadable(context, AppStatusKind.success).withAlpha(40),
                               AppStatusKind.warning => p.verdictCode == 'octave'
-                                  ? AppTheme.statusWarning.withAlpha(70)
-                                  : AppTheme.statusWarning.withAlpha(40),
-                              AppStatusKind.danger => AppTheme.statusDanger.withAlpha(40),
+                                  ? AppTheme.statusReadable(context, AppStatusKind.warning).withAlpha(70)
+                                  : AppTheme.statusReadable(context, AppStatusKind.warning).withAlpha(40),
+                              AppStatusKind.danger => AppTheme.statusReadable(context, AppStatusKind.danger).withAlpha(40),
                               AppStatusKind.info => scheme.onSurfaceVariant.withAlpha(40),
                             },
                             label: Text(
                               '${p.name} ${p.verdictCode == "unclear" || p.errCents == null ? "" : "${p.errCents! > 0 ? "+" : ""}${p.errCents!.toStringAsFixed(0)}c"}',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: AppFontSize.xs),
                             ),
                           ),
                         ),
@@ -227,8 +278,10 @@ class ScalePracticeCard extends StatelessWidget {
                     children: [
                       for (final n in result!.notes)
                         Chip(
-                          backgroundColor: n.hit ? AppTheme.statusSuccess.withAlpha(40) : AppTheme.statusDanger.withAlpha(40),
-                          label: Text('${n.name} (${(n.share * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: 11)),
+                          backgroundColor: n.hit
+                              ? AppTheme.statusReadable(context, AppStatusKind.success).withAlpha(40)
+                              : AppTheme.statusReadable(context, AppStatusKind.danger).withAlpha(40),
+                          label: Text('${n.name} (${(n.share * 100).toStringAsFixed(0)}%)', style: const TextStyle(fontSize: AppFontSize.xs)),
                         ),
                     ],
                   ),

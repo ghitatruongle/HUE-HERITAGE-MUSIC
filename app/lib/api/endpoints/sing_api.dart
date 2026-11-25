@@ -53,4 +53,32 @@ class SingApi {
     }
     throw DioException(requestOptions: res.requestOptions, error: 'Invalid response from server');
   }
+
+  Future<CompareResult> compareItems({
+    String sampleItemId = '',
+    String userItemId = '',
+    String sampleSha = '',
+    String userSha = '',
+    Uint8List? sampleBytes,
+    Uint8List? userBytes,
+  }) async {
+    final map = <String, dynamic>{
+      if (sampleItemId.isNotEmpty) 'sample_item_id': sampleItemId,
+      if (userItemId.isNotEmpty) 'user_item_id': userItemId,
+      if (sampleSha.isNotEmpty) 'sample_sha': sampleSha,
+      if (userSha.isNotEmpty) 'user_sha': userSha,
+      if (sampleBytes != null) 'sample': MultipartFile.fromBytes(sampleBytes, filename: 'sample.wav'),
+      if (userBytes != null) 'user': MultipartFile.fromBytes(userBytes, filename: 'user.wav'),
+    };
+    final res = await dio.post(
+      '/api/music/compare-items',
+      data: FormData.fromMap(map),
+      options: ApiClient.dspOptions,
+    );
+    final data = res.data;
+    if (data is Map) {
+      return CompareResult.fromJson(Map<String, dynamic>.from(data));
+    }
+    throw DioException(requestOptions: res.requestOptions, error: 'Invalid response from server');
+  }
 }

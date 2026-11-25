@@ -20,12 +20,29 @@ LABEL = "Phục dựng – bản xử lý"
 
 
 def remove_dc(samples):
+    if np is not None:
+        arr = np.asarray(samples, dtype=np.float64)
+        mean = float(arr.mean()) if arr.size else 0.0
+        return (arr - mean if arr.size else arr), mean
     n = len(samples)
     mean = sum(samples) / n if n else 0.0
     return [s - mean for s in samples], mean
 
 
 def remove_clicks(samples):
+    if np is not None:
+        arr = np.asarray(samples, dtype=np.float64)
+        if arr.size < 3:
+            return arr.copy(), 0
+        prev = arr[:-2]
+        mid = arr[1:-1]
+        nxt = arr[2:]
+        mask = (np.abs(mid - prev) > CLICK_THR) & (np.abs(mid - nxt) > CLICK_THR) & (np.abs(prev - nxt) < CLICK_THR)
+        fixed = int(mask.sum())
+        out = arr.copy()
+        if fixed > 0:
+            out[1:-1][mask] = 0.5 * (prev[mask] + nxt[mask])
+        return out, fixed
     out = list(samples)
     fixed = 0
     for i in range(1, len(samples) - 1):
@@ -39,6 +56,18 @@ def remove_clicks(samples):
 
 
 def spectral_gate(frames):
+    if np is not None and frames:
+        mat = np.asarray(frames, dtype=np.float64)
+        n_fft = mat.shape[1] if mat.ndim == 2 else 0
+        if n_fft > 0 and (n_fft & (n_fft - 1)) == 0:
+            spec = np.fft.fft(mat, axis=1)
+            mags = np.abs(spec)
+            mid_idx = mags.shape[1] // 2
+            med = np.partition(mags, mid_idx, axis=1)[:, mid_idx : mid_idx + 1]
+            thr = med * GATE_MULT + 0.0000001
+            gated = np.where(mags >= thr, spec, spec * GATE_FLOOR)
+            rec = np.fft.ifft(gated, axis=1).real
+            return [rec[i] for i in range(rec.shape[0])]
     out = []
     for fr in frames:
         spec = dsp_fft.fft(fr)
@@ -57,6 +86,9 @@ def spectral_gate(frames):
 
 
 def peak_of(samples):
+    if np is not None:
+        arr = np.asarray(samples, dtype=np.float64)
+        return float(np.max(np.abs(arr))) if arr.size else 0.0
     p = 0.0
     for s in samples:
         v = abs(s)
@@ -70,23 +102,29 @@ def normalize(samples):
     if peak <= 0.000001:
         return samples, 0.0
     g = TARGET_PEAK / peak
+    if np is not None:
+        return np.asarray(samples, dtype=np.float64) * g, peak
     return [s * g for s in samples], peak
 
 
 def to_wav_bytes(samples, sr):
-    clamped = []
-    for s in samples:
-        if s > 1.0:
-            s = 1.0
-        elif s < -1.0:
-            s = -1.0
-        clamped.append(int(s * 32767))
     bio = io.BytesIO()
     with wave.open(bio, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sr)
-        w.writeframes(struct.pack("<%dh" % len(clamped), *clamped))
+        if np is not None:
+            pcm = (np.clip(np.asarray(samples, dtype=np.float64), -1.0, 1.0) * 32767.0).astype("<i2")
+            w.writeframes(pcm.tobytes())
+        else:
+            clamped = []
+            for s in samples:
+                if s > 1.0:
+                    s = 1.0
+                elif s < -1.0:
+                    s = -1.0
+                clamped.append(int(s * 32767))
+            w.writeframes(struct.pack("<%dh" % len(clamped), *clamped))
     return bio.getvalue()
 
 

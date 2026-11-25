@@ -1,12 +1,15 @@
 from typing import Optional, List
 from pathlib import Path
+import asyncio
 import hashlib
 import hmac
 import json
 import logging
+import math
 import re
 import secrets
 import os
+import tempfile
 import threading
 import time
 
@@ -17,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..database.session import acquire_write_slot, get_db, SessionLocal
+from ..database.session import acquire_write_slot, get_db, SessionLocal, write_slot
 from ..database import crud
 from .. import rate_limit
 from .. import rate_limit, security_log
@@ -65,13 +68,18 @@ def _token_ttl_for(user) -> int:
 
 
 _DUMMY_HASH: Optional[str] = None
+_dummy_hash_lock = threading.Lock()
 
 
 def _uniform_verify(password: str, stored: Optional[str]) -> bool:
     global _DUMMY_HASH
-    if _DUMMY_HASH is None:
-        _DUMMY_HASH = hash_password("timing-uniform-dummy-verification-hash")
-    ok = verify_password(password, stored or _DUMMY_HASH)
+    dummy = _DUMMY_HASH
+    if dummy is None:
+        with _dummy_hash_lock:
+            if _DUMMY_HASH is None:
+                _DUMMY_HASH = hash_password("timing-uniform-dummy-verification-hash")
+            dummy = _DUMMY_HASH
+    ok = verify_password(password, stored or dummy)
     time.sleep((2 + secrets.randbelow(5)) / 1000)
     return ok
 
@@ -270,6 +278,31 @@ class LoginRequest(BaseModel):
 FORCE_CHANGE_ALLOWED_PATHS = ("/api/auth/change-password", "/api/auth/revoke-all")
 
 
+def _generate_temp_password(min_len: int = 12) -> str:
+    body_len = max(12, int(min_len))
+    rng = secrets.SystemRandom()
+    uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+    lowers = "abcdefghijkmnopqrstuvwxyz"
+    digits = "23456789"
+    pool = uppers + lowers + digits
+    chars = [
+        rng.choice(uppers),
+        rng.choice(lowers),
+        rng.choice(digits),
+        rng.choice(digits),
+    ]
+    chars.extend(rng.choice(pool) for _ in range(body_len - len(chars)))
+    rng.shuffle(chars)
+    return "hue-" + "".join(chars)
+
+
+def _enforce_must_change(request: Request, user) -> None:
+    if getattr(user, "must_change_password", 0) and request.method not in ("GET", "HEAD", "OPTIONS"):
+        path = request.url.path
+        if not any(path == p or path.startswith(p + "/") for p in FORCE_CHANGE_ALLOWED_PATHS):
+            raise HTTPException(status_code=403, detail="password change required")
+
+
 def require_user(request: Request) -> Optional[str]:
     if not settings.auth_required:
         return None
@@ -286,10 +319,7 @@ def require_user(request: Request) -> Optional[str]:
             raise HTTPException(status_code=401, detail="token revoked")
         if getattr(user, "active", 1) == 0:
             raise HTTPException(status_code=403, detail="account disabled")
-        if getattr(user, "must_change_password", 0) and request.method not in ("GET", "HEAD", "OPTIONS"):
-            path = request.url.path
-            if not any(path == p or path.startswith(p + "/") for p in FORCE_CHANGE_ALLOWED_PATHS):
-                raise HTTPException(status_code=403, detail="password change required")
+        _enforce_must_change(request, user)
     finally:
         db.close()
     return user_id
@@ -307,6 +337,7 @@ def require_admin(request: Request, db: Session = Depends(get_db)) -> str:
         raise HTTPException(status_code=401, detail="token revoked")
     if getattr(user, "active", 1) == 0:
         raise HTTPException(status_code=403, detail="account disabled")
+    _enforce_must_change(request, user)
     if (user.role or "user") != "admin" or user.username != settings.admin_truong_username:
         raise HTTPException(status_code=403, detail="admin truong only")
     return user.id
@@ -331,11 +362,8 @@ def require_staff(request: Request, db: Session = Depends(get_db)) -> str:
         raise HTTPException(status_code=401, detail="token revoked")
     if getattr(user, "active", 1) == 0:
         raise HTTPException(status_code=403, detail="account disabled")
-    if getattr(user, "must_change_password", 0) and request.method not in ("GET", "HEAD", "OPTIONS"):
-        path = request.url.path
-        if not any(path == p or path.startswith(p + "/") for p in FORCE_CHANGE_ALLOWED_PATHS):
-            raise HTTPException(status_code=403, detail="password change required")
-    if (user.role or "user") not in ("worker", "admin"):
+    _enforce_must_change(request, user)
+    if (user.role or "user") != "worker" and not crud.is_admin_user(user):
         raise HTTPException(status_code=403, detail="staff only")
     return user.id
 
@@ -372,7 +400,11 @@ def resolve_bearer_user(request: Request, db: Session):
 
 
 def _role_of(user) -> str:
-    return user.role or "user"
+    if crud.is_admin_user(user):
+        return "admin"
+    if (user.role or "user") == "worker":
+        return "worker"
+    return "user"
 
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
@@ -406,7 +438,7 @@ def _validate_registration(db: Session, u: str, e: str, p: str, c: str) -> None:
 
 
 @router.post("/register")
-def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
+def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     u = req.username.strip()
     e = req.email.strip().lower()
     p = req.password
@@ -425,31 +457,55 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
     if _attempts_exceeded(key):
         security_log.security_event("register_rate_limited", ip=_client_ip(request), username=u)
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
+
+    pw_hash = ""
+    try:
+        pw_hash = hash_password(p)
+    except Exception:
+        pw_hash = ""
+
     with _invite_lock:
         try:
             _validate_registration(db, u, e, p, c)
         except HTTPException as exc:
-            try:
-                hash_password(p)
-            except Exception:
-                pass
             _record_failure(key)
             _record_ip_failure(_register_ip_failures, fail_key)
             security_log.security_event("register_failed", ip=_client_ip(request), username=u, detail=exc.detail)
             raise
 
-        if crud.get_invite_code(db, c) is not None:
-            if not crud.mark_invite_used(db, c, u):
-                security_log.security_event("invite_code_conflict", code=c, username=u)
-                raise HTTPException(status_code=409, detail="invitation code already used")
+        from sqlalchemy import update
+        from ..database.models import InviteCode, User
 
-        try:
-            user = crud.create_user(db, username=u, email=e, password_hash=hash_password(p))
-        except IntegrityError:
-            _record_failure(key)
-            _record_ip_failure(_register_ip_failures, fail_key)
-            security_log.security_event("register_failed", ip=_client_ip(request), username=u, detail="duplicate")
-            raise HTTPException(status_code=409, detail="username or email already exists")
+        with write_slot:
+            try:
+                if crud.get_invite_code(db, c) is not None:
+                    now = crud._utc_now()
+                    res = db.execute(
+                        update(InviteCode)
+                        .where(InviteCode.code == c, *crud._active_invite_filters(InviteCode, now))
+                        .values(used_count=InviteCode.used_count + 1, used_by=u, used_at=now)
+                    )
+                    if res.rowcount == 0:
+                        db.rollback()
+                        security_log.security_event("invite_code_conflict", code=c, username=u)
+                        raise HTTPException(status_code=409, detail="invitation code unavailable")
+                safe_email = e or f"{u}@no-email.local"
+                user = User(
+                    username=u,
+                    email=safe_email,
+                    password_hash=pw_hash or hash_password(p),
+                    must_change_password=0,
+                    role="user",
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            except IntegrityError:
+                db.rollback()
+                _record_failure(key)
+                _record_ip_failure(_register_ip_failures, fail_key)
+                security_log.security_event("register_failed", ip=_client_ip(request), username=u, detail="duplicate")
+                raise HTTPException(status_code=409, detail="username or email already exists")
 
     _clear_failures(key)
     security_log.security_event("register_success", ip=_client_ip(request), username=u, user_id=user.id)
@@ -569,25 +625,57 @@ def _save_avatar_file(user_id: str, raw: bytes, ext: str) -> str:
     target_dir = Path(settings.storage_dir) / "avatars"
     target_dir.mkdir(parents=True, exist_ok=True)
     name = f"{user_id}.{ext}"
-    if ext == "jpg":
-        image.save(target_dir / name, quality=85)
-    else:
-        image.save(target_dir / name)
+    fd, tmp_name = tempfile.mkstemp(dir=str(target_dir), suffix=f".{ext}.part")
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    try:
+        if ext == "jpg":
+            image.save(tmp_path, format="JPEG", quality=85)
+        else:
+            image.save(tmp_path, format="PNG")
+        os.replace(tmp_path, target_dir / name)
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
     return name
+
+
+def _authorize_staff_short(request: Request):
+    db = SessionLocal()
+    try:
+        staff_id = require_staff(request, db)
+        user = crud.get_user_by_id(db, staff_id)
+        if not user:
+            raise HTTPException(status_code=401, detail="unknown user")
+        return user.id, user.username, user.avatar or ""
+    finally:
+        db.close()
+
+
+def _commit_avatar_db(user_id: str, name: str):
+    with write_slot:
+        db = SessionLocal()
+        try:
+            user = crud.get_user_by_id(db, user_id)
+            if not user:
+                return None, ""
+            old = user.avatar or ""
+            updated = crud.set_user_avatar(db, user_id, name)
+            return old, _avatar_public_url(updated or user)
+        finally:
+            db.close()
 
 
 @router.post("/me/avatar")
 async def upload_avatar(
     request: Request,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    staff_id: str = Depends(require_staff),
-    _write_slot: None = Depends(acquire_write_slot),
 ):
-    user = crud.get_user_by_id(db, staff_id)
-    if not user:
-        raise HTTPException(status_code=401, detail="unknown user")
-    if not user_inflight.try_acquire(user_inflight.user_key("avatar", user.id)):
+    uid, username, _ = await asyncio.to_thread(_authorize_staff_short, request)
+    if not user_inflight.try_acquire(user_inflight.user_key("avatar", uid)):
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         raw = await file.read(AVATAR_MAX_BYTES + 1)
@@ -596,18 +684,19 @@ async def upload_avatar(
         ext = AVATAR_CONTENT_TYPES.get((file.content_type or "").lower())
         if ext is None or not _avatar_magic_ok(raw, ext):
             raise HTTPException(status_code=400, detail="avatar must be png or jpeg")
-        name = _save_avatar_file(user.id, raw, ext)
-        old = user.avatar or ""
-        crud.set_user_avatar(db, user.id, name)
+        name = await asyncio.to_thread(_save_avatar_file, uid, raw, ext)
+        old, avatar_url = await asyncio.to_thread(_commit_avatar_db, uid, name)
+        if old is None:
+            raise HTTPException(status_code=401, detail="unknown user")
         if old and old != name:
             try:
                 (Path(settings.storage_dir) / "avatars" / Path(old).name).unlink(missing_ok=True)
             except OSError:
                 pass
-        security_log.security_event("avatar_updated", user_id=user.id, username=user.username)
+        security_log.security_event("avatar_updated", user_id=uid, username=username)
     finally:
-        user_inflight.release(user_inflight.user_key("avatar", user.id))
-    return {"avatar": _avatar_public_url(user), "name": name}
+        user_inflight.release(user_inflight.user_key("avatar", uid))
+    return {"avatar": avatar_url, "name": name}
 
 
 avatar_router = APIRouter(prefix="/avatars", tags=["avatars"])
@@ -629,6 +718,9 @@ def get_avatar(user_id: str, request: Request, db: Session = Depends(get_db)):
 class InviteCreateRequest(BaseModel):
     code: str = ""
     note: str = ""
+    max_uses: int = 1
+    expires_minutes: Optional[int] = None
+    expires_hours: Optional[float] = None
 
 
 def _generate_invite_code() -> str:
@@ -636,51 +728,95 @@ def _generate_invite_code() -> str:
     return "HUE-" + "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+def _invite_to_dict(row, now=None) -> dict:
+    ref = now or crud._utc_now()
+    max_uses = 1 if getattr(row, "max_uses", None) is None else int(row.max_uses)
+    used_count = int(getattr(row, "used_count", 0) or 0)
+    if max_uses == 1 and used_count == 0 and row.used_by is not None:
+        used_count = 1
+    expired = bool(row.expires_at is not None and row.expires_at <= ref)
+    exhausted = max_uses > 0 and used_count >= max_uses
+    remaining_uses = None if max_uses == 0 else max(0, max_uses - used_count)
+    return {
+        "id": row.id,
+        "code": row.code,
+        "note": row.note or "",
+        "max_uses": max_uses,
+        "used_count": used_count,
+        "remaining_uses": remaining_uses,
+        "used": exhausted,
+        "expired": expired,
+        "active": not expired and not exhausted,
+        "expires_at": (row.expires_at.isoformat() + "Z") if row.expires_at else None,
+        "used_at": str(row.used_at) if row.used_at else None,
+        "created_at": str(row.created_at),
+    }
+
+
+def _resolve_invite_expiry(expires_minutes: Optional[int], expires_hours: Optional[float]):
+    from datetime import timedelta
+
+    if expires_minutes is not None:
+        if expires_minutes < 1 or expires_minutes > 525600:
+            raise HTTPException(status_code=400, detail="invalid invite expiration")
+        return crud._utc_now() + timedelta(minutes=expires_minutes)
+    if expires_hours is not None:
+        if not math.isfinite(expires_hours) or expires_hours <= 0 or expires_hours > 8760:
+            raise HTTPException(status_code=400, detail="invalid invite expiration")
+        return crud._utc_now() + timedelta(seconds=max(60, int(round(expires_hours * 3600))))
+    return None
+
+
 @router.get("/invites")
 def list_invites(limit: int = 50, offset: int = 0, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
     from ..database.models import InviteCode
 
+    now = crud._utc_now()
     base = db.query(InviteCode).order_by(InviteCode.created_at.desc())
     total = base.count()
     safe_offset = max(0, min(int(offset), 10**9))
     rows = base.offset(safe_offset).limit(max(1, min(limit, 200))).all()
     return {
         "total": total,
-        "items": [
-            {
-                "id": r.id,
-                "code": r.code,
-                "note": r.note or "",
-                "used": r.used_by is not None,
-                "used_at": str(r.used_at) if r.used_at else None,
-                "created_at": str(r.created_at),
-            }
-            for r in rows
-        ],
+        "items": [_invite_to_dict(r, now=now) for r in rows],
     }
 
 
 @router.post("/invites")
-def create_invite(req: InviteCreateRequest, staff_id: str = Depends(require_staff), db: Session = Depends(get_db)):
+def create_invite(req: InviteCreateRequest, staff_id: str = Depends(require_staff), db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
     code = req.code.strip() or _generate_invite_code()
     if len(code) < 4 or len(code) > 64:
         raise HTTPException(status_code=400, detail="code must be 4-64 characters")
+    if req.max_uses < 0 or req.max_uses > 10000:
+        raise HTTPException(status_code=400, detail="max_uses must be 0 or 1-10000")
+    expires_at = _resolve_invite_expiry(req.expires_minutes, req.expires_hours)
     if crud.get_invite_code(db, code):
         raise HTTPException(status_code=409, detail="code already exists")
-    row = crud.create_invite_code(db, code, req.note.strip())
-    security_log.security_event("invite_created", actor=staff_id, code=code)
-    return {
-        "id": row.id,
-        "code": row.code,
-        "note": row.note or "",
-        "used": False,
-        "used_at": None,
-        "created_at": str(row.created_at),
-    }
+    try:
+        if req.max_uses == 1 and expires_at is None:
+            row = crud.create_invite_code(db, code, req.note.strip())
+        else:
+            row = crud.create_invite_code(
+                db,
+                code,
+                req.note.strip(),
+                max_uses=req.max_uses,
+                expires_at=expires_at,
+            )
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="code already exists")
+    security_log.security_event(
+        "invite_created",
+        actor=staff_id,
+        code=code,
+        max_uses=req.max_uses,
+        expires_at=expires_at.isoformat() if expires_at else "never",
+    )
+    return _invite_to_dict(row)
 
 
 @router.delete("/invites/{invite_id}")
-def delete_invite(invite_id: str, admin_id: str = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_invite(invite_id: str, admin_id: str = Depends(require_admin), db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
     from ..database.models import InviteCode
 
     row = db.get(InviteCode, invite_id)
@@ -719,7 +855,9 @@ def change_password(req: ChangePasswordRequest, request: Request, db: Session = 
             raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
         raise HTTPException(status_code=401, detail="wrong password")
     _clear_failures(f"chg:{_client_ip(request)}:{user.id}")
-    new_epoch = crud.change_password_cas(db, user.id, user.password_hash, hash_password(req.new_password))
+    new_hash = hash_password(req.new_password)
+    with write_slot:
+        new_epoch = crud.change_password_cas(db, user.id, user.password_hash, new_hash)
     if new_epoch is None:
         security_log.security_event("change_password_stale_race", user_id=user.id, username=user.username)
         chg_key = f"chg:{_client_ip(request)}:{user.id}"
@@ -731,17 +869,31 @@ def change_password(req: ChangePasswordRequest, request: Request, db: Session = 
     return {"changed": True, "token": make_token_for(user)}
 
 
+def _ensure_worker_capacity(db: Session) -> None:
+    from ..database.models import User
+
+    active_workers = db.query(User).filter(User.role == "worker", User.active == 1).count()
+    if active_workers >= max(1, int(settings.worker_max_active)):
+        raise HTTPException(status_code=409, detail="worker limit reached")
+
+
 class ActiveRequest(BaseModel):
     active: bool
 
 
+class RoleRequest(BaseModel):
+    role: str
+
+
 @router.patch("/users/{user_id}/active")
-def set_user_active(user_id: str, req: ActiveRequest, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db)):
+def set_user_active(user_id: str, req: ActiveRequest, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
     if user.username == settings.admin_truong_username and not req.active:
         raise HTTPException(status_code=400, detail="cannot disable admin truong")
+    if req.active and getattr(user, "active", 1) == 0 and (user.role or "user") == "worker":
+        _ensure_worker_capacity(db)
     crud.set_user_active(db, user_id, req.active)
     if not req.active:
         crud.bump_token_epoch(db, user_id)
@@ -751,8 +903,35 @@ def set_user_active(user_id: str, req: ActiveRequest, admin_id: str = Depends(re
     return {"id": user_id, "username": user.username, "active": req.active}
 
 
+@router.patch("/users/{user_id}/role")
+def set_user_role(user_id: str, req: RoleRequest, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    if user.username == settings.admin_truong_username:
+        raise HTTPException(status_code=400, detail="cannot change admin truong role")
+    target_role = (req.role or "").strip().lower()
+    if target_role not in ("user", "worker"):
+        raise HTTPException(status_code=400, detail="role must be user or worker")
+    old_role = _role_of(user)
+    if target_role != old_role:
+        if target_role == "worker" and getattr(user, "active", 1) == 1:
+            _ensure_worker_capacity(db)
+        crud.set_user_role(db, user_id, target_role)
+        crud.bump_token_epoch(db, user_id)
+        security_log.security_event(
+            "user_role_changed",
+            admin=admin_id,
+            user_id=user_id,
+            username=user.username,
+            old_role=old_role,
+            new_role=target_role,
+        )
+    return {"id": user_id, "username": user.username, "role": target_role}
+
+
 @router.delete("/users/{user_id}")
-def delete_user(user_id: str, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db)):
+def delete_user(user_id: str, admin_id: str = Depends(require_admin_fresh), db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
     user = crud.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
@@ -820,16 +999,12 @@ def admin_create_user(req: AdminCreateUserRequest, admin_id: str = Depends(requi
     if role not in ("user", "worker"):
         raise HTTPException(status_code=400, detail="role must be user or worker")
     if role == "worker":
-        from ..database.models import User
-
-        active_workers = db.query(User).filter(User.role == "worker", User.active == 1).count()
-        if active_workers >= max(1, int(settings.worker_max_active)):
-            raise HTTPException(status_code=409, detail="worker limit reached")
+        _ensure_worker_capacity(db)
     e = req.email.strip().lower()
     if e and not EMAIL_RE.fullmatch(e):
         raise HTTPException(status_code=400, detail="invalid email address")
     generated = not req.password.strip()
-    p = req.password.strip() or ("hue-" + secrets.token_hex(4))
+    p = req.password.strip() or _generate_temp_password(12)
     if not _user_password_ok(p):
         raise HTTPException(
             status_code=400,
@@ -861,18 +1036,20 @@ def admin_reset_password(user_id: str, admin_id: str = Depends(require_admin_fre
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
     if user.username == settings.admin_truong_username:
-        temp = "hue-" + secrets.token_urlsafe(12)
+        temp = _generate_temp_password(16)
     else:
-        temp = "hue-" + secrets.token_hex(4)
-    crud.reset_user_password(db, user_id, hash_password(temp))
-    crud.set_must_change_password(db, user_id, True)
-    crud.bump_token_epoch(db, user_id)
+        temp = _generate_temp_password(12)
+    temp_hash = hash_password(temp)
+    with write_slot:
+        crud.reset_user_password(db, user_id, temp_hash)
+        crud.set_must_change_password(db, user_id, True)
+        crud.bump_token_epoch(db, user_id)
     security_log.security_event("password_reset_by_admin", admin=admin_id, user_id=user_id, username=user.username)
     return {"id": user_id, "temp_password": temp, "must_change_password": True}
 
 
 @router.post("/revoke-all")
-def revoke_all_tokens(request: Request, db: Session = Depends(get_db)):
+def revoke_all_tokens(request: Request, db: Session = Depends(get_db), _write_slot: None = Depends(acquire_write_slot)):
     user = _bearer_user(request, db)
     crud.bump_token_epoch(db, user.id)
     security_log.security_event("tokens_revoked", user_id=user.id, username=user.username)

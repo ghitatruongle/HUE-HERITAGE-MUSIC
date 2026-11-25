@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 
-from ..database.session import acquire_write_slot, get_db
+from ..database.session import SessionLocal, get_db, write_slot
 from ..database import crud
 from ..config import settings
 from ..services import heritage_service, user_inflight
@@ -42,6 +42,45 @@ def list_heritage(
     return {"items": [heritage_service.item_to_dict(i) for i in items], "total": total}
 
 
+def _check_upload_permission_and_quota(user_id: Optional[str], request: Request, data_len: int):
+    db = SessionLocal()
+    try:
+        uploader = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
+        visibility = "admin_only" if crud.is_admin_user(uploader) else "public"
+        uploader_id = uploader.id if uploader is not None else None
+        is_admin = crud.is_admin_user(uploader)
+        if uploader is not None and not is_admin and settings.user_storage_quota_mb > 0:
+            used = crud.user_storage_bytes(db, uploader.id)
+            limit_bytes = settings.user_storage_quota_mb * 1024 * 1024
+            if used + data_len > limit_bytes:
+                return None, None, f"storage quota exceeded: {used // (1024 * 1024)}MB used of {settings.user_storage_quota_mb}MB"
+        return uploader_id, visibility, ""
+    finally:
+        db.close()
+
+
+def _ingest_heritage_db(
+    path, digest: str, size: int, filename: str, title: str, kind: str, artist: str,
+    uploader_id: Optional[str], visibility: str, metadata: dict,
+):
+    with write_slot:
+        db = SessionLocal()
+        try:
+            uploader = crud.get_user_by_id(db, uploader_id) if uploader_id else None
+            item, created = heritage_service.ingest_saved(
+                db, path, digest, size, filename, title, kind, artist,
+                owner_user_id=uploader_id,
+                visibility=visibility, **metadata,
+            )
+            if not created and not crud.can_view_item(item, uploader):
+                return None, False
+            result = heritage_service.item_to_dict(item)
+            result["created"] = created
+            return result, True
+        finally:
+            db.close()
+
+
 @router.post("/upload")
 async def upload_heritage(
     request: Request,
@@ -67,23 +106,9 @@ async def upload_heritage(
     bpm: str = Form(""),
     source: str = Form(""),
     license: str = Form(""),
-    db: Session = Depends(get_db),
     user_id: Optional[str] = Depends(require_user),
-    _write_slot: None = Depends(acquire_write_slot),
 ):
-    chunks = []
-    total = 0
-    while True:
-        chunk = await file.read(1024 * 1024)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > manager.MAX_SIZE:
-            raise HTTPException(status_code=413, detail="file too large")
-        chunks.append(chunk)
-    data = b"".join(chunks)
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="empty file")
+    data = await manager.read_upload_limited(file, manager.MAX_SIZE)
     ext = Path(file.filename or "").suffix.lower()
     if ext not in manager.ALLOWED_EXT:
         raise HTTPException(status_code=400, detail="unsupported type")
@@ -106,34 +131,27 @@ async def upload_heritage(
         instruments=instruments, tonal=tonal,
         description=description, notes=notes, bpm=bpm_val, source=source, license=license,
     )
-    uploader = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
-    visibility = "admin_only" if crud.is_admin_user(uploader) else "public"
-    if uploader is not None and not crud.is_admin_user(uploader) and settings.user_storage_quota_mb > 0:
-        used = crud.user_storage_bytes(db, uploader.id)
-        limit_bytes = settings.user_storage_quota_mb * 1024 * 1024
-        if used + len(data) > limit_bytes:
-            raise HTTPException(
-                status_code=413,
-                detail=f"storage quota exceeded: {used // (1024 * 1024)}MB used of {settings.user_storage_quota_mb}MB",
-            )
+    uploader_id, visibility, quota_err = await asyncio.to_thread(
+        _check_upload_permission_and_quota, user_id, request, len(data)
+    )
+    if quota_err:
+        raise HTTPException(status_code=413, detail=quota_err)
     if not user_inflight.try_acquire(user_inflight.user_key("heritage-upload", user_id)):
         raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
     try:
         path, digest, _fresh = await asyncio.to_thread(
             heritage_service.save_upload_payload, data, file.filename or "audio.wav"
         )
-        item, created = heritage_service.ingest_saved(
-            db, path, digest, len(data), file.filename or "audio.wav", title, type, artist,
-            owner_user_id=uploader.id if uploader is not None else None,
-            visibility=visibility, **metadata,
+        result, allowed = await asyncio.to_thread(
+            _ingest_heritage_db,
+            path, digest, len(data), file.filename or "audio.wav", title, type, artist,
+            uploader_id, visibility, metadata,
         )
-        if not created and not crud.can_view_item(item, uploader):
+        if not allowed:
             raise HTTPException(status_code=404, detail="upload rejected: duplicate content")
+        return result
     finally:
         user_inflight.release(user_inflight.user_key("heritage-upload", user_id))
-    result = heritage_service.item_to_dict(item)
-    result["created"] = created
-    return result
 
 
 @router.get("/{item_id}")

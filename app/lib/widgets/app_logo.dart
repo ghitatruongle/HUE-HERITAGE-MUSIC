@@ -24,7 +24,7 @@ class AppLogo extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Icon(
+        errorBuilder: (_, __, ___) => HueIcon(
           HueIcons.musicNote,
           size: iconSize,
           color: iconColor,

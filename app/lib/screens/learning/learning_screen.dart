@@ -16,6 +16,7 @@ import '../../services/recording_controller.dart';
 import '../../services/history_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/locale_provider.dart';
+import '../../services/practice_resume.dart';
 import '../../services/server_config.dart';
 import '../../services/session_media.dart';
 import '../../widgets/common_button.dart';
@@ -36,6 +37,8 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   late final TabController _tabController;
   final AudioRecorder _recorder = AudioRecorder();
   bool _recording = false;
+  bool _arming = false;
+  bool _stopping = false;
   bool _busy = false;
   String? _filePath;
   PitchData? _result;
@@ -44,10 +47,19 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   late AppStrings strings;
   late AppLifecycleHooks _lifecycleHooks;
 
+  void _syncResumeTab() {
+    final pending = PracticeResume.lessonId.value;
+    if (pending != null && pending.isNotEmpty && mounted && _tabController.index != 1) {
+      _tabController.animateTo(1);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    PracticeResume.lessonId.addListener(_syncResumeTab);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncResumeTab());
     _lifecycleHooks = AppLifecycleHooks(
       onPause: () {
         unawaited(_stopAndKeep());
@@ -58,6 +70,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    PracticeResume.lessonId.removeListener(_syncResumeTab);
     AppLifecycleService.instance.unregister(_lifecycleHooks);
     _tabController.dispose();
     if (_recording) {
@@ -73,39 +86,40 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
   }
 
   Future<void> _stopAndKeep() async {
-    if (!_recording) {
+    if (!_recording || _stopping) {
       return;
     }
+    _stopping = true;
     String? p;
     try {
       p = await _recorder.stop();
+      if (!mounted) return;
+      setState(() {
+        _recording = false;
+        _filePath = p;
+      });
+      if (p != null) {
+        final media = context.read<SessionMedia>();
+        if (kIsWeb) {
+          try {
+            final bytes = await XFile(p).readAsBytes();
+            if (mounted) media.setRecording(bytes: bytes);
+          } catch (_) {}
+        } else {
+          media.setRecording(path: p);
+        }
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _recording = false);
       }
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _recording = false;
-      _filePath = p;
-    });
-    if (p != null) {
-      final media = context.read<SessionMedia>();
-      if (kIsWeb) {
-        try {
-          final bytes = await XFile(p).readAsBytes();
-          media.setRecording(bytes: bytes);
-        } catch (_) {}
-      } else {
-        media.setRecording(path: p);
-      }
+    } finally {
+      _stopping = false;
     }
   }
 
   Future<void> _toggle() async {
+    if (_arming || _stopping || _busy) return;
     if (_recording) {
       await _stopAndKeep();
       return;
@@ -114,41 +128,50 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
       setState(() => _error = strings.practiceBusySection);
       return;
     }
-    final ok = await _recorder.hasPermission();
-    if (!mounted) {
-      return;
-    }
-    if (!ok) {
-      setState(() => _error = strings.practiceMicDenied);
-      return;
-    }
+    _arming = true;
     try {
-      await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          sampleRate: 16000,
-          numChannels: 1,
-        ),
-        path: kIsWeb ? 'hue_learn.wav' : _tmpPath(),
-      );
-    } catch (e) {
+      final ok = await _recorder.hasPermission();
       if (!mounted) {
         return;
       }
-      setState(() => _error = strings.practiceMicStartFail);
-      return;
+      if (!ok) {
+        setState(() => _error = strings.practiceMicDenied);
+        return;
+      }
+      try {
+        await _recorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+          path: kIsWeb ? 'hue_learn.wav' : _tmpPath(),
+        );
+      } catch (e) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _error = strings.practiceMicStartFail);
+        return;
+      }
+      if (!mounted) {
+        try {
+          await _recorder.stop();
+        } catch (_) {}
+        return;
+      }
+      setState(() {
+        _recording = true;
+        _error = null;
+        _result = null;
+      });
+    } finally {
+      _arming = false;
     }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _recording = true;
-      _error = null;
-      _result = null;
-    });
   }
 
   Future<void> _analyze() async {
+    if (_busy || _arming || _stopping) return;
     final path = _filePath;
     if (path == null) {
       return;
@@ -237,7 +260,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
       children: [
         CommonButton(
           label: _recording ? strings.learnStopBtn : strings.learnRecordBtn,
-          onPressed: _toggle,
+          onPressed: _busy ? null : _toggle,
         ),
         const SizedBox(height: 8),
         if (_recording)
@@ -271,7 +294,7 @@ class _LearningScreenState extends State<LearningScreen> with SingleTickerProvid
                   '${_result!.maxSeconds?.toStringAsFixed(0) ?? '35'}s',
                   _result!.durationFull?.toStringAsFixed(1),
                 ),
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(fontSize: AppFontSize.sm, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
         ],
@@ -289,10 +312,24 @@ class _PulsingDot extends StatefulWidget {
 
 class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+  late final CurvedAnimation _curved = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  late final Animation<double> _opacity = Tween<double>(begin: 0.35, end: 1.0).animate(_curved);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _ctrl.stop();
+      _ctrl.value = 1.0;
+    } else if (!_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    }
+  }
 
   @override
   void dispose() {
+    _curved.dispose();
     _ctrl.dispose();
     super.dispose();
   }
@@ -300,8 +337,8 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: Tween<double>(begin: 0.35, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut)),
-      child: const HueIcon(HueIcons.recordDot, color: AppTheme.statusDanger, size: 14),
+      opacity: _opacity,
+      child: HueIcon(HueIcons.recordDot, color: AppTheme.statusReadable(context, AppStatusKind.danger), size: 14),
     );
   }
 }

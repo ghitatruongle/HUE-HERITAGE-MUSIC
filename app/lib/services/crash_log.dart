@@ -11,6 +11,7 @@ class CrashLog {
   static const int _keepFiles = 5;
   static Future<void>? _pending;
   static bool _flushed = false;
+  static bool _flushing = false;
 
   static Future<void> write(String message) async {
     if (kIsWeb) {
@@ -51,18 +52,21 @@ class CrashLog {
   }
 
   static Future<void> flushToServer(Dio dio, String appVersion, String platform) async {
-    if (kIsWeb || _flushed) {
+    if (kIsWeb || _flushed || _flushing) {
       return;
     }
-    _flushed = true;
+    _flushing = true;
     try {
+      await _pending;
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/hue_crash_log.txt');
       if (!await file.exists()) {
+        _flushed = true;
         return;
       }
       String content = await file.readAsString();
       if (content.trim().isEmpty) {
+        _flushed = true;
         return;
       }
       final bytes = utf8.encode(content);
@@ -77,7 +81,19 @@ class CrashLog {
         'summary': summary,
         'detail': content,
       });
-      await file.writeAsString('', mode: FileMode.write);
-    } catch (_) {}
+      _flushed = true;
+      final prev = _pending;
+      final clearDone = Completer<void>();
+      _pending = clearDone.future;
+      try {
+        await prev;
+        await file.writeAsString('', mode: FileMode.write);
+      } finally {
+        clearDone.complete();
+      }
+    } catch (_) {
+    } finally {
+      _flushing = false;
+    }
   }
 }

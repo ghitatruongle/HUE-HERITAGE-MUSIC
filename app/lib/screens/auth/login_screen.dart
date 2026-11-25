@@ -7,8 +7,12 @@ import '../../api/endpoints/auth_endpoints.dart';
 import '../../core/localization/app_strings.dart';
 import '../../services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/history_service.dart';
 import '../../services/locale_provider.dart';
+import '../../services/practice_resume.dart';
 import '../../services/server_config.dart';
+import '../../services/session_media.dart';
+import '../../widgets/avatar_view.dart';
 import '../../widgets/feature_header.dart';
 import '../../widgets/common_button.dart';
 import '../../widgets/error_panel.dart';
@@ -57,6 +61,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Future<void> _submitLogin() async {
+    if (_busy) return;
     final strings = context.read<LocaleProvider>().strings;
     final identifier = _loginIdCtrl.text.trim();
     final password = _loginPasswordCtrl.text;
@@ -101,7 +106,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     }
   }
 
+  bool _passwordMeetsPolicy(String password) =>
+      password.length >= 8 &&
+      RegExp(r'[A-Za-z]').hasMatch(password) &&
+      RegExp(r'[0-9]').hasMatch(password);
+
+  void _clearSessionCaches() {
+    AvatarView.clearCache();
+    PracticeResume.clear();
+    if (!mounted) return;
+    try {
+      context.read<SessionMedia>().clearRecording();
+    } catch (_) {}
+    try {
+      unawaited(context.read<HistoryService>().clear());
+    } catch (_) {}
+  }
+
   Future<void> _submitRegister() async {
+    if (_busy) return;
     final strings = context.read<LocaleProvider>().strings;
     final username = _regUsernameCtrl.text.trim();
     final email = _regEmailCtrl.text.trim().toLowerCase();
@@ -116,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       setState(() => _error = strings.authErrEmail);
       return;
     }
-    if (password.length < 6) {
+    if (!_passwordMeetsPolicy(password)) {
       setState(() => _error = strings.authErrPasswordShort);
       return;
     }
@@ -169,11 +192,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Future<void> _logout() async {
-    await context.read<AuthService>().clearToken();
-    if (!mounted) return;
-    setState(() {
-      _error = null;
-    });
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await context.read<AuthService>().clearToken();
+      if (!mounted) return;
+      _clearSessionCaches();
+      setState(() {
+        _error = null;
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -219,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 Expanded(
                                   child: Text(
                                     strings.authStorageWarning,
-                                    style: TextStyle(color: scheme.onTertiaryContainer, fontSize: 12),
+                                    style: TextStyle(color: scheme.onTertiaryContainer, fontSize: AppFontSize.sm),
                                   ),
                                 ),
                               ],
@@ -253,16 +283,33 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Widget _buildLoggedInCard(BuildContext context, AuthService auth, ColorScheme scheme, AppStrings strings) {
+    final roleColor = auth.isAdmin
+        ? AppTheme.statusReadable(context, AppStatusKind.warning)
+        : auth.role == 'worker'
+            ? AppTheme.emeraldReadable(context)
+            : AppTheme.statusReadable(context, AppStatusKind.info);
+    final roleIcon = auth.isAdmin
+        ? HueIcons.adminPanel
+        : auth.role == 'worker'
+            ? HueIcons.engineering
+            : HueIcons.person;
+    final roleLabel = auth.isAdmin
+        ? strings.authRoleAdmin
+        : auth.role == 'worker'
+            ? strings.authRoleWorker
+            : strings.authRoleUser;
+    final loggedColor = AppTheme.statusReadable(context, AppStatusKind.success);
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           children: [
-            CircleAvatar(
-              radius: 36,
-              backgroundColor: scheme.primary.withValues(alpha: 0.15),
-              child: HueIcon(HueIcons.verified, size: 40, color: scheme.primary),
+            AvatarView(
+              url: auth.avatar,
+              size: 72,
+              icon: HueIcons.verified,
+              iconColor: scheme.primary,
             ),
             const SizedBox(height: 16),
             Text(
@@ -277,26 +324,20 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
-                color: auth.isAdmin
-                    ? AppTheme.statusWarning.withAlpha(40)
-                    : AppTheme.statusInfo.withAlpha(40),
+                color: roleColor.withAlpha(40),
                 borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo),
+                border: Border.all(color: roleColor),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    auth.isAdmin ? HueIcons.adminPanel : HueIcons.person,
-                    size: 14,
-                    color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo,
-                  ),
+                  HueIcon(roleIcon, size: 14, color: roleColor),
                   const SizedBox(width: 6),
                   Text(
-                    auth.isAdmin ? strings.authRoleAdmin : strings.authRoleUser,
+                    roleLabel,
                     style: TextStyle(
-                      color: auth.isAdmin ? AppTheme.statusWarning : AppTheme.statusInfo,
-                      fontSize: 12,
+                      color: roleColor,
+                      fontSize: AppFontSize.sm,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -307,11 +348,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
-                color: AppTheme.statusSuccess.withAlpha(40),
+                color: loggedColor.withAlpha(40),
                 borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(color: AppTheme.statusSuccess),
+                border: Border.all(color: loggedColor),
               ),
-              child: Text(strings.authLoggedInChip, style: const TextStyle(color: AppTheme.statusSuccess, fontSize: 12, fontWeight: FontWeight.w600)),
+              child: Text(strings.authLoggedInChip, style: TextStyle(color: loggedColor, fontSize: AppFontSize.sm, fontWeight: FontWeight.w600)),
             ),
             const SizedBox(height: 24),
             Row(
@@ -352,6 +393,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Future<void> _openChangePassword() async {
+    if (_busy) return;
     setState(() => _obscureDialog = true);
     final strings = context.read<LocaleProvider>().strings;
     final oldCtrl = TextEditingController();
@@ -367,7 +409,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: oldCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordOld)),
-              TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(tooltip: _obscureDialog ? strings.obscureShowPassword : strings.obscureHidePassword, icon: Icon(_obscureDialog ? HueIcons.visibility : HueIcons.visibilityOff, size: 20), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
+              TextField(controller: newCtrl, obscureText: _obscureDialog, decoration: InputDecoration(labelText: strings.changePasswordNew, suffixIcon: IconButton(tooltip: _obscureDialog ? strings.obscureShowPassword : strings.obscureHidePassword, icon: HueIcon(_obscureDialog ? HueIcons.visibility : HueIcons.visibilityOff, size: 20, decorative: true), onPressed: () => setDialogState(() => _obscureDialog = !_obscureDialog)))),
               TextField(controller: confirmCtrl, obscureText: true, decoration: InputDecoration(labelText: strings.changePasswordConfirm)),
             ],
           ),
@@ -379,7 +421,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         ),
       );
       if (!mounted || confirmed != true) return;
-      if (newCtrl.text != confirmCtrl.text || newCtrl.text.length < 6) {
+      if (newCtrl.text != confirmCtrl.text || !_passwordMeetsPolicy(newCtrl.text)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.changePasswordMismatch)));
         }
@@ -418,6 +460,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Future<void> _logoutEverywhere() async {
+    if (_busy) return;
     final strings = context.read<LocaleProvider>().strings;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -431,14 +474,28 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       ),
     );
     if (!mounted || confirmed != true) return;
+    setState(() => _busy = true);
+    Object? revokeError;
     try {
       final dio = context.read<ServerConfig>().api.dio;
       await AuthEndpoints(dio).revokeAllTokens();
-    } catch (_) {}
-    if (!mounted) return;
-    await context.read<AuthService>().clearToken();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(strings.logoutEverywhereDone)));
+    } catch (e) {
+      revokeError = e;
+    }
+    try {
+      if (!mounted) return;
+      await context.read<AuthService>().clearToken();
+      if (!mounted) return;
+      _clearSessionCaches();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            revokeError != null ? ApiClient.describe(revokeError) : strings.logoutEverywhereDone,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -470,7 +527,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               border: const OutlineInputBorder(),
               prefixIcon: const HueIcon(HueIcons.lock),
               suffixIcon: IconButton(
-                icon: Icon(_obscureLogin ? HueIcons.visibility : HueIcons.visibilityOff, size: 20),
+                icon: HueIcon(_obscureLogin ? HueIcons.visibility : HueIcons.visibilityOff, size: 20, decorative: true),
                 tooltip: strings.authTogglePassword,
                 onPressed: () => setState(() => _obscureLogin = !_obscureLogin),
               ),
@@ -485,17 +542,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           decoration: BoxDecoration(
             color: AppTheme.statusWarning.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(AppRadius.sm),
-            border: Border.all(color: AppTheme.statusWarning.withValues(alpha: 0.35)),
+            border: Border.all(color: AppTheme.statusReadable(context, AppStatusKind.warning).withValues(alpha: 0.35)),
           ),
           child: Row(
             children: [
-              const HueIcon(HueIcons.info, size: 16, color: AppTheme.statusWarning),
+              HueIcon(HueIcons.info, size: 16, color: AppTheme.statusReadable(context, AppStatusKind.warning)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   strings.authNoResetNote,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: AppFontSize.xs,
                     color: Theme.of(context).colorScheme.onSurface,
                     height: 1.4,
                   ),
@@ -516,7 +573,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              child: Text(strings.authOrDivider, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+              child: Text(strings.authOrDivider, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: AppFontSize.sm)),
             ),
             const Expanded(child: Divider()),
           ],
@@ -535,7 +592,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         Text(
           strings.authGuestNote,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style: TextStyle(fontSize: AppFontSize.xs, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -575,7 +632,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             border: const OutlineInputBorder(),
             prefixIcon: const HueIcon(HueIcons.lock),
             suffixIcon: IconButton(
-              icon: Icon(_obscureRegister ? HueIcons.visibility : HueIcons.visibilityOff, size: 20),
+              icon: HueIcon(_obscureRegister ? HueIcons.visibility : HueIcons.visibilityOff, size: 20, decorative: true),
               tooltip: strings.authTogglePassword,
               onPressed: () => setState(() => _obscureRegister = !_obscureRegister),
             ),
@@ -603,7 +660,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         Text(
           strings.authRegisterFootnote,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style: TextStyle(fontSize: AppFontSize.xs, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ],
     );

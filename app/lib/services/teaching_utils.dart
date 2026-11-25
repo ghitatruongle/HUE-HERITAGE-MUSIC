@@ -8,6 +8,7 @@ class WordScore {
   final String verdictCode;
   final double? errCents;
   final double onsetErrMs;
+  final bool octaveDiff;
 
   const WordScore({
     required this.word,
@@ -16,6 +17,7 @@ class WordScore {
     required this.verdictCode,
     required this.errCents,
     required this.onsetErrMs,
+    this.octaveDiff = false,
   });
 }
 
@@ -121,6 +123,7 @@ List<WordScore> serverWordScores(List<PracticeWord> words) {
         verdictCode: w.verdictCode,
         errCents: w.errCents,
         onsetErrMs: 0,
+        octaveDiff: w.octaveDiff,
       ),
   ];
 }
@@ -214,24 +217,28 @@ String summaryHintText({
 DateTime? parsePracticeDate(String raw, {Duration? utcOffset}) {
   if (raw.isEmpty) return null;
   var s = raw.trim();
-  if (s.length >= 10 && s[10] == ' ') {
+  if (s.length > 10 && s[10] == ' ') {
     s = '${s.substring(0, 10)}T${s.substring(11)}';
   }
   final dt = DateTime.tryParse(s);
   if (dt != null) {
-    return utcOffset == null ? dt : dt.add(utcOffset);
+    if (utcOffset == null) return dt;
+    final base = dt.isUtc
+        ? dt
+        : DateTime.utc(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.millisecond, dt.microsecond);
+    return base.add(utcOffset);
   }
-  if (raw.length >= 10) {
-    final d = DateTime.tryParse(raw.substring(0, 10));
+  if (s.length >= 10) {
+    final d = DateTime.tryParse(s.substring(0, 10));
     if (d == null) return null;
-    return utcOffset == null ? d : d.add(utcOffset);
+    return utcOffset == null ? d : DateTime.utc(d.year, d.month, d.day).add(utcOffset);
   }
   return null;
 }
 
 PracticeStats practiceStatsFromDates(List<DateTime> dates, DateTime now) {
-  final today = DateTime(now.year, now.month, now.day);
-  final days = dates.map((d) => DateTime(d.year, d.month, d.day)).toSet();
+  final today = DateTime.utc(now.year, now.month, now.day);
+  final days = dates.map((d) => DateTime.utc(d.year, d.month, d.day)).toSet();
   var streak = 0;
   var cursor = today;
   if (!days.contains(cursor)) {
@@ -243,7 +250,7 @@ PracticeStats practiceStatsFromDates(List<DateTime> dates, DateTime now) {
   }
   final last7 = List<int>.filled(7, 0);
   for (final d in dates) {
-    final diff = today.difference(DateTime(d.year, d.month, d.day)).inDays;
+    final diff = today.difference(DateTime.utc(d.year, d.month, d.day)).inDays;
     if (diff >= 0 && diff < 7) {
       last7[6 - diff]++;
     }

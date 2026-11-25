@@ -13,6 +13,7 @@ import '../../widgets/hue_icons.dart';
 class TaskResultCard extends StatelessWidget {
   final MusicTask task;
   final bool polling;
+  final bool cancelling;
   final void Function(String taskId) onCancel;
 
   const TaskResultCard({
@@ -20,6 +21,7 @@ class TaskResultCard extends StatelessWidget {
     required this.task,
     required this.polling,
     required this.onCancel,
+    this.cancelling = false,
   });
 
   @override
@@ -45,7 +47,7 @@ class TaskResultCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(strings.taskStatusLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(strings.taskStatusLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: AppFontSize.md)),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
@@ -57,7 +59,7 @@ class TaskResultCard extends StatelessWidget {
                   task.status,
                   style: TextStyle(
                     color: statusColor,
-                    fontSize: 12,
+                    fontSize: AppFontSize.sm,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -88,11 +90,13 @@ class TaskResultCard extends StatelessWidget {
                 TextButton.icon(
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                    minimumSize: const Size(44, 44),
+                    minimumSize: const Size(48, 48),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                    visualDensity: VisualDensity.standard,
                   ),
                   icon: HueIcon(HueIcons.close, size: 14, color: scheme.onSurfaceVariant),
-                  label: Text(strings.cancelBtn, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-                  onPressed: () => onCancel(task.id),
+                  label: Text(strings.cancelBtn, style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant)),
+                  onPressed: cancelling ? null : () => onCancel(task.id),
                 ),
               ],
             ],
@@ -101,7 +105,7 @@ class TaskResultCard extends StatelessWidget {
               task.status != 'failed' &&
               task.status != 'error') ...[
             const SizedBox(height: 6),
-            Text(strings.taskNotice(task.reason), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            Text(strings.taskNotice(task.reason), style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant)),
           ],
           if (task.status == 'failed' || task.status == 'error') ...[
             const SizedBox(height: 8),
@@ -115,7 +119,7 @@ class TaskResultCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               strings.taskBlockedNote,
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant),
             ),
           ],
           if (task.status == 'done' && task.audioUrl.isNotEmpty) ...[
@@ -126,7 +130,7 @@ class TaskResultCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   strings.taskAiGenerated,
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.goldReadable(context)),
+                  style: TextStyle(fontSize: AppFontSize.sm, fontWeight: FontWeight.bold, color: AppTheme.goldReadable(context)),
                 ),
               ],
             ),

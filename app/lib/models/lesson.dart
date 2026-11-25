@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 class Lesson {
   final String id;
   final String title;
@@ -289,6 +291,7 @@ class PracticeMetrics {
   final double ornament;
   final double meanAbsCents;
   final double vibratoRate;
+  final double octaveShift;
   final int matchedNotes;
   final int unmatchedNotes;
   final int missingNotes;
@@ -309,6 +312,7 @@ class PracticeMetrics {
     this.stabilityScore = 0,
     this.ornament = 0,
     this.vibratoRate = 0,
+    this.octaveShift = 1.0,
     this.matchedNotes = 0,
     this.unmatchedNotes = 0,
     this.missingNotes = 0,
@@ -379,6 +383,7 @@ class PracticeWord {
   final double end;
   final double voicedRatio;
   final double? errCents;
+  final bool octaveDiff;
   final String verdictCode;
   final String verdict;
 
@@ -390,6 +395,7 @@ class PracticeWord {
     required this.end,
     required this.voicedRatio,
     required this.errCents,
+    this.octaveDiff = false,
     required this.verdictCode,
     required this.verdict,
   });
@@ -405,6 +411,7 @@ class PracticeWord {
       end: double.tryParse(raw['end']?.toString() ?? '0') ?? 0,
       voicedRatio: double.tryParse(raw['voiced_ratio']?.toString() ?? '0') ?? 0,
       errCents: rawErr == null ? null : double.tryParse(rawErr.toString()),
+      octaveDiff: raw['octave_diff'] == true,
       verdictCode: raw['verdict_code']?.toString() ?? '',
       verdict: raw['verdict']?.toString() ?? '',
     );
@@ -452,6 +459,7 @@ class PracticeResult {
     double stability = 0;
     double ornament = 0;
     double vibRate = 0;
+    double octaveShift = 1.0;
     int matched = 0;
     int unmatched = 0;
     int missing = 0;
@@ -468,6 +476,11 @@ class PracticeResult {
       stability = double.tryParse(m['stability_score']?.toString() ?? '0') ?? 0;
       ornament = double.tryParse(m['ornament']?.toString() ?? '0') ?? 0;
       vibRate = double.tryParse(m['vibrato_rate']?.toString() ?? '0') ?? 0;
+      final rawOct = m['octave_shift'];
+      final octNum = rawOct is num ? rawOct : num.tryParse(rawOct?.toString() ?? '');
+      if (octNum != null) {
+        octaveShift = math.pow(2.0, octNum.clamp(-2, 2)).toDouble();
+      }
       matched = int.tryParse(m['matched_notes']?.toString() ?? '0') ?? 0;
       unmatched = int.tryParse(m['unmatched_notes']?.toString() ?? '0') ?? 0;
       missing = int.tryParse(m['missing_notes']?.toString() ?? '0') ?? 0;
@@ -531,6 +544,7 @@ class PracticeResult {
         stabilityScore: stability,
         ornament: ornament,
         vibratoRate: vibRate,
+        octaveShift: octaveShift,
         matchedNotes: matched,
         unmatchedNotes: unmatched,
         missingNotes: missing,
@@ -559,8 +573,9 @@ class PracticeResult {
 class ProgressPage {
   final List<ProgressEntry> items;
   final String serverToday;
+  final String serverUtcNow;
 
-  ProgressPage({required this.items, this.serverToday = ''});
+  ProgressPage({required this.items, this.serverToday = '', this.serverUtcNow = ''});
 }
 
 class ProgressEntry {

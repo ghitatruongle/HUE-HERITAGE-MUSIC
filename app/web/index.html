@@ -146,7 +146,6 @@
       document.body.style.background = "transparent";
     }
   </script>
-  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
 </head>
 <body>
   <picture id="splash">
@@ -164,17 +163,18 @@
   </div>
   <script>
     window.addEventListener('flutter-first-frame', function () {
+      if (typeof removeSplashFromWeb === 'function') {
+        removeSplashFromWeb();
+      }
       var loader = document.getElementById('loading-container');
       if (loader) {
+        loader.style.pointerEvents = 'none';
         loader.style.opacity = '0';
         setTimeout(function () {
           loader.remove();
         }, 400);
       }
     });
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('flutter_service_worker.js');
-    }
   </script>
   <script>
     var s = document.createElement('script');

@@ -101,6 +101,9 @@ class InviteCode(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     code: Mapped[str] = mapped_column(String(128), unique=True)
     note: Mapped[str] = mapped_column(String(256), default="")
+    max_uses: Mapped[int] = mapped_column(Integer, default=1)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     used_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -121,5 +124,13 @@ class ArtifactOwner(Base):
     __tablename__ = "artifact_owners"
     sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    kind: Mapped[str] = mapped_column(String(32), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ArtifactAccess(Base):
+    __tablename__ = "artifact_access"
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     kind: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

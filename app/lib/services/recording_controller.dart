@@ -29,6 +29,8 @@ class RecordingController {
 
   final AudioRecorder _recorder;
   int epoch = 0;
+  int _beginSeq = 0;
+  bool _disposed = false;
   bool arming = false;
   RecordingMode? _active;
   int _activeSection = -1;
@@ -60,7 +62,12 @@ class RecordingController {
     required String path,
     int sectionIndex = -1,
   }) async {
+    if (_disposed) return false;
+    final seq = ++_beginSeq;
     if (!(await hasPermission())) {
+      return false;
+    }
+    if (_disposed || seq != _beginSeq) {
       return false;
     }
     try {
@@ -71,6 +78,12 @@ class RecordingController {
     } catch (_) {
       return false;
     }
+    if (_disposed || seq != _beginSeq) {
+      try {
+        await _recorder.stop();
+      } catch (_) {}
+      return false;
+    }
     epoch++;
     _active = mode;
     _activeSection = sectionIndex;
@@ -78,6 +91,7 @@ class RecordingController {
   }
 
   Future<RecordingStopResult> stop() {
+    _beginSeq++;
     final existing = _stopLock;
     if (existing != null) {
       return existing;
@@ -112,6 +126,14 @@ class RecordingController {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
+    _beginSeq++;
+    final pendingStop = _stopLock;
+    if (pendingStop != null) {
+      try {
+        await pendingStop;
+      } catch (_) {}
+    }
     if (_active != null) {
       try {
         await _recorder.stop();

@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../api_client.dart';
+
 class AdminStats {
   final int usersTotal;
   final int usersActive;
@@ -292,12 +294,12 @@ class AdminEndpoints {
 
   Future<AdminStats> stats() async {
     final res = await dio.get('/api/admin/stats');
-    return AdminStats.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return AdminStats.fromJson(ApiClient.requireMap(res.data, res.requestOptions));
   }
 
   Future<LearningStats> learningStats() async {
     final res = await dio.get('/api/admin/learning/stats');
-    return LearningStats.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return LearningStats.fromJson(ApiClient.requireMap(res.data, res.requestOptions));
   }
 
   Future<StoragePage> storage({String q = '', int limit = 100, int offset = 0}) async {
@@ -332,7 +334,7 @@ class AdminEndpoints {
 
   Future<CleanupResult> cleanup() async {
     final res = await dio.post('/api/admin/maintenance/cleanup');
-    return CleanupResult.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return CleanupResult.fromJson(ApiClient.requireMap(res.data, res.requestOptions));
   }
 
   Future<SecurityEventsPage> securityEvents({int limit = 100, int offset = 0, String event = '', String q = ''}) async {
@@ -361,7 +363,7 @@ class AdminEndpoints {
 
   Future<SecuritySummary> securitySummary() async {
     final res = await dio.get('/api/admin/security/summary');
-    return SecuritySummary.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return SecuritySummary.fromJson(ApiClient.requireMap(res.data, res.requestOptions));
   }
 
   Future<List<CrashReportEntry>> crashReports({int limit = 100, int offset = 0}) async {
@@ -386,7 +388,7 @@ class AdminEndpoints {
 
   Future<CrashReportEntry> crashReportDetail(String id) async {
     final res = await dio.get('/api/admin/crash-reports/$id');
-    return CrashReportEntry.fromJson(Map<String, dynamic>.from(res.data as Map));
+    return CrashReportEntry.fromJson(ApiClient.requireMap(res.data, res.requestOptions));
   }
 
   Future<int> clearCrashReports() async {

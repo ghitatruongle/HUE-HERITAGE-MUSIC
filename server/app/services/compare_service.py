@@ -72,6 +72,14 @@ def _ref_key_lock(key):
         return _REF_KEY_LOCKS.setdefault(key, threading.Lock())
 
 
+def invalidate_reference(prefix: str) -> None:
+    if not prefix:
+        return
+    with _REF_CACHE_LOCK:
+        for k in [k for k in _REF_CACHE if k.startswith(prefix)]:
+            _REF_CACHE.pop(k, None)
+
+
 def _reference_state(data, key=None):
     if key is None:
         key = "sha:" + hashlib.sha256(data).hexdigest()
@@ -87,7 +95,7 @@ def _reference_state(data, key=None):
             return hit
         samples, sr = pitch_service.read_mono_wav(data, max_seconds=MAX_COMPARE_SECONDS)
         samples, sr = pitch_service.resample_16k(samples, sr)
-        times, f0 = pitch_service.estimate_f0(samples, sr, hop=256)
+        times, f0 = pitch_service.estimate_f0(samples, sr, hop=256, fmin=70.0)
         if not times:
             state = {"has_frames": False, "valid": False, "times": [], "f0": [], "onset_a": 0.0}
         else:
@@ -192,6 +200,28 @@ def onset_trim(samples, sr):
     return round(a / sr, 3), round(b / sr, 3)
 
 
+def _octave_shift_multiplier(s_f0, u_f0):
+    s_vals = [v for v in s_f0 if v > 0]
+    u_vals = [v for v in u_f0 if v > 0]
+    if not s_vals or not u_vals:
+        return 1.0, 0
+    med_s = sorted(s_vals)[len(s_vals) // 2]
+    med_u = sorted(u_vals)[len(u_vals) // 2]
+    if med_s <= 0 or med_u <= 0:
+        return 1.0, 0
+    oct_shift = max(-2, min(2, int(round(math.log2(med_s / med_u)))))
+    return (2.0 ** oct_shift), oct_shift
+
+
+def _fold_octave_cents(raw_err: float):
+    k = round(raw_err / 1200.0)
+    if k != 0:
+        folded = raw_err - k * 1200.0
+        if abs(folded) <= (OCTAVE_HIGH - 1200.0):
+            return round(folded, 1), True
+    return round(raw_err, 1), False
+
+
 def empty_result():
     return {
         "metrics": {
@@ -200,6 +230,7 @@ def empty_result():
             "median_cents": 0.0,
             "mean_offset_ms": 0.0,
             "start_offset_ms": 0.0,
+            "octave_shift": 0,
             "pairs": 0,
             "dtw_distance": 0.0,
             "pitch_score": 0.0,
@@ -398,7 +429,7 @@ def _reference_notes(times, smooth7, f0_raw):
     return _merge_fragments(notes)
 
 
-def _match_note_sequences(ref_notes, user_notes):
+def _match_note_sequences(ref_notes, user_notes, octave_normalize=True):
     n = len(ref_notes)
     m = len(user_notes)
     if n == 0 or m == 0:
@@ -421,10 +452,19 @@ def _match_note_sequences(ref_notes, user_notes):
                 best = dp[i][j - 1] + SKIP_USER
                 skip_user[i][j] = True
                 take[i][j] = False
-            err = abs(to_cents(user_notes[j - 1]["freq"]) - to_cents(ref_notes[i - 1]["freq"]))
-            ok = err <= MATCH_ERR_LIMIT_CENTS or MATCH_OCTAVE_LOW <= err <= MATCH_OCTAVE_HIGH
+            raw_err = abs(to_cents(user_notes[j - 1]["freq"]) - to_cents(ref_notes[i - 1]["freq"]))
+            if octave_normalize:
+                k = round(raw_err / 1200.0)
+                if k == 0:
+                    ok = raw_err <= MATCH_ERR_LIMIT_CENTS
+                    cost = raw_err
+                else:
+                    ok = abs(k) <= 2 and abs(raw_err - k * 1200.0) <= (MATCH_OCTAVE_HIGH - 1200.0)
+                    cost = OCTAVE_MATCH_COST
+            else:
+                ok = raw_err <= MATCH_ERR_LIMIT_CENTS or MATCH_OCTAVE_LOW <= raw_err <= MATCH_OCTAVE_HIGH
+                cost = OCTAVE_MATCH_COST if raw_err >= MATCH_ERR_LIMIT_CENTS else raw_err
             if ok:
-                cost = OCTAVE_MATCH_COST if err >= MATCH_ERR_LIMIT_CENTS else err
                 if dp[i - 1][j - 1] + cost < best:
                     best = dp[i - 1][j - 1] + cost
                     take[i][j] = True
@@ -450,7 +490,9 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0, octave_norm
         raise CompareEmptyError("no_voice", "empty pitch contour")
     s_smooth = pitch_service.smooth_series(s_f0, 7)
     u_smooth = pitch_service.smooth_series(u_f0, 7)
-    path, dist = dtw_aligner.dtw(s_smooth, u_smooth)
+    mult, raw_oct = _octave_shift_multiplier(s_smooth, u_smooth) if octave_normalize else (1.0, 0)
+    u_dtw = [round(v * mult, 1) if v > 0 else 0.0 for v in u_smooth] if mult != 1.0 else u_smooth
+    path, dist = dtw_aligner.dtw(s_smooth, u_dtw)
     if not path:
         raise CompareEmptyError("align_failed", "dtw produced no path")
     errs = []
@@ -461,7 +503,10 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0, octave_norm
         b = u_smooth[j]
         warp.setdefault(i, []).append(u_f0[j])
         if a > 0 and b > 0:
-            errs.append(abs(to_cents(b) - to_cents(a)))
+            raw_diff = to_cents(b) - to_cents(a)
+            if octave_normalize:
+                raw_diff, _ = _fold_octave_cents(raw_diff)
+            errs.append(abs(raw_diff))
             offs.append(abs(u_times[j] - s_times[i]))
     if not errs:
         return empty_result()
@@ -497,7 +542,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0, octave_norm
     vibrato_count = 0
     notes_out = []
 
-    seq_pairs = _match_note_sequences(ref_notes, user_notes)
+    seq_pairs = _match_note_sequences(ref_notes, user_notes, octave_normalize=octave_normalize)
     ref_of_user = {}
     for r_idx, u_idx in seq_pairs:
         ref_of_user[u_idx] = r_idx
@@ -527,13 +572,12 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0, octave_norm
         rn = ref_notes[r_idx]
         matched += 1
         err = round(to_cents(nt["freq"]) - to_cents(rn["freq"]), 1)
-        octave_diff = octave_normalize and OCTAVE_LOW <= abs(err) <= OCTAVE_HIGH
-        if octave_diff:
-            err = round(err - 1200.0 * (1.0 if err > 0 else -1.0), 1)
-        onset_ms = 0.0
-        if ref_window:
-            onset_ms = round((min(ref_window) - rn["start"]) * 1000.0, 1)
-        onset_errs.append(abs(onset_ms))
+        octave_diff = False
+        if octave_normalize:
+            err, octave_diff = _fold_octave_cents(err)
+        onset_ms = round((nt["start"] - rn["start"]) * 1000.0, 1)
+        rel_onset_ms = round((nt["start"] - (start_off_ms / 1000.0) - rn["start"]) * 1000.0, 1)
+        onset_errs.append(abs(rel_onset_ms))
         dur_ratio = (nt["end"] - nt["start"]) / max(1e-3, rn["end"] - rn["start"])
         stats = _note_stats(u_times, u_f0, nt)
         code = verdict_code(err)
@@ -657,6 +701,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0, octave_norm
             "median_cents": med_cents,
             "mean_offset_ms": round(mean_off * 1000, 1),
             "start_offset_ms": round(start_off_ms, 1),
+            "octave_shift": raw_oct,
             "pairs": len(errs),
             "dtw_distance": dist,
             "pitch_score": pitch_score,
@@ -679,6 +724,7 @@ def compare_contours(s_times, s_f0, u_times, u_f0, start_off_ms=0.0, octave_norm
     }
     if include_warped_full:
         result["user_warped_full"] = {"times": [round(t, 3) for t in s_times], "f0": warped}
+        result["sample_full"] = {"times": [round(t, 3) for t in s_times], "f0": [round(v, 1) for v in s_f0]}
     return result
 
 
@@ -698,7 +744,7 @@ def compare(sample_data, user_data, sample_key=None, include_warped_full=False):
     state = _reference_state(sample_data, sample_key)
     u_samples, u_sr = pitch_service.read_mono_wav(user_data, max_seconds=MAX_COMPARE_SECONDS)
     u_samples, u_sr = pitch_service.resample_16k(u_samples, u_sr)
-    u_times, u_f0 = pitch_service.estimate_f0(u_samples, u_sr, hop=256)
+    u_times, u_f0 = pitch_service.estimate_f0(u_samples, u_sr, hop=256, fmin=70.0)
     if u_sr and len(u_samples) < int(u_sr * 0.05):
         raise CompareEmptyError("too_short", "user audio shorter than 50 ms")
     if not state["has_frames"]:

@@ -50,6 +50,7 @@ class HistoryService extends ChangeNotifier {
 
   static String newId() => '${DateTime.now().microsecondsSinceEpoch}_${_idSeq++}';
   List<HistoryEntry> _entries = [];
+  Future<void> _saveChain = Future<void>.value();
 
   List<HistoryEntry> get entries => List.unmodifiable(_entries);
 
@@ -59,9 +60,15 @@ class HistoryService extends ChangeNotifier {
       final raw = prefs.getString(_key);
       if (raw == null) return;
       final list = jsonDecode(raw) as List;
-      _entries = list
-          .map((e) => HistoryEntry.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final parsed = <HistoryEntry>[];
+      for (final item in list) {
+        if (item is Map) {
+          try {
+            parsed.add(HistoryEntry.fromJson(Map<String, dynamic>.from(item)));
+          } catch (_) {}
+        }
+      }
+      _entries = parsed;
       notifyListeners();
     } catch (_) {
       _entries = [];
@@ -73,6 +80,7 @@ class HistoryService extends ChangeNotifier {
     if (_entries.length > _maxEntries) {
       _entries = _entries.sublist(0, _maxEntries);
     }
+    notifyListeners();
     await _persist();
   }
 
@@ -88,20 +96,25 @@ class HistoryService extends ChangeNotifier {
         score: _entries[idx].score,
         detail: _entries[idx].detail,
       );
+      notifyListeners();
       await _persist();
     }
   }
 
   Future<void> clear() async {
     _entries = [];
+    notifyListeners();
     await _persist();
   }
 
-  Future<void> _persist() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key, jsonEncode(_entries.map((e) => e.toJson()).toList()));
-    } catch (_) {}
-    notifyListeners();
+  Future<void> _persist() {
+    final payload = jsonEncode(_entries.map((e) => e.toJson()).toList());
+    _saveChain = _saveChain.catchError((_) {}).then((_) async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_key, payload);
+      } catch (_) {}
+    });
+    return _saveChain;
   }
 }

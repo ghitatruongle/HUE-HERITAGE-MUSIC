@@ -23,6 +23,7 @@ class ThemeProvider extends ChangeNotifier {
       } else if (saved == 'system') {
         _mode = ThemeMode.system;
       }
+      notifyListeners();
     } catch (_) {}
   }
 

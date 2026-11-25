@@ -11,13 +11,16 @@ def valid_truth(items):
     for e in items:
         if not isinstance(e, dict):
             return False
-        if not isinstance(e.get("midi"), int):
+        midi = e.get("midi")
+        start = e.get("start")
+        end = e.get("end")
+        if isinstance(midi, bool) or not isinstance(midi, int) or midi < 0 or midi > 127:
             return False
-        if not isinstance(e.get("start"), (int, float)):
+        if isinstance(start, bool) or not isinstance(start, (int, float)) or not math.isfinite(start):
             return False
-        if not isinstance(e.get("end"), (int, float)):
+        if isinstance(end, bool) or not isinstance(end, (int, float)) or not math.isfinite(end):
             return False
-        if e["end"] <= e["start"]:
+        if end <= start:
             return False
     return True
 
@@ -86,7 +89,7 @@ def error_stats(pred, truth):
         p = pp[best]
         onset_errs.append(best_dt * 1000.0)
         offset_errs.append(abs(p["end"] - t["end"]) * 1000.0)
-        pitch_errs.append(cents(2 ** (p["midi"] / 12.0), 2 ** (t["midi"] / 12.0)))
+        pitch_errs.append(100.0 * abs(p["midi"] - t["midi"]))
     return _summarize(pitch_errs), _summarize(onset_errs), _summarize(offset_errs)
 
 

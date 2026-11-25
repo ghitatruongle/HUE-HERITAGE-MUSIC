@@ -1,11 +1,32 @@
+import asyncio
 import threading
+import weakref
 
 from ..config import settings
 
 _LOCK = threading.Lock()
 _INFLIGHT: dict = {}
+_DSP_SEMS_LOCK = threading.Lock()
+_DSP_SEMS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 HEAVY_INFLIGHT_PER_USER = 2
+
+
+def _dsp_semaphore():
+    loop = asyncio.get_running_loop()
+    cap = max(1, int(settings.worker_threads))
+    with _DSP_SEMS_LOCK:
+        entry = _DSP_SEMS.get(loop)
+        if entry is None or entry[0] != cap:
+            entry = (cap, asyncio.Semaphore(cap))
+            _DSP_SEMS[loop] = entry
+        return entry[1]
+
+
+async def run_dsp(fn, *args, **kwargs):
+    sem = _dsp_semaphore()
+    async with sem:
+        return await asyncio.to_thread(fn, *args, **kwargs)
 
 
 def user_key(prefix: str, user_id) -> str:

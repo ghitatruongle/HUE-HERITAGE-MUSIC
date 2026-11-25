@@ -137,8 +137,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 20),
-        _buildServerSection(context, strings),
+        if (auth.isLoggedIn && auth.isStaff) ...[
+          const SizedBox(height: 20),
+          _buildServerSection(context, strings),
+        ],
         if (auth.isLoggedIn && auth.storageUsedBytes != null) ...[
           const SizedBox(height: 20),
           _sectionLabel(context, strings.storageTitle),
@@ -157,8 +159,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Center(
-                  child: AppLogo(size: 80, borderRadius: 18, iconSize: 60),
+                Center(
+                  child: AppLogo(size: 80, borderRadius: 18, iconSize: 60, iconColor: scheme.primary),
                 ),
                 const SizedBox(height: 14),
                 Row(
@@ -192,51 +194,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Row(
-          children: [
-            AvatarView(
-              url: auth.avatar,
-              size: 56,
-              icon: auth.role == 'worker' ? HueIcons.engineering : HueIcons.accountCircle,
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final infoRow = Row(
+              children: [
+                AvatarView(
+                  url: auth.avatar,
+                  size: 56,
+                  icon: auth.role == 'worker' ? HueIcons.engineering : HueIcons.accountCircle,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        auth.username ?? '',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: AppFontSize.xl),
+                      ),
+                      if ((auth.email ?? '').isNotEmpty)
+                        Text(
+                          auth.email!,
+                          style: TextStyle(fontSize: AppFontSize.sm, color: scheme.onSurfaceVariant),
+                        ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: scheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(AppRadius.xs),
+                        ),
+                        child: Text(
+                          roleLabel,
+                          style: TextStyle(fontSize: AppFontSize.xs, color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+            if (!auth.isStaff) {
+              return infoRow;
+            }
+            final avatarButton = HueButton(
+              label: strings.accountAvatarChange,
+              icon: HueIcons.edit,
+              variant: HueButtonVariant.ghost,
+              size: HueButtonSize.small,
+              loading: _avatarBusy,
+              onPressed: _avatarBusy ? null : () => _changeAvatar(strings, auth),
+            );
+            if (constraints.maxWidth < 400) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    auth.username ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                  ),
-                  if ((auth.email ?? '').isNotEmpty)
-                    Text(
-                      auth.email!,
-                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                    ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(AppRadius.xs),
-                    ),
-                    child: Text(
-                      roleLabel,
-                      style: TextStyle(fontSize: 11, color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600),
-                    ),
-                  ),
+                  infoRow,
+                  const SizedBox(height: AppSpacing.md),
+                  Align(alignment: Alignment.centerRight, child: avatarButton),
                 ],
-              ),
-            ),
-            if (auth.isStaff)
-              HueButton(
-                label: strings.accountAvatarChange,
-                icon: HueIcons.edit,
-                variant: HueButtonVariant.ghost,
-                loading: _avatarBusy,
-                onPressed: _avatarBusy ? null : () => _changeAvatar(strings, auth),
-              ),
-          ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: infoRow),
+                const SizedBox(width: AppSpacing.sm),
+                avatarButton,
+              ],
+            );
+          },
         ),
       ),
     );
@@ -307,7 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: server.hasServer ? AppTheme.emeraldBright : AppTheme.statusDangerDark,
+                        color: server.hasServer ? AppTheme.emeraldReadable(context) : AppTheme.statusReadable(context, AppStatusKind.danger),
                       ),
                     ),
                   ],

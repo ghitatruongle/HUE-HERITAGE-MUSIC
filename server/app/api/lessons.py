@@ -1,5 +1,6 @@
 from typing import Optional
 import asyncio
+import hashlib
 import logging
 import re
 import secrets
@@ -14,7 +15,7 @@ from ..rate_limit import RATE_LIMIT_DETAIL, RATE_LIMIT_HEADERS
 from ..config import settings
 from ..database.session import get_db
 from ..database import crud
-from ..services import lesson_service, compare_service, scale_service
+from ..services import lesson_service, compare_service, scale_service, user_inflight
 from ..storage import manager
 from ..audio_access import require_audio_access, verify_path
 from .auth import require_user, resolve_bearer_user, require_admin_fresh
@@ -66,11 +67,7 @@ async def upload_lesson_sample(
 ):
     if manager.content_length_exceeds(request, MAX_BYTES):
         raise HTTPException(status_code=413, detail="file too large")
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="file too large")
+    data = await manager.read_upload_limited(file, MAX_BYTES)
 
     def _validate_and_save():
         item = _load_item(lesson_id)
@@ -85,11 +82,13 @@ async def upload_lesson_sample(
             if "too large" in msg:
                 return None, "file too large", 413
             return None, msg, 400
-        return True, None, 200
+        return item.sha256 or item.id, None, 200
 
-    _, err, status = await asyncio.to_thread(_validate_and_save)
+    sha_key, err, status = await asyncio.to_thread(_validate_and_save)
     if err:
         raise HTTPException(status_code=status, detail=err)
+    if sha_key:
+        compare_service.invalidate_reference(f"lesson:{sha_key}:{section}:")
     from .. import security_log
 
     security_log.security_event("lesson_sample_uploaded", admin=admin_id, lesson=lesson_id, section=section, size=len(data))
@@ -114,6 +113,7 @@ def delete_lesson_sample(lesson_id: str, section: int, admin_id: str = Depends(r
     if not item:
         raise HTTPException(status_code=404, detail="lesson not found")
     removed = manager.delete_lesson_sample(item.sha256 or item.id, section)
+    compare_service.invalidate_reference(f"lesson:{item.sha256 or item.id}:{section}:")
     from .. import security_log
 
     security_log.security_event("lesson_sample_deleted", admin=admin_id, lesson=lesson_id, section=section, removed=removed)
@@ -124,13 +124,10 @@ def delete_lesson_sample(lesson_id: str, section: int, admin_id: str = Depends(r
 def list_lessons(request: Request, db: Session = Depends(get_db)):
     viewer = resolve_bearer_user(request, db)
     items = crud.get_creation_tunes(db, viewer=viewer)
-    if not items:
+    lessons = [s for s in (lesson_service.lesson_summary(it) for it in items) if s is not None]
+    if not lessons:
         items = crud.list_items(db, limit=100, viewer=viewer)
-    lessons = []
-    for item in items:
-        summary = lesson_service.lesson_summary(item)
-        if summary is not None:
-            lessons.append(summary)
+        lessons = [s for s in (lesson_service.lesson_summary(it) for it in items) if s is not None]
     return lessons
 
 
@@ -158,14 +155,10 @@ async def practice_scale(
 ):
     if manager.content_length_exceeds(request, MAX_BYTES):
         raise HTTPException(status_code=413, detail="file too large")
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="file too large")
+    data = await manager.read_upload_limited(file, MAX_BYTES)
     _practice_slot_acquire(user_id)
     try:
-        return await asyncio.to_thread(scale_service.practice_scale, scale_id, data, transpose)
+        return await user_inflight.run_dsp(scale_service.practice_scale, scale_id, data, transpose)
     except ValueError as e:
         msg = str(e)
         if msg == "unknown scale":
@@ -186,9 +179,10 @@ _PRACTICE_INFLIGHT_LOCK = threading.Lock()
 def _practice_slot_acquire(user_id: Optional[str]) -> None:
     if not user_id:
         return
+    limit = max(1, int(getattr(settings, "heavy_inflight_per_user", PRACTICE_MAX_INFLIGHT_PER_USER)))
     with _PRACTICE_INFLIGHT_LOCK:
         current = _PRACTICE_INFLIGHT.get(user_id, 0)
-        if current >= PRACTICE_MAX_INFLIGHT_PER_USER:
+        if current >= limit:
             raise HTTPException(status_code=429, detail=RATE_LIMIT_DETAIL, headers=RATE_LIMIT_HEADERS)
         _PRACTICE_INFLIGHT[user_id] = current + 1
 
@@ -209,18 +203,22 @@ def download_practice_midi(
     name: str,
     request: Request,
     db: Session = Depends(get_db),
-    user_id: Optional[str] = Depends(require_user),
-    access=Depends(require_audio_access),
 ):
     if not PRACTICE_MIDI_NAME.fullmatch(name):
         raise HTTPException(status_code=400, detail="bad filename")
     session = crud.get_practice_session_by_midi(db, name)
-    if session is not None and session.user_id:
-        viewer = crud.get_user_by_id(db, user_id) if user_id else resolve_bearer_user(request, db)
-        if viewer is None or (viewer.id != session.user_id and not crud.is_admin_user(viewer)):
+    viewer = resolve_bearer_user(request, db)
+    if viewer is not None:
+        if session is not None and session.user_id and viewer.id != session.user_id and not crud.is_admin_user(viewer):
             raise HTTPException(status_code=404, detail="not found")
-    elif session is None and settings.auth_required:
-        raise HTTPException(status_code=404, detail="not found")
+        if session is None and settings.auth_required:
+            raise HTTPException(status_code=404, detail="not found")
+    elif settings.auth_required:
+        scope = f"pm:{session.user_id}" if (session is not None and session.user_id) else ""
+        if not verify_path(request.url.path, request.query_params.get("e"), request.query_params.get("s"), scope=scope):
+            raise HTTPException(status_code=401, detail="authentication or signed url required")
+        if session is None:
+            raise HTTPException(status_code=404, detail="not found")
     path = manager.midi_dir() / name
     if not path.exists():
         raise HTTPException(status_code=404, detail="not found")
@@ -234,13 +232,17 @@ def my_progress(
     user_id: Optional[str] = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    utc_now = time.gmtime()
+    utc_today = time.strftime("%Y-%m-%d", utc_now)
+    utc_iso = time.strftime("%Y-%m-%dT%H:%M:%S", utc_now)
     if not user_id:
-        return {"items": [], "server_history": False, "server_today": time.strftime("%Y-%m-%d")}
+        return {"items": [], "server_history": False, "server_today": utc_today, "server_utc_now": utc_iso}
     rows = crud.list_practice_sessions(db, user_id, lesson_id or None, limit=limit)
     return {
         "items": [crud.practice_session_to_dict(r) for r in rows],
         "server_history": True,
-        "server_today": time.strftime("%Y-%m-%d"),
+        "server_today": utc_today,
+        "server_utc_now": utc_iso,
     }
 
 
@@ -254,7 +256,7 @@ def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db
         lesson = lesson_service.get_lesson(item)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    lyrics_text = (item.lyrics_with_ornaments or item.lyrics or "").strip()
+    lyrics_text = "\n".join(lesson_service.clean_lyric_lines(item.lyrics_with_ornaments or item.lyrics or ""))
     sha = item.sha256 or item.id
     contour = lesson.get("contour") or {}
     c_times = contour.get("times", [])
@@ -263,7 +265,7 @@ def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db
         has_sample = manager.lesson_sample_path(sha, s["index"]).exists()
         s["has_sample"] = has_sample
         s["sample_url"] = f"/api/lessons/{lesson_id}/sections/{s['index']}/sample.wav" if has_sample else ""
-        sec_lines = [ln for ln in (s.get("lyrics") or "").splitlines() if ln.strip()]
+        sec_lines = lesson_service.clean_lyric_lines(s.get("lyrics") or "")
         lt = s.get("line_times")
         if lt is None:
             lt = lesson_service.section_line_times(c_times, c_f0, s["start"], s["end"], sec_lines)
@@ -279,6 +281,51 @@ def lesson_detail(request: Request, lesson_id: str, db: Session = Depends(get_db
     return lesson
 
 
+def _load_practice_item(lesson_id: str, user_id: Optional[str]):
+    from ..database.session import SessionLocal
+    from ..database import crud as _crud
+
+    db = SessionLocal()
+    try:
+        item = _crud.get_item(db, lesson_id)
+        viewer = _crud.get_user_by_id(db, user_id) if user_id else None
+        if not item or not _crud.can_view_item(item, viewer):
+            return None
+        return item
+    finally:
+        db.close()
+
+
+def _save_practice_session_db(user_id: str, lesson_id: str, section: int, result: dict) -> None:
+    from ..database.session import SessionLocal
+
+    m = result["metrics"]
+    db2 = SessionLocal()
+    try:
+        crud.create_practice_session(
+            db2,
+            user_id,
+            lesson_id,
+            section,
+            m.get("score", 0.0),
+            m.get("pitch_score", 0.0),
+            m.get("rhythm_score", 0.0),
+            m.get("stability_score", 0.0),
+            result.get("reference", "original"),
+            metrics={
+                "mean_abs_cents": m.get("mean_abs_cents"),
+                "ornament": m.get("ornament"),
+                "matched_notes": m.get("matched_notes"),
+                "unmatched_notes": m.get("unmatched_notes"),
+                "missing_notes": m.get("missing_notes"),
+                "summary_hint": m.get("summary_hint"),
+            },
+            user_midi=result.get("user_midi", ""),
+        )
+    finally:
+        db2.close()
+
+
 @router.post("/{lesson_id}/practice")
 async def practice_section(
     request: Request,
@@ -287,24 +334,12 @@ async def practice_section(
     file: UploadFile = File(...),
     user_id: Optional[str] = Depends(require_user),
 ):
-    from ..database.session import SessionLocal
-    from ..database import crud as _crud
-
-    db = SessionLocal()
-    try:
-        item = _crud.get_item(db, lesson_id)
-        viewer = _crud.get_user_by_id(db, user_id) if user_id else None
-    finally:
-        db.close()
-    if not item or not _crud.can_view_item(item, viewer):
+    item = await asyncio.to_thread(_load_practice_item, lesson_id, user_id)
+    if not item:
         raise HTTPException(status_code=404, detail="lesson not found")
     if manager.content_length_exceeds(request, MAX_BYTES):
         raise HTTPException(status_code=413, detail="file too large")
-    data = await file.read()
-    if len(data) == 0:
-        raise HTTPException(status_code=400, detail="empty file")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="file too large")
+    data = await manager.read_upload_limited(file, MAX_BYTES)
 
     def _run():
         sha = item.sha256 or item.id
@@ -318,18 +353,36 @@ async def practice_section(
                 return None
             reference = wav_path.read_bytes()
             reference_kind = "original"
-        ref_key = f"lesson:{item.sha256 or item.id}:{section}:{reference_kind}"
+        ref_hash = hashlib.sha256(reference).hexdigest()[:16]
+        ref_key = f"lesson:{item.sha256 or item.id}:{section}:{reference_kind}:{ref_hash}"
         result = compare_service.compare(reference, data, sample_key=ref_key, include_warped_full=True)
         section_info = None
         lesson = lesson_service.get_lesson(item)
         for s in lesson.get("sections", []):
             if s["index"] == section:
                 section_info = s
+        section_for_words = section_info
+        if reference_kind == "sample" and section_info is not None:
+            sample_state = compare_service._reference_state(reference, ref_key)
+            s_times_full = sample_state.get("times") or []
+            s_f0_full = sample_state.get("f0") or []
+            sec_lines = lesson_service.clean_lyric_lines(section_info.get("lyrics") or "")
+            if s_times_full and sec_lines:
+                sample_end = s_times_full[-1] + 0.02
+                sample_lt = lesson_service.section_line_times(s_times_full, s_f0_full, 0.0, sample_end, sec_lines)
+                if sample_lt:
+                    sec_start = float(section_info.get("start") or 0.0)
+                    section_for_words = dict(section_info)
+                    section_for_words["line_times"] = [
+                        {"start": round(sec_start + w["start"], 3), "end": round(sec_start + w["end"], 3)}
+                        for w in sample_lt
+                    ]
         result["section"] = section_info
         result["lesson_id"] = lesson_id
         result["lesson_title"] = item.title
         result["reference"] = reference_kind
-        result["words"] = lesson_service.word_feedback(section_info, result)
+        result["words"] = lesson_service.word_feedback(section_for_words, result)
+        result.pop("sample_full", None)
         result["words_alignment"] = lesson_service.WORDS_ALIGNMENT
         if result.get("notes"):
             try:
@@ -348,7 +401,7 @@ async def practice_section(
 
     _practice_slot_acquire(user_id)
     try:
-        result = await asyncio.to_thread(_run)
+        result = await user_inflight.run_dsp(_run)
     except compare_service.CompareEmptyError as e:
         raise HTTPException(status_code=422, detail={"code": e.code, "message": e.message})
     except ValueError as e:
@@ -363,33 +416,7 @@ async def practice_section(
         raise HTTPException(status_code=404, detail="section not found")
     if user_id and result.get("metrics"):
         try:
-            from ..database.session import SessionLocal
-
-            m = result["metrics"]
-            db2 = SessionLocal()
-            try:
-                crud.create_practice_session(
-                    db2,
-                    user_id,
-                    lesson_id,
-                    section,
-                    m.get("score", 0.0),
-                    m.get("pitch_score", 0.0),
-                    m.get("rhythm_score", 0.0),
-                    m.get("stability_score", 0.0),
-                    result.get("reference", "original"),
-                    metrics={
-                        "mean_abs_cents": m.get("mean_abs_cents"),
-                        "ornament": m.get("ornament"),
-                        "matched_notes": m.get("matched_notes"),
-                        "unmatched_notes": m.get("unmatched_notes"),
-                        "missing_notes": m.get("missing_notes"),
-                        "summary_hint": m.get("summary_hint"),
-                    },
-                    user_midi=result.get("user_midi", ""),
-                )
-            finally:
-                db2.close()
+            await asyncio.to_thread(_save_practice_session_db, user_id, lesson_id, section, result)
         except Exception:
             logging.getLogger(__name__).warning("practice session save failed", exc_info=True)
     return result

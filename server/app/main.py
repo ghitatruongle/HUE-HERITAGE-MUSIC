@@ -1,4 +1,6 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 import logging
 import os
 import shutil
@@ -39,10 +41,18 @@ LARGE_BODY_PREFIXES = ("/api/lessons/",)
 LARGE_BODY_PATHS = (
     "/api/music/analyze-pitch",
     "/api/music/compare",
+    "/api/music/compare-items",
     "/api/music/instruments",
     "/api/music/restore",
     "/api/music/transcribe",
     "/api/music/evaluate",
+)
+NO_GZIP_MEDIA_PREFIXES = (
+    "/api/music/restored/",
+    "/api/music/generated/",
+    "/api/music/midi/",
+    "/api/music/musicxml/",
+    "/api/avatars/",
 )
 LARGE_BODY_LIMIT = max(1, int(settings.large_body_limit))
 COMPARE_BODY_LIMIT = _storage_manager.COMPARE_BODY_LIMIT
@@ -94,7 +104,8 @@ class NoGzipAudioMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             path = scope.get("path", "")
-            if path.lower().endswith(AUDIO_SUFFIXES):
+            low = path.lower()
+            if low.endswith(AUDIO_SUFFIXES) or low.endswith("/audio") or low.startswith(NO_GZIP_MEDIA_PREFIXES):
                 headers = MutableHeaders(scope=scope)
                 if "accept-encoding" in headers:
                     headers["accept-encoding"] = "identity"
@@ -146,6 +157,31 @@ class HeavyRateLimitMiddleware:
         await self.app(scope, receive, send)
 
 
+def _json_nesting_exceeds(body: bytes, max_allowed: int = 64) -> bool:
+    depth = 0
+    in_string = False
+    escaped = False
+    for ch in body:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == 0x5C:
+                escaped = True
+            elif ch == 0x22:
+                in_string = False
+            continue
+        if ch == 0x22:
+            in_string = True
+        elif ch in (0x7B, 0x5B):
+            depth += 1
+            if depth > max_allowed:
+                return True
+        elif ch in (0x7D, 0x5D):
+            if depth > 0:
+                depth -= 1
+    return False
+
+
 class BodyLimitMiddleware:
     def __init__(self, app, default_limit=2 * 1024 * 1024):
         self.app = app
@@ -153,15 +189,15 @@ class BodyLimitMiddleware:
 
     def _limit_for(self, path: str) -> int:
         if path.startswith("/api/heritage/upload"):
-            return 50 * 1024 * 1024 + 2 * 1024 * 1024
-        if path == "/api/music/compare":
-            return COMPARE_BODY_LIMIT
+            return max(1, int(settings.heritage_upload_max_bytes)) + 2 * 1024 * 1024
+        if path in ("/api/music/compare", "/api/music/compare-items"):
+            return 2 * max(1, int(settings.large_body_limit)) + 2 * 1024 * 1024
         if path == "/api/auth/me/avatar":
             from .api.auth import AVATAR_MAX_BYTES
 
             return AVATAR_MAX_BYTES + 64 * 1024
         if path.startswith(LARGE_BODY_PREFIXES) or path in LARGE_BODY_PATHS:
-            return LARGE_BODY_LIMIT
+            return max(1, int(settings.large_body_limit))
         return self.default_limit
 
     async def __call__(self, scope, receive, send):
@@ -173,7 +209,7 @@ class BodyLimitMiddleware:
             await self.app(scope, receive, send)
             return
         limit = self._limit_for(path)
-        if limit > LARGE_BODY_LIMIT:
+        if limit >= LARGE_BODY_LIMIT:
             await self._stream_limit(scope, receive, send, limit)
             return
         body = b""
@@ -195,17 +231,7 @@ class BodyLimitMiddleware:
                 ct = hvalue.lower()
                 break
         if b"json" in ct:
-            depth = 0
-            max_depth = 0
-            for ch in body:
-                if ch in (0x7B, 0x5B):
-                    depth += 1
-                    if depth > max_depth:
-                        max_depth = depth
-                elif ch in (0x7D, 0x5D):
-                    if depth > 0:
-                        depth -= 1
-            if max_depth > 64:
+            if _json_nesting_exceeds(body, 64):
                 response = JSONResponse({"detail": "json nesting too deep"}, status_code=400)
                 await response(scope, receive, send)
                 return
@@ -223,6 +249,7 @@ class BodyLimitMiddleware:
         from fastapi import HTTPException
 
         total = 0
+        started = False
 
         async def counting_receive():
             nonlocal total
@@ -233,7 +260,20 @@ class BodyLimitMiddleware:
                     raise HTTPException(status_code=413, detail="file too large")
             return msg
 
-        await self.app(scope, counting_receive, send)
+        async def tracked_send(msg):
+            nonlocal started
+            if msg.get("type") == "http.response.start":
+                started = True
+            await send(msg)
+
+        try:
+            await self.app(scope, counting_receive, tracked_send)
+        except HTTPException as exc:
+            if not started:
+                response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+                await response(scope, receive, send)
+            else:
+                raise
 
 
 SHED_EXEMPT_PATHS = {"/health", "/api/auth/login", "/api/auth/admin-unlock"}
@@ -308,7 +348,7 @@ def _warmup_lessons():
         db = SessionLocal()
         try:
             item = crud.get_item(db, item_id)
-            if item is None:
+            if item is None or lesson_service.is_instrumental_item(item):
                 continue
             if lesson_service._lesson_cache_path(item).exists():
                 continue
@@ -340,14 +380,18 @@ def _raise_fd_limit():
         pass
 
 
-def _maintenance_thread():
+def _maintenance_thread(stop_event: Optional[threading.Event] = None):
     import time
 
     from .services import maintenance
 
     interval = max(1, settings.maintenance_interval_hours) * 3600
     while True:
-        time.sleep(interval)
+        if stop_event is not None:
+            if stop_event.wait(interval):
+                return
+        else:
+            time.sleep(interval)
         try:
             db = SessionLocal()
             try:
@@ -383,12 +427,31 @@ def create_app() -> FastAPI:
     finally:
         db.close()
     docs_open = settings.enable_docs
+    stop_event = threading.Event()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        import anyio.to_thread
+
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        limiter.total_tokens = max(1, int(settings.thread_limiter_tokens))
+        threading.Thread(target=_warmup_lessons, daemon=True).start()
+        if settings.basic_pitch_warmup:
+            threading.Thread(target=_warmup_basic_pitch, daemon=True, name="hue-bp-warmup").start()
+        if settings.maintenance_interval_hours > 0:
+            threading.Thread(target=_maintenance_thread, args=(stop_event,), daemon=True).start()
+        try:
+            yield
+        finally:
+            stop_event.set()
+
     application = FastAPI(
         title=settings.app_name,
-        version="0.0.5-alpha",
+        version="0.0.5-beta2",
         docs_url="/docs" if docs_open else None,
         redoc_url="/redoc" if docs_open else None,
         openapi_url="/openapi.json" if docs_open else None,
+        lifespan=lifespan,
     )
     application.add_middleware(GZipMiddleware, minimum_size=1000)
     origins_cfg = settings.allowed_origins.strip()
@@ -431,25 +494,13 @@ def create_app() -> FastAPI:
 
     application.include_router(api_router, prefix="/api")
 
-    @application.on_event("startup")
-    async def _post_startup():
-        import anyio.to_thread
-
-        limiter = anyio.to_thread.current_default_thread_limiter()
-        limiter.total_tokens = max(1, int(settings.thread_limiter_tokens))
-        threading.Thread(target=_warmup_lessons, daemon=True).start()
-        if settings.basic_pitch_warmup:
-            threading.Thread(target=_warmup_basic_pitch, daemon=True, name="hue-bp-warmup").start()
-        if settings.maintenance_interval_hours > 0:
-            threading.Thread(target=_maintenance_thread, daemon=True).start()
-
     @application.get("/health")
     async def health():
         payload = {
             "status": "ok",
             "app": settings.app_name,
-            "version": "0.0.5-beta1",
-            "stage": "0.0.5-beta1",
+            "version": "0.0.5-beta2",
+            "stage": "0.0.5-beta2",
         }
         if os.environ.get("HUE_HEALTH_EXTENDED") == "1":
             import asyncio

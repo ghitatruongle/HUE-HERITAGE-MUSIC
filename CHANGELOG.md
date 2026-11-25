@@ -1,5 +1,44 @@
 # CHANGELOG — HUE HERITAGE MUSIC
 
+## 0.0.5-beta2 (2026-11-25)
+
+> Đợt "Mã mời nhiều lượt + thời hạn · nâng/hạ vai trò · ẩn máy chủ AI với user · gates C3→C8": mã mời `max_uses` (0 = vô hạn, 1–10000) + `expires_at` theo phút/giờ, cấp cho cả admin lẫn worker · `PATCH /users/{id}/role` (admin-unlock, trần 5, epoch-revoke) · Settings ẩn máy chủ AI khỏi user thường · sửa tràn layout 320px · đóng nốt gate motion/navigation/polish · web bỏ service worker + cho phép zoom · `db_backup.sh` chống path lạ và backup hỏng · env-tunable `DB_WRITE_SLOTS` — pytest 481/481 · flutter 297/297 · parity 3.13 480+1skip · analyze 0 · battery D0→D16 CLEAN · web release ✓.
+
+### T1 — Mã mời nhiều lượt + thời hạn
+- `InviteCode` thêm `max_uses` (0 = vô hạn · 1–10000), `used_count`, `expires_at` qua MIGRATION_COLUMNS (ALTER tự động khi boot, backfill bản ghi cũ = mã một lần)
+- `POST /api/auth/invites` nhận `max_uses`, `expires_minutes` (1–525600), `expires_hours` (≤8760); nhánh phút ưu tiên hơn giờ; ngoài khoảng → 400
+- Trừ lượt nguyên tử: `UPDATE invite_codes SET used_count = used_count + 1 WHERE ... AND used_count < max_uses` — `rowcount > 0` mới cấp tài khoản, chống race đa luồng
+- Chặn đăng ký khi hết lượt hoặc quá `expires_at`; mã cũ dạng một lần vẫn hoạt động qua `used_by`/`used_at`
+- UI: hộp thoại tạo mã có preset số lượt (1 / vô hạn / tuỳ chỉnh) + preset thời hạn (30 phút / 2 giờ / 24 giờ / 7 ngày / 30 ngày / tuỳ chỉnh); danh sách mã hiện badge hết lượt / hết hạn / không giới hạn
+- Worker tạo được mã (`require_staff`), chỉ admin liệt kê và xoá mã
+
+### T2 — Nâng/hạ vai trò worker cho tài khoản hiện có
+- `PATCH /api/auth/users/{user_id}/role` (`require_admin_fresh`): chỉ nhận `user` / `worker`, cấm đổi vai `ghitatruongle` (400), áp trần 5 active worker (409 `worker limit reached`), thành công thì `bump_token_epoch` thu hồi mọi phiên cũ
+- `PATCH /users/{id}/active` dùng chung `_ensure_worker_capacity`
+- UI tab Tài khoản: nút "Chọn làm cộng tác viên" / "Hạ về người dùng thường" + hộp thoại xác nhận, chạy qua `runWithAdminReauth`
+
+### T3 — Ẩn máy chủ AI khỏi user thường
+- `settings_screen.dart`: mục Máy chủ AI / Địa chỉ máy chủ / nút Đổi máy chủ chỉ render khi `auth.isLoggedIn && auth.isStaff` — user thường không thấy hạ tầng
+- Sửa tràn layout màn hẹp 320px: `LayoutBuilder` + `HueButtonSize.small`, thêm `Flexible` trong `hue_button.dart`
+
+### T4 — Gates C3→C8
+- C3+C4 motion & state: dispose controller, busy-gate, jank, đồng bộ ô trạng thái
+- C5 navigation: boot không ép login-first, back về Home/thoát app đúng chủ đích, bảo toàn state qua chuyển tab
+- C6–C8 polish & design tokens: `HueIcon`, `AppFontSize`, `AppTheme` thống nhất; 40 khoá bản địa hoá VI/EN mới cho luồng mời và vai trò
+
+### T5 — Bảo mật & vận hành
+- `DB_WRITE_SLOTS` (mặc định 8) + `UVICORN_LIMIT_CONCURRENCY` (mặc định 1024) vào `Settings` và `.env.example`; `write_slot` khởi tạo từ cấu hình thay vì hằng số
+- `db_backup.sh`: validate `KEEP` là số nguyên dương, escape dấu `'` trong đường dẫn, xoá bản backup hỏng theo `PRAGMA quick_check`, vòng xoá luân phiên thay `xargs`
+- Battery D0→D16 trên sân cô lập `:8004`: D0 124 test · D2 26/26 · D3 29.440 req bypass=0 · D4 12.818 req sink=0 · D5 39.022 req forged=0 · D6 19/19 · D7 8/8 · D8 14/14 · D9 5/5 · D10 16/16 · D11 7/7 shed=3.739 · D12 5/5 (default-config `:8006`) · D13 13/13 · D14+D15 18/18 · D16 3 lớp — 0 breach, 0 5xx-thật, 0 Traceback
+
+### T6 — Web & tài nguyên
+- `app/web/index.html`: bỏ `user-scalable=no` (cho phép zoom), splash gọi `removeSplashFromWeb()` có guard + `pointerEvents='none'`, bỏ đăng ký service worker
+- Logo `app/assets/images/app_logo.png` tối ưu 1.238.423 → 940.569 byte
+
+### T7 — Test mới
+- Server 6 file: `test_beta2_wave1_p0` · `test_beta2_wave2_speed_lifecycle` · `test_invite_and_role_features` (gồm race đa luồng + trần lượt) · `test_review_round1_fixes` · `test_security_hardening_locks` · `test_staff_double_gate_lock`
+- Flutter 7 file: `beta2_wave3` · `c3_c4_motion_flow_gate` · `c5_g1_g5_gate` · `c6_c7_c8_polish_gate` · `invite_and_role_ui` · `populated_layout_theme_gate` · `review_round1_flutter`
+
 ## 0.0.5-beta1 (2026-11-22)
 
 > Đợt "Worker + Avatar + Học hát + Tốc độ tải": role Worker (tối đa 5, quyền cụ thể) · ảnh đại diện admin & worker (PIL resize 256, magic-byte, 2MB cap) · học hát nâng cấp (octave normalize, ngũ cung thật, per-word verdict, busy-gate, force-align timing) · tốc độ tải (startup song song, web gzip) · security hardening (rate-limit avatar, must-change gate, RIFF magic strict, env-tunable ×7) · review code toàn dự án (10 findings vá hết) · battery bảo mật D0→D16 CLEAN · loadtest B1+B2 SLO · gates C1→C8 xanh — pytest 435/435 · flutter 224/224 · parity 3.13 433+1skip · macOS release ✓.

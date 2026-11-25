@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hue_heritage_music/screens/admin/admin_screen.dart';
 import 'package:hue_heritage_music/screens/home/home_screen.dart';
 import 'package:hue_heritage_music/services/auth_service.dart';
 import 'package:hue_heritage_music/services/history_service.dart';
@@ -12,6 +13,7 @@ import 'package:hue_heritage_music/services/server_config.dart';
 import 'package:hue_heritage_music/services/session_media.dart';
 import 'package:hue_heritage_music/services/theme_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockAdapter implements HttpClientAdapter {
   @override
@@ -35,6 +37,13 @@ class _MockAdapter implements HttpClientAdapter {
         headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
       );
     }
+    if (options.path.contains('/api/admin/security')) {
+      return ResponseBody.fromString(
+        '{}',
+        200,
+        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      );
+    }
     return ResponseBody.fromString(
       '[]',
       200,
@@ -46,9 +55,15 @@ class _MockAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-Widget _home(AuthService auth) {
+Future<ServerConfig> _configuredServer() async {
+  SharedPreferences.setMockInitialValues({'hue_server_url': 'http://127.0.0.1:8005'});
   final server = ServerConfig();
+  await server.load();
   server.api.dio.httpClientAdapter = _MockAdapter();
+  return server;
+}
+
+Widget _home(AuthService auth, ServerConfig server) {
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<ServerConfig>.value(value: server),
@@ -87,13 +102,14 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
+    final server = await _configuredServer();
     final auth = AuthService();
     await auth.save(token: 'tok-admin-t2', username: 'ghitatruongle', email: 'a@x.com', role: 'admin');
     addTearDown(() async {
       await auth.clearToken();
     });
 
-    await tester.pumpWidget(_home(auth));
+    await tester.pumpWidget(_home(auth, server));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -102,12 +118,14 @@ void main() {
     await tester.tap(adminIcon);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AdminScreen), findsOneWidget);
 
     await auth.save(token: 'tok-user-t2', username: 'plainuser', email: 'b@x.com', role: 'user');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(tester.takeException(), isNull);
+    expect(find.byType(AdminScreen), findsNothing);
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
@@ -119,13 +137,14 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
+    final server = await _configuredServer();
     final auth = AuthService();
     await auth.save(token: 'tok-admin-t3', username: 'ghitatruongle', email: 'a@x.com', role: 'admin');
     addTearDown(() async {
       await auth.clearToken();
     });
 
-    await tester.pumpWidget(_home(auth));
+    await tester.pumpWidget(_home(auth, server));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -134,12 +153,14 @@ void main() {
     await tester.tap(adminIcon);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AdminScreen), findsOneWidget);
 
     await auth.clearToken();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(tester.takeException(), isNull);
+    expect(find.byType(AdminScreen), findsNothing);
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 }
